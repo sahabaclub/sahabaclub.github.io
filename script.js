@@ -33,7 +33,7 @@
 // Sign-up / consultation forms — post to the Sahaba Club Power Automate
 // flow, which emails the team for every submission.
 (function () {
-  var FLOW_URL = "FLOW_ENDPOINT_URL_HERE";
+  var FLOW_URL = "https://default23e9f3d3e0d04d38b8cf44b82c7fab.db.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/15/workflows/b950546181014f17b4fec3b3cfe6c139/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xD3SzgK_AVwsu89BqjT2I3vIcwojfFKT5yiZqvupEvk";
 
   function wireForm(formId, formType, thanksId) {
     var form = document.getElementById(formId);
