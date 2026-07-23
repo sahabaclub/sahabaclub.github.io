@@ -112,8 +112,31 @@
   <section class="cta-band" id="join">
     <p class="cta-title indiv-only">Join Sahaba Club, get Microsoft 365 free for 3 months.</p>
     <p class="cta-title corp-only">Let's talk about your Microsoft AI roadmap.</p>
-    <a href="mailto:info@sahabaclub.com?subject=Join%20Sahaba%20Club%20-%20Free%20Membership&body=Name%3A%0AEmail%3A%0APhone%20(optional)%3A%0AHow%20did%20you%20hear%20about%20us%3F%20(optional)%3A" class="btn btn-solid indiv-only">Join free</a>
-    <a href="mailto:info@sahabaclub.com?subject=Corporate%20Consultation%20Request&body=Name%3A%0AWork%20email%3A%0ACompany%3A%0ARole%3A%0AArea%20of%20interest%20(Power%20Platform%20%2F%20Agentic%20AI%20%2F%20Training)%3A" class="btn btn-solid corp-only">Talk to sales</a>
+
+    <form id="individual-form" class="signup-form indiv-only" novalidate>
+      <input type="text" name="name" placeholder="Full name" required>
+      <input type="email" name="email" placeholder="Email" required>
+      <input type="tel" name="phone" placeholder="Phone (optional)">
+      <input type="text" name="how_heard" placeholder="How did you hear about us? (optional)">
+      <button type="submit" class="btn btn-solid">Join free</button>
+    </form>
+    <div id="individual-thanks" class="form-thanks indiv-only hidden">Thanks — we're reviewing your details now and will email your onboarding info, including your Microsoft 365 account access, shortly.</div>
+
+    <form id="corporate-form" class="signup-form corp-only" novalidate>
+      <input type="text" name="name" placeholder="Full name" required>
+      <input type="email" name="email" placeholder="Work email" required>
+      <input type="text" name="company" placeholder="Company" required>
+      <input type="text" name="role" placeholder="Role (optional)">
+      <select name="interest" required>
+        <option value="" disabled selected>Area of interest</option>
+        <option value="Power Platform">Power Platform</option>
+        <option value="Agentic AI">Agentic AI</option>
+        <option value="Training">Training</option>
+      </select>
+      <input type="tel" name="phone" placeholder="Phone (optional)">
+      <button type="submit" class="btn btn-solid">Talk to sales</button>
+    </form>
+    <div id="corporate-thanks" class="form-thanks corp-only hidden">Thanks — our team will reach out within 1–2 business days to set up a consultation.</div>
   </section>
 
 </main>
