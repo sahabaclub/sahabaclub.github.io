@@ -153,6 +153,8 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   color: #05070d;
 }
 .nav-actions { display: flex; gap: 10px; align-items: center; }
+.nav-link { font-size: 14px; font-weight: 600; color: var(--text-secondary); padding: 8px 4px; transition: color 0.2s; }
+.nav-link:hover { color: var(--text); }
 
 /* Buttons */
 .btn {
@@ -395,6 +397,91 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   .social-name { font-size: 12px; }
 }
 
+/* Past-events gallery */
+.events-gallery-section {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 8px 20px 44px;
+  text-align: center;
+}
+.section-heading {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 4px 0 8px;
+}
+.section-sub {
+  color: var(--text-secondary);
+  font-size: 15px;
+  max-width: 560px;
+  margin: 0 auto 28px;
+}
+.event-gallery {
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+.event-gallery-track {
+  display: flex;
+  gap: 18px;
+  width: max-content;
+  padding: 4px 20px;
+  animation: gallery-scroll 36s linear infinite;
+}
+.event-gallery:hover .event-gallery-track { animation-play-state: paused; }
+@keyframes gallery-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.event-photo {
+  position: relative;
+  width: 260px;
+  height: 180px;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+}
+.event-photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.event-photo-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.event-photo-icon { font-size: 26px; opacity: 0.6; }
+.event-photo.has-photo .event-photo-fallback { display: none; }
+.events-cta { margin-top: 30px; }
+
+@media (max-width: 720px) {
+  .section-heading { font-size: 24px; }
+  .event-photo { width: 200px; height: 140px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .event-gallery-track { animation: none; }
+}
+
+.card-link { display: block; text-decoration: none; }
+
 /* Partner strip */
 .partners {
   max-width: var(--max-width);
@@ -557,6 +644,78 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   border: 1px solid var(--glass-border);
   border-radius: var(--radius);
   padding: 18px;
+}
+
+/* Events page */
+.events-hero {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 64px 20px 20px;
+  text-align: center;
+}
+.events-hero h1 { font-size: 40px; margin: 8px 0 14px; font-weight: 700; letter-spacing: -0.01em; }
+.events-hero .lead { margin: 0 auto; }
+.events-list {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+}
+.event-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+.event-card {
+  position: relative;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  border-radius: var(--radius);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
+}
+.event-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(139, 92, 246, 0.4);
+  box-shadow: 0 12px 40px rgba(139, 92, 246, 0.18);
+}
+.event-price-badge {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 5px 12px;
+  border-radius: 999px;
+  margin-bottom: 4px;
+}
+.event-price-badge.is-free { color: #7cf7d0; background: rgba(34, 211, 238, 0.12); border: 1px solid rgba(34, 211, 238, 0.35); }
+.event-price-badge.is-paid { color: var(--gold-light); background: rgba(224, 168, 62, 0.14); border: 1px solid rgba(224, 168, 62, 0.4); }
+.event-title { font-size: 17px; font-weight: 700; margin: 0; color: var(--text); }
+.event-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.event-meta svg { flex-shrink: 0; opacity: 0.8; }
+.event-card .btn { margin-top: 8px; justify-content: center; }
+.events-empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 40px 20px;
+}
+
+@media (max-width: 1024px) {
+  .event-card-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 720px) {
+  .events-hero h1 { font-size: 30px; }
+  .event-card-grid { grid-template-columns: 1fr; }
 }
 
 /* Footer */

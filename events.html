@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Events — Sahaba Club</title>
+<meta name="description" content="Upcoming AI hackathons, meetups, and conferences curated by Sahaba Club — free and paid, in the UAE and around the world.">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="logo">
+      <svg class="logo-mark" viewBox="0 0 140 115" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <mask id="cloudCut2">
+            <rect width="140" height="115" fill="#fff"/>
+            <circle cx="41" cy="34" r="10" fill="#000"/>
+            <circle cx="50" cy="27" r="7.5" fill="#000"/>
+            <circle cx="58" cy="35" r="8.5" fill="#000"/>
+          </mask>
+        </defs>
+        <g fill="#3bb3e0" mask="url(#cloudCut2)">
+          <circle cx="43" cy="36" r="16"/>
+          <circle cx="28" cy="41" r="11"/>
+          <circle cx="54" cy="29" r="12"/>
+          <circle cx="63" cy="39" r="9"/>
+        </g>
+        <path d="M36 48 C25 54,21 68,28 80 C34 89,47 90,55 81 C63 72,72 58,80 46 C69 58,56 66,49 66 C43 66,41 60,43 56 C45 52,41 48,36 48 Z" fill="#3bb3e0"/>
+        <path d="M60 46 C66 41,71 33,75 25" fill="none" stroke="#3bb3e0" stroke-width="4.5" stroke-linecap="round"/>
+        <circle cx="41" cy="76" r="3.2" fill="#05070d"/>
+        <circle cx="50" cy="77" r="3.2" fill="#05070d"/>
+        <text x="97" y="102" font-family="Arial, Tahoma, sans-serif" font-size="34" font-weight="700" fill="#3bb3e0">ز</text>
+      </svg>
+      <span class="logo-word">Sahaba Club</span>
+    </a>
+    <div class="nav-actions">
+      <a href="index.html" class="nav-link">Home</a>
+      <a href="index.html#join" class="btn btn-glow">Join free</a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <section class="events-hero">
+    <p class="kicker center">Upcoming</p>
+    <h1 class="glow-text">AI Events</h1>
+    <p class="lead">Hackathons, meetups, and conferences from across the AI universe &mdash; curated by Sahaba Club. Free and paid, in the UAE and beyond.</p>
+  </section>
+
+  <section class="events-list">
+    <div class="event-card-grid" id="events-grid"></div>
+    <p class="events-empty hidden" id="events-empty">No upcoming events right now &mdash; check back soon, or follow us on social for updates.</p>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-links">
+    <a href="index.html">About</a>
+    <a href="events.html">Events</a>
+    <a href="mailto:info@sahabaclub.com">Contact</a>
+    <a href="#">Privacy</a>
+  </div>
+  <div class="footer-social">
+    <a href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="LinkedIn">LinkedIn</a>
+    <a href="https://youtube.com/@sahabaclub" target="_blank" rel="noopener" aria-label="YouTube">YouTube</a>
+    <a href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
+    <a href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
+    <a href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
+  </div>
+</footer>
+
+<script src="events-data.js"></script>
+<script src="script.js"></script>
+</body>
+</html>

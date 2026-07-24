@@ -44,6 +44,7 @@
       <button class="tab-btn" data-tab="corporate" role="tab" aria-selected="false">Corporate</button>
     </div>
     <div class="nav-actions">
+      <a href="events.html" class="nav-link">Events</a>
       <a href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in" class="btn btn-ghost">Sign in</a>
       <a href="#join" class="btn btn-glow nav-cta indiv-only">Join free</a>
       <a href="#join" class="btn btn-glow nav-cta corp-only">Talk to sales</a>
@@ -141,6 +142,50 @@
     </div>
   </section>
 
+  <section class="events-gallery-section">
+    <p class="kicker center">Gallery</p>
+    <h2 class="section-heading glow-text">Moments From Our Events</h2>
+    <p class="section-sub">Hackathons, meetups, and demo days from across the Sahaba Club community.</p>
+
+    <!--
+      HOW TO ADD REAL EVENT PHOTOS
+      -----------------------------
+      Each slot below tries to load an image from
+      assets/events/event-01.jpg through event-10.jpg.
+      Until a file exists at that path, a placeholder icon is shown
+      automatically — no other code needs to change.
+      Just send the photos and they'll be uploaded to those exact
+      filenames to make them appear.
+    -->
+    <div class="event-gallery">
+      <div class="event-gallery-track">
+        <div class="event-photo"><img src="assets/events/event-01.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 01</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-02.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 02</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-03.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 03</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-04.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 04</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-05.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 05</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-06.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 06</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-07.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 07</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-08.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 08</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-09.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 09</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-10.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 10</span></div></div>
+        <!-- duplicate set so the strip loops seamlessly -->
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-01.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 01</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-02.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 02</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-03.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 03</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-04.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 04</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-05.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 05</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-06.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 06</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-07.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 07</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-08.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 08</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-09.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 09</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-10.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 10</span></div></div>
+      </div>
+    </div>
+
+    <a href="events.html" class="btn btn-outline events-cta">See upcoming events &rarr;</a>
+  </section>
+
   <section class="partners">
     <span class="badge"><span class="dot2"></span>Microsoft AI Cloud Partner</span>
     <span class="badge"><span class="dot2"></span>DIFC AI Campus</span>
@@ -188,11 +233,11 @@
         <p class="card-title">Vibe-Code</p>
         <p class="card-desc">Prefer to code? Ship AI apps fast with AI-paired "vibe coding" workflows.</p>
       </div>
-      <div class="card">
+      <a class="card card-link" href="events.html">
         <div class="card-icon">&#10024;</div>
         <p class="card-title">Events</p>
-        <p class="card-desc">Demo days and meetups across the community.</p>
-      </div>
+        <p class="card-desc">Hackathons, meetups, and AI events happening around the world &mdash; see what's next.</p>
+      </a>
     </div>
 
     <div class="card-grid corp-only">
@@ -261,6 +306,7 @@
 <footer class="footer">
   <div class="footer-links">
     <a href="#">About</a>
+    <a href="events.html">Events</a>
     <a href="mailto:info@sahabaclub.com">Contact</a>
     <a href="#">Privacy</a>
   </div>
