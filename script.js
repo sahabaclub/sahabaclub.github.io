@@ -50,6 +50,152 @@
   frame();
 })();
 
+// The AI universe orbit visual - a glowing core with the Sahaba Club
+// activities orbiting around it on tilted, depth-shaded rings.
+(function () {
+  var canvas = document.getElementById("universe-canvas");
+  if (!canvas || !canvas.getContext) return;
+  var ctx = canvas.getContext("2d");
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var RINGS = [
+    { radiusRatio: 0.24, tilt: 0.42, speed: 0.00028, color: "34, 211, 238", items: ["Coaching", "Hackathons"] },
+    { radiusRatio: 0.37, tilt: 0.42, speed: -0.00019, color: "139, 92, 246", items: ["PromptArena", "Play ZuZu AI", "Podcast with Zoka"] },
+    { radiusRatio: 0.49, tilt: 0.42, speed: 0.00013, color: "224, 168, 62", items: ["Low-Code", "Vibe-Code"] },
+  ];
+
+  var w, h, cx, cy, dpr;
+
+  function resize() {
+    var rect = canvas.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = rect.width;
+    h = rect.height;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cx = w / 2;
+    cy = h / 2;
+  }
+
+  function drawRingPath(radius, tilt) {
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, radius, radius * tilt, 0, 0, Math.PI * 2);
+  }
+
+  function drawCore(t) {
+    var pulse = 1 + Math.sin(t * 0.0016) * 0.06;
+    var r = Math.max(24, Math.min(w, h) * 0.07) * pulse;
+    var grad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+    grad.addColorStop(0, "#ffffff");
+    grad.addColorStop(0.35, "#8be9fd");
+    grad.addColorStop(1, "#8b5cf6");
+    ctx.save();
+    ctx.shadowColor = "rgba(139, 92, 246, 0.9)";
+    ctx.shadowBlur = r * 1.8;
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawNode(x, y, depth, color, label, alignRight) {
+    var baseR = 5.5;
+    var r = baseR * (0.65 + depth * 0.7);
+    var alpha = 0.45 + depth * 0.55;
+
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.9;
+    ctx.strokeStyle = "rgba(" + color + ", 0.28)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = "rgba(" + color + ", 0.9)";
+    ctx.shadowBlur = 14 * (0.5 + depth);
+    ctx.fillStyle = "rgba(" + color + ", 0.95)";
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.55 + depth * 0.45;
+    ctx.fillStyle = "#f3f4f8";
+    ctx.font = "600 12px -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.textBaseline = "middle";
+    var pad = r + 8;
+    if (alignRight) {
+      ctx.textAlign = "left";
+      ctx.fillText(label, x + pad, y);
+    } else {
+      ctx.textAlign = "right";
+      ctx.fillText(label, x - pad, y);
+    }
+    ctx.restore();
+  }
+
+  function frame(t) {
+    if (!w || !h) { resize(); }
+    ctx.clearRect(0, 0, w, h);
+
+    var minDim = Math.min(w, h);
+    var nodes = [];
+
+    RINGS.forEach(function (ring) {
+      var radius = minDim * ring.radiusRatio;
+      drawRingPath(radius, ring.tilt);
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+
+      var count = ring.items.length;
+      var angleOffset = reduceMotion ? 0 : t * ring.speed;
+      ring.items.forEach(function (label, i) {
+        var angle = (Math.PI * 2 * i) / count + angleOffset;
+        var x = cx + radius * Math.cos(angle);
+        var y = cy + radius * ring.tilt * Math.sin(angle);
+        var depth = (Math.sin(angle) + 1) / 2;
+        nodes.push({ x: x, y: y, depth: depth, color: ring.color, label: label, alignRight: Math.cos(angle) >= 0 });
+      });
+    });
+
+    nodes.sort(function (a, b) { return a.depth - b.depth; });
+    var backNodes = nodes.filter(function (n) { return n.depth < 0.5; });
+    var frontNodes = nodes.filter(function (n) { return n.depth >= 0.5; });
+
+    backNodes.forEach(function (n) { drawNode(n.x, n.y, n.depth, n.color, n.label, n.alignRight); });
+    drawCore(t);
+    frontNodes.forEach(function (n) { drawNode(n.x, n.y, n.depth, n.color, n.label, n.alignRight); });
+
+    if (!reduceMotion) requestAnimationFrame(frame);
+  }
+
+  var resizeTimer;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      resize();
+      if (reduceMotion) frame(0);
+    }, 200);
+  });
+
+  resize();
+  if (reduceMotion) {
+    frame(0);
+  } else {
+    requestAnimationFrame(frame);
+  }
+})();
+
 (function () {
   var tabButtons = document.querySelectorAll(".tab-btn");
   var indivEls = document.querySelectorAll(".indiv-only");
