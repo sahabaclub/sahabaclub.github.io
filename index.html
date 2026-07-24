@@ -15,7 +15,28 @@
 
 <header class="nav">
   <div class="nav-inner">
-    <a href="#" class="logo">Sahaba Club</a>
+    <a href="#" class="logo">
+      <svg class="logo-mark" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <mask id="cloudCut">
+            <rect width="100" height="100" fill="#fff"/>
+            <circle cx="40" cy="35" r="10" fill="#000"/>
+            <circle cx="49" cy="29" r="7" fill="#000"/>
+            <circle cx="56" cy="36" r="8" fill="#000"/>
+          </mask>
+        </defs>
+        <g fill="#3bb3e0" mask="url(#cloudCut)">
+          <circle cx="42" cy="37" r="15"/>
+          <circle cx="29" cy="42" r="10"/>
+          <circle cx="53" cy="31" r="11"/>
+          <circle cx="61" cy="40" r="9"/>
+        </g>
+        <path d="M34 49 C24 55,21 70,29 82 C35 90,47 90,54 82 C61 74,69 60,78 47 C68 59,55 67,48 67 C42 67,40 61,42 57 C44 53,40 49,34 49 Z" fill="#3bb3e0"/>
+        <circle cx="39" cy="77" r="3.2" fill="#05070d"/>
+        <circle cx="48" cy="78" r="3.2" fill="#05070d"/>
+      </svg>
+      <span class="logo-word">Sahaba Club</span>
+    </a>
     <div class="tab-toggle" role="tablist" aria-label="Audience">
       <button class="tab-btn active" data-tab="individual" role="tab" aria-selected="true">Individuals</button>
       <button class="tab-btn" data-tab="corporate" role="tab" aria-selected="false">Corporate</button>
@@ -32,15 +53,26 @@
 
   <section class="hero">
     <span class="eyebrow"><span class="dot"></span>Microsoft AI Cloud Partner · DIFC AI Campus, Dubai</span>
-    <h1 class="glow-text indiv-only">Join the AI universe. Get Microsoft&nbsp;365 free for 3 months.</h1>
+    <h1 class="glow-text indiv-only">
+      <span class="line-big">Join the AI universe</span>
+      <span class="line-small">Get Microsoft 365 free for 3 months</span>
+    </h1>
     <h1 class="glow-text corp-only">Power Platform, agentic AI, and training — delivered by a Microsoft partner.</h1>
-    <p class="lead indiv-only">Sahaba Club is a global community for AI and cloud dreamers — coaching, hackathons, a podcast with 20,000+ daily listeners, and a free Microsoft 365 account when you join.</p>
+    <p class="lead indiv-only">
+      <span class="lead-line1">Sahaba Club is a global community for AI and cloud dreamers</span>
+      <span class="lead-line2">Coaching, Hackathons, PromptArena, Play ZuZu AI, build your own AI apps &mdash; low-code and vibe-code, podcast with Zoka, and more and more with Microsoft and AI&hellip;</span>
+    </p>
     <p class="lead corp-only">We help GCC companies scale with Power Apps, Power Automate, Copilot Studio, and Azure AI — backed by hands-on training so your team keeps building after we're done.</p>
     <div class="hero-actions">
-      <a href="#join" class="btn btn-glow btn-lg indiv-only">Join free, get Microsoft 365</a>
+      <a href="#join" class="btn btn-glow btn-lg indiv-only">Join FREE, Get Microsoft 365</a>
       <a href="#join" class="btn btn-glow btn-lg corp-only">Request a consultation</a>
-      <a href="https://youtube.com/playlist?list=PLHKe9OmckbU3JA7dXCRz-UOPP-XfT8n8O" target="_blank" rel="noopener" class="btn btn-outline btn-lg">Watch Tech Talk with Zoka</a>
+      <a href="#universe" class="btn btn-outline btn-lg">Discover The AI Universe</a>
     </div>
+  </section>
+
+  <section class="universe-section" id="universe">
+    <p class="kicker center">The Sahaba Club AI universe</p>
+    <canvas id="universe-canvas" aria-hidden="true"></canvas>
   </section>
 
   <section class="story">
