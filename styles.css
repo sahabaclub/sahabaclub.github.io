@@ -703,6 +703,7 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   margin: 0;
 }
 .event-meta svg { flex-shrink: 0; opacity: 0.8; }
+.event-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin: 2px 0 0; }
 .event-card .btn { margin-top: 8px; justify-content: center; }
 .events-empty {
   text-align: center;
