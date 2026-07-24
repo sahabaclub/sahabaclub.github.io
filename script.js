@@ -390,12 +390,19 @@
     when.querySelector("span").textContent = formatDate(evt.date) + " · " + evt.time;
     card.appendChild(when);
 
+    if (evt.description) {
+      var desc = document.createElement("p");
+      desc.className = "event-desc";
+      desc.textContent = evt.description;
+      card.appendChild(desc);
+    }
+
     var link = document.createElement("a");
     link.className = "btn btn-glow";
     link.href = evt.link;
     link.target = "_blank";
     link.rel = "noopener";
-    link.textContent = "View Event";
+    link.textContent = evt.linkLabel || "View Event";
     card.appendChild(link);
 
     grid.appendChild(card);
