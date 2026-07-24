@@ -332,7 +332,8 @@
 
 // Upcoming events grid — reads from the EVENTS array defined in
 // events-data.js (only present on events.html). Automatically hides
-// past events and sorts what's left by date.
+// past events, sorts what's left by date, and loads results in
+// batches of 9 as the user scrolls.
 (function () {
   var grid = document.getElementById("events-grid");
   if (!grid || typeof EVENTS === "undefined") return;
@@ -340,6 +341,22 @@
 
   var pinIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>';
   var calIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>';
+
+  var KNOWN_TAG_CLASSES = ["ai", "agentic", "cloud", "media", "coding", "security", "business", "startups", "investors", "hackathon"];
+
+  function tagSlug(tag) {
+    return String(tag).toLowerCase().replace(/[^a-z0-9]+/g, "");
+  }
+
+  // Deterministic fallback color for any tag not in the fixed palette above,
+  // so new tags added later still get a consistent (if arbitrary) color.
+  function hashHue(str) {
+    var hash = 0;
+    for (var i = 0; i < str.length; i++) {
+      hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return hash % 360;
+  }
 
   function formatDate(iso) {
     var parts = iso.split("-");
@@ -363,7 +380,7 @@
     return;
   }
 
-  upcoming.forEach(function (evt) {
+  function buildCard(evt) {
     var isPaid = /paid/i.test(evt.price);
     var card = document.createElement("div");
     card.className = "event-card";
@@ -411,7 +428,8 @@
 
     if (evt.mode) {
       var modeBadge = document.createElement("span");
-      modeBadge.className = "event-mode-badge";
+      var modeSlug = evt.mode === "Online" ? "is-online" : "is-in-person";
+      modeBadge.className = "event-mode-badge " + modeSlug;
       modeBadge.textContent = evt.mode;
       badges.appendChild(modeBadge);
     }
@@ -419,7 +437,14 @@
     if (evt.tags && evt.tags.length) {
       evt.tags.slice(0, 2).forEach(function (tag) {
         var tagBadge = document.createElement("span");
-        tagBadge.className = "event-tag-badge";
+        var slug = tagSlug(tag);
+        tagBadge.className = "event-tag-badge" + (KNOWN_TAG_CLASSES.indexOf(slug) !== -1 ? " tag-" + slug : "");
+        if (KNOWN_TAG_CLASSES.indexOf(slug) === -1) {
+          var hue = hashHue(slug);
+          tagBadge.style.setProperty("--tag-color", "hsl(" + hue + ", 85%, 78%)");
+          tagBadge.style.setProperty("--tag-bg", "hsla(" + hue + ", 85%, 55%, 0.14)");
+          tagBadge.style.setProperty("--tag-border", "hsla(" + hue + ", 85%, 55%, 0.4)");
+        }
         tagBadge.textContent = tag;
         badges.appendChild(tagBadge);
       });
@@ -445,26 +470,31 @@
     card.appendChild(when);
 
     if (evt.description) {
+      var wrap = document.createElement("div");
+      wrap.className = "event-desc-wrap";
+
       var desc = document.createElement("p");
       desc.className = "event-desc";
       desc.textContent = evt.description;
+      wrap.appendChild(desc);
 
       var toggle = document.createElement("span");
       toggle.className = "event-desc-toggle";
-      toggle.textContent = "More";
+      toggle.textContent = "more details";
       toggle.setAttribute("role", "button");
       toggle.setAttribute("tabindex", "0");
+      wrap.appendChild(toggle);
 
       var expandCard = function () {
         var wasExpanded = card.classList.contains("is-expanded");
         Array.prototype.forEach.call(grid.querySelectorAll(".event-card.is-expanded"), function (openCard) {
           openCard.classList.remove("is-expanded");
           var t = openCard.querySelector(".event-desc-toggle");
-          if (t) t.textContent = "More";
+          if (t) t.textContent = "more details";
         });
         if (!wasExpanded) {
           card.classList.add("is-expanded");
-          toggle.textContent = "Less";
+          toggle.textContent = "show less";
         }
       };
 
@@ -476,9 +506,7 @@
         }
       });
 
-      desc.appendChild(document.createTextNode(" "));
-      desc.appendChild(toggle);
-      card.appendChild(desc);
+      card.appendChild(wrap);
     }
 
     var actions = document.createElement("div");
@@ -505,7 +533,52 @@
     }
 
     card.appendChild(actions);
+    return card;
+  }
 
-    grid.appendChild(card);
-  });
+  var PAGE_SIZE = 9;
+  var renderedCount = 0;
+
+  var sentinel = document.createElement("div");
+  sentinel.className = "events-sentinel";
+
+  var statusEl = document.createElement("p");
+  statusEl.className = "events-load-more-status";
+  statusEl.textContent = "Loading more events…";
+  statusEl.style.display = "none";
+
+  function renderNextBatch() {
+    var next = upcoming.slice(renderedCount, renderedCount + PAGE_SIZE);
+    next.forEach(function (evt) {
+      grid.insertBefore(buildCard(evt), sentinel);
+    });
+    renderedCount += next.length;
+
+    if (renderedCount >= upcoming.length) {
+      statusEl.style.display = "none";
+      if (observer) observer.disconnect();
+      if (sentinel.parentNode) sentinel.parentNode.removeChild(sentinel);
+    }
+  }
+
+  grid.appendChild(sentinel);
+  grid.insertAdjacentElement("afterend", statusEl);
+
+  var observer = null;
+  if ("IntersectionObserver" in window) {
+    observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting && renderedCount < upcoming.length) {
+          statusEl.style.display = "block";
+          renderNextBatch();
+          window.setTimeout(function () {
+            statusEl.style.display = "none";
+          }, 200);
+        }
+      });
+    }, { rootMargin: "300px" });
+    observer.observe(sentinel);
+  }
+
+  renderNextBatch();
 })();
