@@ -689,7 +689,14 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   border-radius: var(--radius) var(--radius) 0 0;
   display: block;
 }
-.event-price-badge {
+.event-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.event-price-badge,
+.event-mode-badge {
   align-self: flex-start;
   font-size: 11px;
   font-weight: 700;
@@ -697,10 +704,10 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   letter-spacing: 0.04em;
   padding: 5px 12px;
   border-radius: 999px;
-  margin-bottom: 4px;
 }
 .event-price-badge.is-free { color: #7cf7d0; background: rgba(34, 211, 238, 0.12); border: 1px solid rgba(34, 211, 238, 0.35); }
 .event-price-badge.is-paid { color: var(--gold-light); background: rgba(224, 168, 62, 0.14); border: 1px solid rgba(224, 168, 62, 0.4); }
+.event-mode-badge { color: var(--text-secondary); background: var(--glass); border: 1px solid var(--glass-border); }
 .event-title { font-size: 17px; font-weight: 700; margin: 0; color: var(--text); }
 .event-meta {
   display: flex;
@@ -712,7 +719,13 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
 }
 .event-meta svg { flex-shrink: 0; opacity: 0.8; }
 .event-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin: 2px 0 0; }
-.event-card .btn { margin-top: 8px; justify-content: center; }
+.event-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.event-actions .btn { flex: 1; justify-content: center; white-space: nowrap; }
 .events-empty {
   text-align: center;
   color: var(--text-secondary);
