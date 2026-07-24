@@ -377,10 +377,22 @@
       card.appendChild(img);
     }
 
+    var badges = document.createElement("div");
+    badges.className = "event-badges";
+
     var badge = document.createElement("span");
     badge.className = "event-price-badge " + (isPaid ? "is-paid" : "is-free");
     badge.textContent = evt.price;
-    card.appendChild(badge);
+    badges.appendChild(badge);
+
+    if (evt.mode) {
+      var modeBadge = document.createElement("span");
+      modeBadge.className = "event-mode-badge";
+      modeBadge.textContent = evt.mode;
+      badges.appendChild(modeBadge);
+    }
+
+    card.appendChild(badges);
 
     var title = document.createElement("h3");
     title.className = "event-title";
@@ -406,13 +418,30 @@
       card.appendChild(desc);
     }
 
-    var link = document.createElement("a");
-    link.className = "btn btn-glow";
-    link.href = evt.link;
-    link.target = "_blank";
-    link.rel = "noopener";
-    link.textContent = evt.linkLabel || "View Event";
-    card.appendChild(link);
+    var actions = document.createElement("div");
+    actions.className = "event-actions";
+
+    if (evt.registerLink) {
+      var registerBtn = document.createElement("a");
+      registerBtn.className = "btn btn-glow";
+      registerBtn.href = evt.registerLink;
+      registerBtn.target = "_blank";
+      registerBtn.rel = "noopener";
+      registerBtn.textContent = "Register";
+      actions.appendChild(registerBtn);
+    }
+
+    if (evt.mapsLink) {
+      var mapsBtn = document.createElement("a");
+      mapsBtn.className = "btn btn-outline";
+      mapsBtn.href = evt.mapsLink;
+      mapsBtn.target = "_blank";
+      mapsBtn.rel = "noopener";
+      mapsBtn.textContent = "Find Location";
+      actions.appendChild(mapsBtn);
+    }
+
+    card.appendChild(actions);
 
     grid.appendChild(card);
   });
