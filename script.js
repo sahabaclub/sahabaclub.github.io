@@ -368,6 +368,15 @@
     var card = document.createElement("div");
     card.className = "event-card";
 
+    if (evt.image) {
+      var img = document.createElement("img");
+      img.className = "event-card-image";
+      img.src = evt.image;
+      img.alt = evt.title;
+      img.loading = "lazy";
+      card.appendChild(img);
+    }
+
     var badge = document.createElement("span");
     badge.className = "event-price-badge " + (isPaid ? "is-paid" : "is-free");
     badge.textContent = evt.price;
