@@ -51,8 +51,7 @@
 })();
 
 // The AI universe orbit visual — a glowing core with the Sahaba Club
-// activities orbiting around it on tilted, depth-shaded rings. Each node
-// is clickable and jumps to its matching section on the page.
+// activities orbiting around it on tilted, depth-shaded rings.
 (function () {
   var canvas = document.getElementById("universe-canvas");
   if (!canvas || !canvas.getContext) return;
@@ -329,4 +328,76 @@
 
   wireForm("individual-form", "individual", "individual-thanks");
   wireForm("corporate-form", "corporate", "corporate-thanks");
+})();
+
+// Upcoming events grid — reads from the EVENTS array defined in
+// events-data.js (only present on events.html). Automatically hides
+// past events and sorts what's left by date.
+(function () {
+  var grid = document.getElementById("events-grid");
+  if (!grid || typeof EVENTS === "undefined") return;
+  var emptyMsg = document.getElementById("events-empty");
+
+  var pinIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>';
+  var calIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>';
+
+  function formatDate(iso) {
+    var parts = iso.split("-");
+    var d = new Date(Date.UTC(+parts[0], +parts[1] - 1, +parts[2]));
+    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return months[d.getUTCMonth()] + " " + d.getUTCDate() + ", " + d.getUTCFullYear();
+  }
+
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  var upcoming = EVENTS.filter(function (e) {
+    var d = new Date(e.date + "T23:59:59");
+    return d >= today;
+  }).sort(function (a, b) {
+    return new Date(a.date) - new Date(b.date);
+  });
+
+  if (upcoming.length === 0) {
+    if (emptyMsg) emptyMsg.classList.remove("hidden");
+    return;
+  }
+
+  upcoming.forEach(function (evt) {
+    var isPaid = /paid/i.test(evt.price);
+    var card = document.createElement("div");
+    card.className = "event-card";
+
+    var badge = document.createElement("span");
+    badge.className = "event-price-badge " + (isPaid ? "is-paid" : "is-free");
+    badge.textContent = evt.price;
+    card.appendChild(badge);
+
+    var title = document.createElement("h3");
+    title.className = "event-title";
+    title.textContent = evt.title;
+    card.appendChild(title);
+
+    var loc = document.createElement("p");
+    loc.className = "event-meta";
+    loc.innerHTML = pinIcon + " <span></span>";
+    loc.querySelector("span").textContent = evt.location + ", " + evt.country;
+    card.appendChild(loc);
+
+    var when = document.createElement("p");
+    when.className = "event-meta";
+    when.innerHTML = calIcon + " <span></span>";
+    when.querySelector("span").textContent = formatDate(evt.date) + " · " + evt.time;
+    card.appendChild(when);
+
+    var link = document.createElement("a");
+    link.className = "btn btn-glow";
+    link.href = evt.link;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "View Event";
+    card.appendChild(link);
+
+    grid.appendChild(card);
+  });
 })();
