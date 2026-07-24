@@ -9,6 +9,10 @@
 </head>
 <body>
 
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
 <header class="nav">
   <div class="nav-inner">
     <a href="#" class="logo">Sahaba Club</a>
@@ -18,8 +22,8 @@
     </div>
     <div class="nav-actions">
       <a href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in" class="btn btn-ghost">Sign in</a>
-      <a href="#join" class="btn btn-accent nav-cta indiv-only">Join free</a>
-      <a href="#join" class="btn btn-accent nav-cta corp-only">Talk to sales</a>
+      <a href="#join" class="btn btn-glow nav-cta indiv-only">Join free</a>
+      <a href="#join" class="btn btn-glow nav-cta corp-only">Talk to sales</a>
     </div>
   </div>
 </header>
@@ -27,14 +31,14 @@
 <main>
 
   <section class="hero">
-    <p class="eyebrow">Microsoft AI Cloud Partner · DIFC AI Campus, Dubai</p>
-    <h1 class="indiv-only">Join the AI universe. Get Microsoft&nbsp;365 free for 3 months.</h1>
-    <h1 class="corp-only">Power Platform, agentic AI, and training — delivered by a Microsoft partner.</h1>
+    <span class="eyebrow"><span class="dot"></span>Microsoft AI Cloud Partner · DIFC AI Campus, Dubai</span>
+    <h1 class="glow-text indiv-only">Join the AI universe. Get Microsoft&nbsp;365 free for 3 months.</h1>
+    <h1 class="glow-text corp-only">Power Platform, agentic AI, and training — delivered by a Microsoft partner.</h1>
     <p class="lead indiv-only">Sahaba Club is a global community for AI and cloud dreamers — coaching, hackathons, a podcast with 20,000+ daily listeners, and a free Microsoft 365 account when you join.</p>
     <p class="lead corp-only">We help GCC companies scale with Power Apps, Power Automate, Copilot Studio, and Azure AI — backed by hands-on training so your team keeps building after we're done.</p>
     <div class="hero-actions">
-      <a href="#join" class="btn btn-accent btn-lg indiv-only">Join free, get Microsoft 365</a>
-      <a href="#join" class="btn btn-accent btn-lg corp-only">Request a consultation</a>
+      <a href="#join" class="btn btn-glow btn-lg indiv-only">Join free, get Microsoft 365</a>
+      <a href="#join" class="btn btn-glow btn-lg corp-only">Request a consultation</a>
       <a href="https://youtube.com/playlist?list=PLHKe9OmckbU3JA7dXCRz-UOPP-XfT8n8O" target="_blank" rel="noopener" class="btn btn-outline btn-lg">Watch Tech Talk with Zoka</a>
     </div>
   </section>
@@ -53,10 +57,10 @@
   </section>
 
   <section class="partners">
-    <span class="badge">Microsoft AI Cloud Partner</span>
-    <span class="badge">DIFC AI Campus</span>
-    <span class="badge">Power Platform</span>
-    <span class="badge">Azure AI</span>
+    <span class="badge"><span class="dot2"></span>Microsoft AI Cloud Partner</span>
+    <span class="badge"><span class="dot2"></span>DIFC AI Campus</span>
+    <span class="badge"><span class="dot2"></span>Power Platform</span>
+    <span class="badge"><span class="dot2"></span>Azure AI</span>
   </section>
 
   <section class="ecosystem">
@@ -65,18 +69,22 @@
 
     <div class="card-grid indiv-only">
       <div class="card">
+        <div class="card-icon">&#128640;</div>
         <p class="card-title">EduHackAI</p>
         <p class="card-desc">A 10-day AI app hackathon — build a real AI app with Microsoft tools, zero or advanced coding.</p>
       </div>
       <div class="card">
+        <div class="card-icon">&#127908;</div>
         <p class="card-title">Tech Talk with Zoka</p>
         <p class="card-desc">Our podcast: AI, cloud, and tech careers, with 20,000+ daily listeners.</p>
       </div>
       <div class="card">
+        <div class="card-icon">&#9889;</div>
         <p class="card-title">PromptArena</p>
         <p class="card-desc">A live, gamified AI prompt-writing competition — judged by experts and the audience.</p>
       </div>
       <div class="card">
+        <div class="card-icon">&#10024;</div>
         <p class="card-title">Events</p>
         <p class="card-desc">Demo days and meetups across the community.</p>
       </div>
@@ -84,18 +92,22 @@
 
     <div class="card-grid corp-only">
       <div class="card">
+        <div class="card-icon">&#9881;&#65039;</div>
         <p class="card-title">Power Platform</p>
         <p class="card-desc">Power Apps, Power Automate, and Power BI dashboards, built fast.</p>
       </div>
       <div class="card">
+        <div class="card-icon">&#129302;</div>
         <p class="card-title">Agentic AI</p>
         <p class="card-desc">Custom AI agents and Copilot Studio bots for service, automation, and analytics.</p>
       </div>
       <div class="card">
+        <div class="card-icon">&#127891;</div>
         <p class="card-title">Training and coaching</p>
         <p class="card-desc">Maker labs, prompt and bot workshops, admin and governance clinics for your team.</p>
       </div>
       <div class="card">
+        <div class="card-icon">&#129309;</div>
         <p class="card-title">Microsoft partnership</p>
         <p class="card-desc">Certified delivery across the GCC — CATRION, Majid Al Futtaim, KIPIC, and more.</p>
       </div>
@@ -118,7 +130,7 @@
       <input type="email" name="email" placeholder="Email" required>
       <input type="tel" name="phone" placeholder="Phone (optional)">
       <input type="text" name="how_heard" placeholder="How did you hear about us? (optional)">
-      <button type="submit" class="btn btn-solid">Join free</button>
+      <button type="submit" class="btn btn-glow">Join free</button>
     </form>
     <div id="individual-thanks" class="form-thanks indiv-only hidden">Thanks — we're reviewing your details now and will email your onboarding info, including your Microsoft 365 account access, shortly.</div>
 
@@ -134,7 +146,7 @@
         <option value="Training">Training</option>
       </select>
       <input type="tel" name="phone" placeholder="Phone (optional)">
-      <button type="submit" class="btn btn-solid">Talk to sales</button>
+      <button type="submit" class="btn btn-glow">Talk to sales</button>
     </form>
     <div id="corporate-thanks" class="form-thanks corp-only hidden">Thanks — our team will reach out within 1–2 business days to set up a consultation.</div>
   </section>
