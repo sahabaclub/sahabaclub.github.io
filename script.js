@@ -582,3 +582,32 @@
 
   renderNextBatch();
 })();
+
+
+// Admin nav link — shown only when this browser is connected to the
+// Events Admin panel with a GitHub token that still has access. This is
+// an interim stand-in for real sign-in/sign-up (coming later): for now,
+// "logged in" means "holds a valid, working admin token in this browser."
+(function () {
+  var link = document.getElementById("nav-admin-link");
+  if (!link) return;
+
+  var TOKEN_KEY = "sc_admin_gh_token";
+  var token = localStorage.getItem(TOKEN_KEY);
+  if (!token) return;
+
+  fetch("https://api.github.com/repos/sahabaclub/sahabaclub.github.io/contents/events-data.js", {
+    headers: {
+      "Authorization": "Bearer " + token,
+      "Accept": "application/vnd.github+json",
+    },
+  }).then(function (resp) {
+    if (resp.ok) {
+      link.classList.remove("admin-hidden");
+    } else if (resp.status === 401 || resp.status === 403) {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  }).catch(function () {
+    // Network hiccup — leave the link hidden rather than guess.
+  });
+})();
