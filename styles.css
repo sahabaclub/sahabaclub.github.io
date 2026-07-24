@@ -85,8 +85,8 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   gap: 10px;
 }
 .logo-mark {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 33px;
   flex-shrink: 0;
   filter: drop-shadow(0 0 10px rgba(59, 179, 224, 0.55));
 }
