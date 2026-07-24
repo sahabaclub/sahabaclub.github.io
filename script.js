@@ -375,6 +375,30 @@
       img.alt = evt.title;
       img.loading = "lazy";
       card.appendChild(img);
+    } else if (evt.brand === "microsoft") {
+      var placeholder = document.createElement("div");
+      placeholder.className = "event-card-image event-ms-placeholder";
+
+      var msLogo = document.createElement("span");
+      msLogo.className = "ms-logo";
+      ["ms-logo-sq1", "ms-logo-sq2", "ms-logo-sq3", "ms-logo-sq4"].forEach(function (cls) {
+        var sq = document.createElement("span");
+        sq.className = "ms-logo-sq " + cls;
+        msLogo.appendChild(sq);
+      });
+      placeholder.appendChild(msLogo);
+
+      var msTitle = document.createElement("span");
+      msTitle.className = "ms-placeholder-title";
+      msTitle.textContent = evt.title;
+      placeholder.appendChild(msTitle);
+
+      var msCaption = document.createElement("span");
+      msCaption.className = "ms-placeholder-caption";
+      msCaption.textContent = "Official Microsoft Training";
+      placeholder.appendChild(msCaption);
+
+      card.appendChild(placeholder);
     }
 
     var badges = document.createElement("div");
@@ -390,6 +414,15 @@
       modeBadge.className = "event-mode-badge";
       modeBadge.textContent = evt.mode;
       badges.appendChild(modeBadge);
+    }
+
+    if (evt.tags && evt.tags.length) {
+      evt.tags.slice(0, 2).forEach(function (tag) {
+        var tagBadge = document.createElement("span");
+        tagBadge.className = "event-tag-badge";
+        tagBadge.textContent = tag;
+        badges.appendChild(tagBadge);
+      });
     }
 
     card.appendChild(badges);
@@ -415,6 +448,36 @@
       var desc = document.createElement("p");
       desc.className = "event-desc";
       desc.textContent = evt.description;
+
+      var toggle = document.createElement("span");
+      toggle.className = "event-desc-toggle";
+      toggle.textContent = "More";
+      toggle.setAttribute("role", "button");
+      toggle.setAttribute("tabindex", "0");
+
+      var expandCard = function () {
+        var wasExpanded = card.classList.contains("is-expanded");
+        Array.prototype.forEach.call(grid.querySelectorAll(".event-card.is-expanded"), function (openCard) {
+          openCard.classList.remove("is-expanded");
+          var t = openCard.querySelector(".event-desc-toggle");
+          if (t) t.textContent = "More";
+        });
+        if (!wasExpanded) {
+          card.classList.add("is-expanded");
+          toggle.textContent = "Less";
+        }
+      };
+
+      toggle.addEventListener("click", expandCard);
+      toggle.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          expandCard();
+        }
+      });
+
+      desc.appendChild(document.createTextNode(" "));
+      desc.appendChild(toggle);
       card.appendChild(desc);
     }
 
@@ -431,7 +494,7 @@
       actions.appendChild(registerBtn);
     }
 
-    if (evt.mapsLink) {
+    if (evt.mapsLink && evt.mode !== "Online") {
       var mapsBtn = document.createElement("a");
       mapsBtn.className = "btn btn-outline";
       mapsBtn.href = evt.mapsLink;
