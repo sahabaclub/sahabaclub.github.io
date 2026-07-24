@@ -681,6 +681,14 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   border-color: rgba(139, 92, 246, 0.4);
   box-shadow: 0 12px 40px rgba(139, 92, 246, 0.18);
 }
+.event-card-image {
+  width: calc(100% + 44px);
+  margin: -22px -22px 4px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius) var(--radius) 0 0;
+  display: block;
+}
 .event-price-badge {
   align-self: flex-start;
   font-size: 11px;
