@@ -1,4 +1,4 @@
-// Drifting starfield behind the whole page — the "AI universe" backdrop.
+// Drifting starfield behind the whole page â the "AI universe" backdrop.
 (function () {
   var canvas = document.getElementById("stars");
   if (!canvas || !canvas.getContext) return;
@@ -50,7 +50,7 @@
   frame();
 })();
 
-// The AI universe orbit visual — a glowing core with the Sahaba Club
+// The AI universe orbit visual â a glowing core with the Sahaba Club
 // activities orbiting around it on tilted, depth-shaded rings.
 (function () {
   var canvas = document.getElementById("universe-canvas");
@@ -288,7 +288,7 @@
   setTab("individual");
 })();
 
-// Sign-up / consultation forms — post to the Sahaba Club Power Automate
+// Sign-up / consultation forms â post to the Sahaba Club Power Automate
 // flow, which emails the team for every submission.
 (function () {
   var FLOW_URL = "https://default23e9f3d3e0d04d38b8cf44b82c7fab.db.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/15/workflows/b950546181014f17b4fec3b3cfe6c139/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xD3SzgK_AVwsu89BqjT2I3vIcwojfFKT5yiZqvupEvk";
@@ -330,7 +330,7 @@
   wireForm("corporate-form", "corporate", "corporate-thanks");
 })();
 
-// Upcoming events grid — reads from the EVENTS array defined in
+// Upcoming events grid â reads from the EVENTS array defined in
 // events-data.js (only present on events.html). Automatically hides
 // past events, sorts what's left by date, and loads results in
 // batches of 9 as the user scrolls.
@@ -466,7 +466,7 @@
     var when = document.createElement("p");
     when.className = "event-meta";
     when.innerHTML = calIcon + " <span></span>";
-    when.querySelector("span").textContent = formatDate(evt.date) + " · " + evt.time;
+    when.querySelector("span").textContent = formatDate(evt.date) + " Â· " + evt.time;
     card.appendChild(when);
 
     if (evt.description) {
@@ -544,7 +544,7 @@
 
   var statusEl = document.createElement("p");
   statusEl.className = "events-load-more-status";
-  statusEl.textContent = "Loading more events…";
+  statusEl.textContent = "Loading more eventsâ¦";
   statusEl.style.display = "none";
 
   function renderNextBatch() {
@@ -596,15 +596,27 @@
   var token = localStorage.getItem(TOKEN_KEY);
   if (!token) return;
 
-  fetch("https://api.github.com/repos/sahabaclub/sahabaclub.github.io/contents/events-data.js", {
+  // Note: this repo is public, so a plain "can I read it" check would pass
+  // for anyone, token or not. We specifically check the authenticated
+  // user's push (write) permission on the repo, which GitHub only returns
+  // when the request carries a valid token belonging to someone with real
+  // access — that's the actual admin signal.
+  fetch("https://api.github.com/repos/sahabaclub/sahabaclub.github.io", {
     headers: {
       "Authorization": "Bearer " + token,
       "Accept": "application/vnd.github+json",
     },
   }).then(function (resp) {
-    if (resp.ok) {
+    if (resp.status === 401 || resp.status === 403) {
+      localStorage.removeItem(TOKEN_KEY);
+      return null;
+    }
+    return resp.ok ? resp.json() : null;
+  }).then(function (data) {
+    if (data && data.permissions && data.permissions.push) {
       link.classList.remove("admin-hidden");
-    } else if (resp.status === 401 || resp.status === 403) {
+    } else if (data) {
+      // Valid token, but this account has no write access to the repo.
       localStorage.removeItem(TOKEN_KEY);
     }
   }).catch(function () {
