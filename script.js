@@ -60,7 +60,7 @@
 
   var RINGS = [
     { radiusRatio: 0.24, tilt: 0.42, speed: 0.00028, color: "34, 211, 238", items: ["Coaching", "Hackathons"] },
-    { radiusRatio: 0.37, tilt: 0.42, speed: -0.00019, color: "139, 92, 246", items: ["PromptArena", "Play ZuZu AI", "Podcast with Zoka"] },
+    { radiusRatio: 0.37, tilt: 0.42, speed: -0.00019, color: "139, 92, 246", items: ["PromptArena", "ZuZu-AI", "PodCast"] },
     { radiusRatio: 0.49, tilt: 0.42, speed: 0.00013, color: "224, 168, 62", items: ["Low-Code", "Vibe-Code"] },
   ];
 
@@ -83,9 +83,9 @@
     ctx.ellipse(cx, cy, radius, radius * tilt, 0, 0, Math.PI * 2);
   }
 
-  function drawCore(t) {
+  function drawCore(t, scale) {
     var pulse = 1 + Math.sin(t * 0.0016) * 0.06;
-    var r = Math.max(24, Math.min(w, h) * 0.07) * pulse;
+    var r = Math.max(24, Math.min(w, h) * 0.075) * pulse;
     var grad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
     grad.addColorStop(0, "#ffffff");
     grad.addColorStop(0.35, "#8be9fd");
@@ -98,10 +98,18 @@
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+
+    ctx.save();
+    ctx.fillStyle = "#05070d";
+    ctx.font = "800 " + Math.round(r * 0.62) + "px -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("AI", cx, cy + r * 0.04);
+    ctx.restore();
   }
 
-  function drawNode(x, y, depth, color, label, alignRight) {
-    var baseR = 5.5;
+  function drawNode(x, y, depth, color, label, alignRight, scale) {
+    var baseR = 5.5 * scale;
     var r = baseR * (0.65 + depth * 0.7);
     var alpha = 0.45 + depth * 0.55;
 
@@ -118,7 +126,7 @@
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.shadowColor = "rgba(" + color + ", 0.9)";
-    ctx.shadowBlur = 14 * (0.5 + depth);
+    ctx.shadowBlur = 14 * scale * (0.5 + depth);
     ctx.fillStyle = "rgba(" + color + ", 0.95)";
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -128,9 +136,9 @@
     ctx.save();
     ctx.globalAlpha = 0.55 + depth * 0.45;
     ctx.fillStyle = "#f3f4f8";
-    ctx.font = "600 12px -apple-system, Segoe UI, Roboto, sans-serif";
+    ctx.font = "600 " + Math.round(12 * scale) + "px -apple-system, Segoe UI, Roboto, sans-serif";
     ctx.textBaseline = "middle";
-    var pad = r + 8;
+    var pad = r + 8 * scale;
     if (alignRight) {
       ctx.textAlign = "left";
       ctx.fillText(label, x + pad, y);
@@ -146,6 +154,7 @@
     ctx.clearRect(0, 0, w, h);
 
     var minDim = Math.min(w, h);
+    var scale = Math.max(0.7, Math.min(1.6, minDim / 560));
     var nodes = [];
 
     RINGS.forEach(function (ring) {
@@ -172,9 +181,9 @@
     var backNodes = nodes.filter(function (n) { return n.depth < 0.5; });
     var frontNodes = nodes.filter(function (n) { return n.depth >= 0.5; });
 
-    backNodes.forEach(function (n) { drawNode(n.x, n.y, n.depth, n.color, n.label, n.alignRight); });
-    drawCore(t);
-    frontNodes.forEach(function (n) { drawNode(n.x, n.y, n.depth, n.color, n.label, n.alignRight); });
+    backNodes.forEach(function (n) { drawNode(n.x, n.y, n.depth, n.color, n.label, n.alignRight, scale); });
+    drawCore(t, scale);
+    frontNodes.forEach(function (n) { drawNode(n.x, n.y, n.depth, n.color, n.label, n.alignRight, scale); });
 
     if (!reduceMotion) requestAnimationFrame(frame);
   }
