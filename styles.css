@@ -334,6 +334,67 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   border: 0;
 }
 
+/* Connect with us */
+.connect {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 8px 20px 44px;
+  text-align: center;
+}
+.connect-heading {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 4px 0 30px;
+}
+.social-grid {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 26px;
+  flex-wrap: wrap;
+}
+.social-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text-secondary);
+}
+.social-icon-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.social-icon-circle svg { width: 26px; height: 26px; }
+.social-name { font-size: 13px; transition: color 0.25s ease; }
+.social-btn:hover .social-icon-circle { transform: translateY(-4px); }
+.social-linkedin:hover .social-icon-circle { border-color: #0A66C2; box-shadow: 0 0 22px rgba(10, 102, 194, 0.4); color: #4098e6; }
+.social-linkedin:hover .social-name { color: #4098e6; }
+.social-youtube:hover .social-icon-circle { border-color: #ff3b3b; box-shadow: 0 0 22px rgba(255, 59, 59, 0.4); color: #ff5c5c; }
+.social-youtube:hover .social-name { color: #ff5c5c; }
+.social-facebook:hover .social-icon-circle { border-color: #1877f2; box-shadow: 0 0 22px rgba(24, 119, 242, 0.4); color: #4a9bff; }
+.social-facebook:hover .social-name { color: #4a9bff; }
+.social-instagram:hover .social-icon-circle { border-color: #e1306c; box-shadow: 0 0 22px rgba(225, 48, 108, 0.4); color: #ef5b8f; }
+.social-instagram:hover .social-name { color: #ef5b8f; }
+.social-tiktok:hover .social-icon-circle { border-color: #25f4ee; box-shadow: 0 0 22px rgba(37, 244, 238, 0.4); color: #25f4ee; }
+.social-tiktok:hover .social-name { color: #25f4ee; }
+
+@media (max-width: 720px) {
+  .connect-heading { font-size: 26px; }
+  .social-grid { gap: 16px; }
+  .social-icon-circle { width: 50px; height: 50px; }
+  .social-icon-circle svg { width: 22px; height: 22px; }
+  .social-name { font-size: 12px; }
+}
+
 /* Partner strip */
 .partners {
   max-width: var(--max-width);
