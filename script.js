@@ -1,3 +1,55 @@
+// Drifting starfield behind the whole page - the "AI universe" backdrop.
+(function () {
+  var canvas = document.getElementById("stars");
+  if (!canvas || !canvas.getContext) return;
+  var ctx = canvas.getContext("2d");
+  var w, h, stars;
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = document.documentElement.scrollHeight;
+    var count = Math.floor((window.innerWidth * window.innerHeight) / 9000);
+    stars = [];
+    for (var i = 0; i < count; i++) {
+      stars.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        r: Math.random() * 1.3 + 0.2,
+        s: Math.random() * 0.4 + 0.05,
+        o: Math.random() * 0.6 + 0.2,
+      });
+    }
+  }
+
+  function frame() {
+    ctx.clearRect(0, 0, w, h);
+    for (var i = 0; i < stars.length; i++) {
+      var st = stars[i];
+      if (!reduceMotion) {
+        st.y += st.s;
+        if (st.y > h) st.y = 0;
+      }
+      ctx.globalAlpha = st.o;
+      ctx.fillStyle = "#cdd3ff";
+      ctx.beginPath();
+      ctx.arc(st.x, st.y, st.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(frame);
+  }
+
+  var resizeTimer;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(resize, 200);
+  });
+
+  resize();
+  frame();
+})();
+
 (function () {
   var tabButtons = document.querySelectorAll(".tab-btn");
   var indivEls = document.querySelectorAll(".indiv-only");
@@ -30,7 +82,7 @@
   setTab("individual");
 })();
 
-// Sign-up / consultation forms — post to the Sahaba Club Power Automate
+// Sign-up / consultation forms - post to the Sahaba Club Power Automate
 // flow, which emails the team for every submission.
 (function () {
   var FLOW_URL = "https://default23e9f3d3e0d04d38b8cf44b82c7fab.db.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/15/workflows/b950546181014f17b4fec3b3cfe6c139/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xD3SzgK_AVwsu89BqjT2I3vIcwojfFKT5yiZqvupEvk";
