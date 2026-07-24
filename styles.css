@@ -211,18 +211,28 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
 /* AI universe orbit visual */
 .universe-section {
   position: relative;
-  max-width: var(--max-width);
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 12px 20px 56px;
+  padding: 12px 20px 64px;
   text-align: center;
 }
-.universe-section .kicker { margin-bottom: 4px; }
+.universe-heading {
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+}
 #universe-canvas {
   display: block;
   width: 100%;
-  height: 560px;
-  max-width: 720px;
+  height: 720px;
+  max-width: 880px;
   margin: 0 auto;
+}
+
+@media (min-width: 721px) and (max-width: 1024px) {
+  .universe-heading { font-size: 30px; }
+  #universe-canvas { height: 520px; max-width: 620px; }
 }
 
 /* Story */
@@ -456,5 +466,10 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .hero h1 { font-size: 32px; }
   .hero h1 .line-small { font-size: 0.48em; }
-  #universe-canvas { height: 420px; }
+  .universe-heading { font-size: 24px; }
+  #universe-canvas { height: 400px; max-width: 420px; }
+}
+
+@media (max-width: 420px) {
+  #universe-canvas { height: 360px; }
 }
