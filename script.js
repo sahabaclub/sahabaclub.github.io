@@ -1,4 +1,4 @@
-// Drifting starfield behind the whole page - the "AI universe" backdrop.
+// Drifting starfield behind the whole page — the "AI universe" backdrop.
 (function () {
   var canvas = document.getElementById("stars");
   if (!canvas || !canvas.getContext) return;
@@ -50,8 +50,9 @@
   frame();
 })();
 
-// The AI universe orbit visual - a glowing core with the Sahaba Club
-// activities orbiting around it on tilted, depth-shaded rings.
+// The AI universe orbit visual — a glowing core with the Sahaba Club
+// activities orbiting around it on tilted, depth-shaded rings. Each node
+// is clickable and jumps to its matching section on the page.
 (function () {
   var canvas = document.getElementById("universe-canvas");
   if (!canvas || !canvas.getContext) return;
@@ -59,12 +60,23 @@
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   var RINGS = [
-    { radiusRatio: 0.24, tilt: 0.42, speed: 0.00028, color: "34, 211, 238", items: ["Coaching", "Hackathons"] },
-    { radiusRatio: 0.37, tilt: 0.42, speed: -0.00019, color: "139, 92, 246", items: ["PromptArena", "ZuZu-AI", "PodCast"] },
-    { radiusRatio: 0.49, tilt: 0.42, speed: 0.00013, color: "224, 168, 62", items: ["Low-Code", "Vibe-Code"] },
+    { radiusRatio: 0.24, tilt: 0.42, speed: 0.00028, color: "34, 211, 238", items: [
+      { label: "Coaching", slug: "coaching" },
+      { label: "Hackathons", slug: "hackathons" },
+    ] },
+    { radiusRatio: 0.37, tilt: 0.42, speed: -0.00019, color: "139, 92, 246", items: [
+      { label: "PromptArena", slug: "promptarena" },
+      { label: "ZuZu-AI", slug: "zuzu-ai" },
+      { label: "PodCast", slug: "podcast" },
+    ] },
+    { radiusRatio: 0.49, tilt: 0.42, speed: 0.00013, color: "224, 168, 62", items: [
+      { label: "Low-Code", slug: "low-code" },
+      { label: "Vibe-Code", slug: "vibe-code" },
+    ] },
   ];
 
   var w, h, cx, cy, dpr;
+  var lastNodes = [];
 
   function resize() {
     var rect = canvas.getBoundingClientRect();
@@ -168,14 +180,29 @@
 
       var count = ring.items.length;
       var angleOffset = reduceMotion ? 0 : t * ring.speed;
-      ring.items.forEach(function (label, i) {
+      ring.items.forEach(function (item, i) {
         var angle = (Math.PI * 2 * i) / count + angleOffset;
         var x = cx + radius * Math.cos(angle);
         var y = cy + radius * ring.tilt * Math.sin(angle);
         var depth = (Math.sin(angle) + 1) / 2;
-        nodes.push({ x: x, y: y, depth: depth, color: ring.color, label: label, alignRight: Math.cos(angle) >= 0 });
+        nodes.push({ x: x, y: y, depth: depth, color: ring.color, label: item.label, slug: item.slug, alignRight: Math.cos(angle) >= 0 });
       });
     });
+
+    ctx.font = "600 " + Math.round(12 * scale) + "px -apple-system, Segoe UI, Roboto, sans-serif";
+    nodes.forEach(function (n) {
+      var r = 5.5 * scale * (0.65 + n.depth * 0.7);
+      var pad = r + 8 * scale;
+      var textW = ctx.measureText(n.label).width;
+      var textH = 16 * scale;
+      var half = Math.max(r * 1.6, textH / 2);
+      if (n.alignRight) {
+        n.hit = { x0: n.x - r * 1.6, y0: n.y - half, x1: n.x + pad + textW, y1: n.y + half };
+      } else {
+        n.hit = { x0: n.x - pad - textW, y0: n.y - half, x1: n.x + r * 1.6, y1: n.y + half };
+      }
+    });
+    lastNodes = nodes;
 
     nodes.sort(function (a, b) { return a.depth - b.depth; });
     var backNodes = nodes.filter(function (n) { return n.depth < 0.5; });
@@ -187,6 +214,31 @@
 
     if (!reduceMotion) requestAnimationFrame(frame);
   }
+
+  function nodeAt(mx, my) {
+    for (var i = 0; i < lastNodes.length; i++) {
+      var n = lastNodes[i];
+      if (n.hit && mx >= n.hit.x0 && mx <= n.hit.x1 && my >= n.hit.y0 && my <= n.hit.y1) {
+        return n;
+      }
+    }
+    return null;
+  }
+
+  canvas.addEventListener("click", function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var n = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
+    if (n) {
+      var target = document.getElementById(n.slug);
+      if (target) target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    }
+  });
+
+  canvas.addEventListener("mousemove", function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var n = nodeAt(e.clientX - rect.left, e.clientY - rect.top);
+    canvas.style.cursor = n ? "pointer" : "default";
+  });
 
   var resizeTimer;
   window.addEventListener("resize", function () {
@@ -237,7 +289,7 @@
   setTab("individual");
 })();
 
-// Sign-up / consultation forms - post to the Sahaba Club Power Automate
+// Sign-up / consultation forms — post to the Sahaba Club Power Automate
 // flow, which emails the team for every submission.
 (function () {
   var FLOW_URL = "https://default23e9f3d3e0d04d38b8cf44b82c7fab.db.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/15/workflows/b950546181014f17b4fec3b3cfe6c139/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xD3SzgK_AVwsu89BqjT2I3vIcwojfFKT5yiZqvupEvk";
