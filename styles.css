@@ -116,6 +116,22 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   align-items: center;
   gap: 10px;
 }
+.logo-img {
+  height: 42px;
+  width: auto;
+  display: block;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 12px rgba(59, 179, 224, 0.35));
+}
+.logo-suffix {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  padding-left: 10px;
+  margin-left: 2px;
+  border-left: 1px solid var(--glass-border);
+}
 .logo-mark {
   width: 40px;
   height: 33px;
@@ -396,6 +412,8 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   .social-icon-circle { width: 50px; height: 50px; }
   .social-icon-circle svg { width: 22px; height: 22px; }
   .social-name { font-size: 12px; }
+  .logo-img { height: 34px; }
+  .logo-suffix { font-size: 12px; padding-left: 8px; }
 }
 
 /* Past-events gallery */
