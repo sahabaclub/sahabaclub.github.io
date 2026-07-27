@@ -589,6 +589,52 @@
 })();
 
 
+// Dark / light theme. Drives the desktop nav button and the Dark/Light
+// choice in the mobile Settings panel, keeping both in sync. The class
+// itself is applied pre-paint by an inline snippet in <head>.
+(function () {
+  var KEY = "sc_light_mode";
+  var root = document.documentElement;
+
+  function isLight() { return root.classList.contains("light-mode"); }
+
+  function syncControls() {
+    var light = isLight();
+
+    var btn = document.getElementById("theme-toggle");
+    if (btn) {
+      var label = light ? "Switch to dark mode" : "Switch to light mode";
+      btn.setAttribute("aria-label", label);
+      btn.setAttribute("title", label);
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll("[data-theme]"), function (b) {
+      var match = b.getAttribute("data-theme") === (light ? "light" : "dark");
+      b.classList.toggle("is-active", match);
+      b.setAttribute("aria-pressed", match ? "true" : "false");
+    });
+  }
+
+  function setTheme(light) {
+    root.classList.toggle("light-mode", light);
+    try { localStorage.setItem(KEY, light ? "1" : "0"); } catch (e) {}
+    syncControls();
+  }
+
+  var toggle = document.getElementById("theme-toggle");
+  if (toggle) {
+    toggle.addEventListener("click", function () { setTheme(!isLight()); });
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-theme]"), function (b) {
+    b.addEventListener("click", function () {
+      setTheme(b.getAttribute("data-theme") === "light");
+    });
+  });
+
+  syncControls();
+})();
+
 // Mobile navigation drawer — hamburger opens a panel under the header
 // with Sign in, Join the Club, Events, Language and Settings.
 (function () {
@@ -693,17 +739,6 @@
     motionBox.addEventListener("change", function () {
       document.documentElement.classList.toggle("reduce-motion", motionBox.checked);
       localStorage.setItem(KEY, motionBox.checked ? "1" : "0");
-    });
-  }
-
-  // Settings — light mode. The class is applied early by an inline
-  // snippet in <head>; here we just keep the switch in sync.
-  var lightBox = document.getElementById("setting-light-mode");
-  if (lightBox) {
-    lightBox.checked = document.documentElement.classList.contains("light-mode");
-    lightBox.addEventListener("change", function () {
-      document.documentElement.classList.toggle("light-mode", lightBox.checked);
-      localStorage.setItem("sc_light_mode", lightBox.checked ? "1" : "0");
     });
   }
 
