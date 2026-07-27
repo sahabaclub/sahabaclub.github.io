@@ -168,6 +168,16 @@
     <a href="events.html" class="btn btn-outline events-cta">See upcoming events &rarr;</a>
   </section>
 
+  <!-- Full-screen photo viewer. Opens when a gallery photo is clicked,
+       closes on another click, the X, or the Escape key. -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Event photo" hidden>
+    <button class="lightbox-close" id="lightbox-close" type="button" aria-label="Close photo">&times;</button>
+    <button class="lightbox-nav lightbox-prev" id="lightbox-prev" type="button" aria-label="Previous photo">&#8249;</button>
+    <img class="lightbox-img" id="lightbox-img" src="" alt="">
+    <button class="lightbox-nav lightbox-next" id="lightbox-next" type="button" aria-label="Next photo">&#8250;</button>
+    <p class="lightbox-counter" id="lightbox-counter"></p>
+  </div>
+
   <section class="partners">
     <span class="badge"><span class="dot2"></span>Microsoft AI Cloud Partner</span>
     <span class="badge"><span class="dot2"></span>DIFC AI Campus</span>
