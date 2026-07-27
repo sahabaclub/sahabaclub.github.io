@@ -584,6 +584,94 @@
 })();
 
 
+// Gallery lightbox — click a past-event photo to view it full screen,
+// click again (or press Escape) to shrink it back into the strip.
+(function () {
+  var box = document.getElementById("lightbox");
+  var gallery = document.querySelector(".event-gallery");
+  if (!box || !gallery) return;
+
+  var boxImg = document.getElementById("lightbox-img");
+  var closeBtn = document.getElementById("lightbox-close");
+  var prevBtn = document.getElementById("lightbox-prev");
+  var nextBtn = document.getElementById("lightbox-next");
+  var counter = document.getElementById("lightbox-counter");
+
+  // The strip duplicates every photo to loop seamlessly, so build the
+  // list from the originals only (the clones are aria-hidden).
+  function realPhotos() {
+    return Array.prototype.filter.call(
+      gallery.querySelectorAll(".event-photo.has-photo"),
+      function (el) { return el.getAttribute("aria-hidden") !== "true"; }
+    );
+  }
+
+  var index = 0;
+
+  function srcList() {
+    return realPhotos().map(function (el) {
+      var img = el.querySelector("img");
+      return img ? img.getAttribute("src") : null;
+    }).filter(Boolean);
+  }
+
+  function show(i) {
+    var list = srcList();
+    if (!list.length) return;
+    index = (i + list.length) % list.length;
+    boxImg.src = list[index];
+    boxImg.alt = "Sahaba Club event photo " + (index + 1) + " of " + list.length;
+    counter.textContent = index + 1 + " / " + list.length;
+    var multiple = list.length > 1;
+    prevBtn.hidden = !multiple;
+    nextBtn.hidden = !multiple;
+  }
+
+  function open(i) {
+    show(i);
+    box.hidden = false;
+    document.body.classList.add("lightbox-open");
+    window.requestAnimationFrame(function () {
+      box.classList.add("is-open");
+    });
+    closeBtn.focus();
+  }
+
+  function close() {
+    box.classList.remove("is-open");
+    document.body.classList.remove("lightbox-open");
+    window.setTimeout(function () {
+      box.hidden = true;
+      boxImg.src = "";
+    }, 220);
+  }
+
+  gallery.addEventListener("click", function (e) {
+    var photo = e.target.closest ? e.target.closest(".event-photo") : null;
+    if (!photo || !photo.classList.contains("has-photo")) return;
+    var clickedSrc = photo.querySelector("img").getAttribute("src");
+    var list = srcList();
+    var at = list.indexOf(clickedSrc);
+    open(at === -1 ? 0 : at);
+  });
+
+  box.addEventListener("click", function (e) {
+    if (e.target === boxImg) { close(); return; }
+    if (e.target === box) close();
+  });
+
+  closeBtn.addEventListener("click", close);
+  prevBtn.addEventListener("click", function () { show(index - 1); });
+  nextBtn.addEventListener("click", function () { show(index + 1); });
+
+  document.addEventListener("keydown", function (e) {
+    if (box.hidden) return;
+    if (e.key === "Escape") close();
+    else if (e.key === "ArrowLeft") show(index - 1);
+    else if (e.key === "ArrowRight") show(index + 1);
+  });
+})();
+
 // Admin nav link — shown only when this browser is connected to the
 // Events Admin panel with a GitHub token that still has access. This is
 // an interim stand-in for real sign-in/sign-up (coming later): for now,
