@@ -173,6 +173,65 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
 .nav-link { font-size: 14px; font-weight: 600; color: var(--text-secondary); padding: 8px 4px; transition: color 0.2s; }
 .nav-link:hover { color: var(--text); }
 
+/* Dark / light switch in the desktop nav */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s, transform 0.2s;
+}
+.theme-toggle:hover { color: var(--text); background: rgba(255, 255, 255, 0.1); transform: translateY(-1px); }
+.theme-toggle:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.theme-icon { width: 19px; height: 19px; }
+/* Show the mode you'd switch TO: sun while dark, moon while light. */
+.theme-toggle .icon-moon { display: none; }
+html.light-mode .theme-toggle .icon-sun { display: none; }
+html.light-mode .theme-toggle .icon-moon { display: block; }
+html.light-mode .theme-toggle:hover { background: rgba(16, 22, 39, 0.07); }
+
+/* Dark / light choice inside the mobile Settings panel */
+.theme-choice-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  flex-wrap: wrap;
+}
+.theme-choice-label { font-size: 15px; color: var(--text); }
+.theme-choice {
+  display: inline-flex;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  border-radius: 999px;
+  padding: 4px;
+}
+.theme-choice-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.22s;
+}
+.theme-choice-btn.is-active {
+  background: linear-gradient(90deg, var(--violet), var(--cyan));
+  color: #05070d;
+}
+html.light-mode .theme-choice-btn.is-active { color: #fff; }
+
 /* Hamburger — hidden on desktop, shown below 820px */
 .nav-toggle {
   display: none;

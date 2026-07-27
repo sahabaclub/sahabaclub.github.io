@@ -34,6 +34,15 @@
     <div class="nav-actions">
       <a href="index.html" class="nav-link">Home</a>
       <a href="admin.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
+        <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/>
+          <path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/>
+        </svg>
+        <svg class="theme-icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.5 13.4A8.4 8.4 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z"/>
+        </svg>
+      </button>
       <a href="index.html#join" class="btn btn-glow">Join free</a>
     </div>
     <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
@@ -70,12 +79,13 @@
       <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
     </button>
     <div class="mobile-submenu" id="submenu-settings" hidden>
-      <label class="mobile-switch">
-        <span>Light mode</span>
-        <input type="checkbox" id="setting-light-mode">
-        <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
-      </label>
-      <p class="mobile-setting-note">Switches the whole site to a light colour scheme.</p>
+      <div class="theme-choice-row">
+        <span class="theme-choice-label">Appearance</span>
+        <div class="theme-choice" role="group" aria-label="Appearance">
+          <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+          <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+        </div>
+      </div>
       <label class="mobile-switch">
         <span>Reduce motion</span>
         <input type="checkbox" id="setting-reduce-motion">
