@@ -742,9 +742,9 @@
     });
   }
 
-  // If the viewport grows past the mobile breakpoint, drop the drawer.
+  // If the viewport grows past the compact-header breakpoint, drop the drawer.
   window.addEventListener("resize", function () {
-    if (window.innerWidth > 820 && isOpen()) closeMenu();
+    if (window.innerWidth > 1200 && isOpen()) closeMenu();
   });
 })();
 
