@@ -584,6 +584,119 @@
 })();
 
 
+// Mobile navigation drawer — hamburger opens a panel under the header
+// with Sign in, Join the Club, Events, Language and Settings.
+(function () {
+  var toggle = document.getElementById("nav-toggle");
+  var menu = document.getElementById("mobile-menu");
+  var backdrop = document.getElementById("mobile-menu-backdrop");
+  var header = document.querySelector(".nav");
+  if (!toggle || !menu || !backdrop || !header) return;
+
+  // Keep the panel pinned right below the header at any screen size.
+  function syncHeaderHeight() {
+    document.documentElement.style.setProperty("--nav-h", header.offsetHeight + "px");
+  }
+  syncHeaderHeight();
+  window.addEventListener("resize", syncHeaderHeight);
+  window.addEventListener("orientationchange", syncHeaderHeight);
+
+  function openMenu() {
+    syncHeaderHeight();
+    menu.hidden = false;
+    backdrop.hidden = false;
+    document.body.classList.add("menu-open");
+    toggle.classList.add("is-open");
+    toggle.setAttribute("aria-expanded", "true");
+    toggle.setAttribute("aria-label", "Close menu");
+    window.requestAnimationFrame(function () {
+      menu.classList.add("is-open");
+      backdrop.classList.add("is-open");
+    });
+  }
+
+  function closeMenu() {
+    menu.classList.remove("is-open");
+    backdrop.classList.remove("is-open");
+    document.body.classList.remove("menu-open");
+    toggle.classList.remove("is-open");
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.setAttribute("aria-label", "Open menu");
+    window.setTimeout(function () {
+      menu.hidden = true;
+      backdrop.hidden = true;
+    }, 240);
+  }
+
+  function isOpen() { return !menu.hidden; }
+
+  toggle.addEventListener("click", function () {
+    if (isOpen()) closeMenu();
+    else openMenu();
+  });
+  backdrop.addEventListener("click", closeMenu);
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && isOpen()) closeMenu();
+  });
+
+  // Any real navigation closes the drawer. Expanders and the settings
+  // switch stay put so the menu doesn't vanish mid-interaction.
+  menu.addEventListener("click", function (e) {
+    var link = e.target.closest ? e.target.closest("a") : null;
+    if (link) closeMenu();
+  });
+
+  // Expandable sections (Language, Settings)
+  Array.prototype.forEach.call(menu.querySelectorAll(".mobile-menu-expand"), function (btn) {
+    btn.addEventListener("click", function () {
+      var panel = document.getElementById(btn.getAttribute("aria-controls"));
+      if (!panel) return;
+      var willOpen = panel.hidden;
+      // Only one section open at a time.
+      Array.prototype.forEach.call(menu.querySelectorAll(".mobile-menu-expand"), function (other) {
+        var otherPanel = document.getElementById(other.getAttribute("aria-controls"));
+        if (otherPanel) otherPanel.hidden = true;
+        other.setAttribute("aria-expanded", "false");
+      });
+      panel.hidden = !willOpen;
+      btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+    });
+  });
+
+  // Language — English is live; Arabic isn't translated yet, so say so
+  // rather than switching to a half-translated page.
+  Array.prototype.forEach.call(menu.querySelectorAll("[data-lang]"), function (btn) {
+    btn.addEventListener("click", function () {
+      if (btn.getAttribute("data-lang") === "ar") {
+        window.alert("An Arabic version of the site is on the way — it isn't ready yet.");
+        return;
+      }
+      Array.prototype.forEach.call(menu.querySelectorAll("[data-lang]"), function (b) {
+        b.classList.toggle("is-active", b === btn);
+      });
+    });
+  });
+
+  // Settings — reduce motion, remembered on this device.
+  var motionBox = document.getElementById("setting-reduce-motion");
+  if (motionBox) {
+    var KEY = "sc_reduce_motion";
+    var saved = localStorage.getItem(KEY) === "1";
+    motionBox.checked = saved;
+    document.documentElement.classList.toggle("reduce-motion", saved);
+    motionBox.addEventListener("change", function () {
+      document.documentElement.classList.toggle("reduce-motion", motionBox.checked);
+      localStorage.setItem(KEY, motionBox.checked ? "1" : "0");
+    });
+  }
+
+  // If the viewport grows past the mobile breakpoint, drop the drawer.
+  window.addEventListener("resize", function () {
+    if (window.innerWidth > 820 && isOpen()) closeMenu();
+  });
+})();
+
 // Gallery lightbox — click a past-event photo to view it full screen,
 // click again (or press Escape) to shrink it back into the strip.
 (function () {
@@ -677,8 +790,11 @@
 // an interim stand-in for real sign-in/sign-up (coming later): for now,
 // "logged in" means "holds a valid, working admin token in this browser."
 (function () {
-  var link = document.getElementById("nav-admin-link");
-  if (!link) return;
+  var links = [
+    document.getElementById("nav-admin-link"),
+    document.getElementById("nav-admin-link-mobile"),
+  ].filter(Boolean);
+  if (!links.length) return;
 
   var TOKEN_KEY = "sc_admin_gh_token";
   var token = localStorage.getItem(TOKEN_KEY);
@@ -702,7 +818,7 @@
     return resp.ok ? resp.json() : null;
   }).then(function (data) {
     if (data && data.permissions && data.permissions.push) {
-      link.classList.remove("admin-hidden");
+      links.forEach(function (l) { l.classList.remove("admin-hidden"); });
     } else if (data) {
       // Valid token, but this account has no write access to the repo.
       localStorage.removeItem(TOKEN_KEY);
