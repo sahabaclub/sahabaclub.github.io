@@ -194,19 +194,8 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
 
 @media (max-width: 900px) { .nav-slogan { font-size: 21px; } }
 @media (max-width: 620px) { .nav-slogan { font-size: 18px; } }
-/* Below this the logo and buttons need the whole top row, so the slogan
-   drops onto its own full-width line beneath them, set on a single line. */
-@media (max-width: 460px) {
-  .nav.has-drawer .nav-inner { flex-wrap: wrap; row-gap: 2px; }
-  .nav-slogan {
-    order: 3;
-    flex: 0 0 100%;
-    font-size: 17px;
-    line-height: 1.1;
-    padding-bottom: 2px;
-  }
-  .nav-slogan span { display: inline; }
-}
+/* The small-phone slogan layout lives further down the file, after the
+   .nav.has-drawer rules it has to override. */
 
 /* Dark / light switch in the desktop nav */
 .theme-toggle {
@@ -482,6 +471,20 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
   .logo-img { height: 40px; }
   .nav-toggle { width: 42px; height: 42px; padding: 0 10px; }
   .mobile-menu-item { padding: 14px; font-size: 15px; }
+}
+/* On small phones the logo and buttons need the whole top row, so the slogan
+   drops onto its own full-width line beneath them, set on a single line.
+   This has to sit after the .nav.has-drawer nowrap rule to win over it. */
+@media (max-width: 460px) {
+  .nav.has-drawer .nav-inner { flex-wrap: wrap; row-gap: 0; }
+  .nav-slogan {
+    order: 3;
+    flex: 0 0 100%;
+    font-size: 17px;
+    line-height: 1.15;
+    padding-bottom: 2px;
+  }
+  .nav-slogan span { display: inline; }
 }
 
 /* Buttons */
