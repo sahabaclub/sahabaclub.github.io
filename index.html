@@ -31,8 +31,53 @@
       <a href="#join" class="btn btn-glow nav-cta indiv-only">Join free</a>
       <a href="#join" class="btn btn-glow nav-cta corp-only">Talk to sales</a>
     </div>
+    <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+      <span class="nav-toggle-bar"></span>
+    </button>
   </div>
 </header>
+
+<!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
+<div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
+<nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
+  <div class="mobile-menu-panel">
+    <div class="tab-toggle mobile-tab-toggle" role="tablist" aria-label="Audience">
+      <button class="tab-btn active" data-tab="individual" role="tab" aria-selected="true">Individuals</button>
+      <button class="tab-btn" data-tab="corporate" role="tab" aria-selected="false">Corporate</button>
+    </div>
+
+    <a class="mobile-menu-item" href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in">Sign in</a>
+    <a class="mobile-menu-item is-primary" href="#join">Join the Club</a>
+    <a class="mobile-menu-item" href="events.html">Events</a>
+    <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="admin.html">Admin</a>
+
+    <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-language">
+      <span>Language</span>
+      <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
+    </button>
+    <div class="mobile-submenu" id="submenu-language" hidden>
+      <button class="mobile-submenu-item is-active" type="button" data-lang="en">English</button>
+      <button class="mobile-submenu-item" type="button" data-lang="ar">
+        العربية <span class="mobile-soon">soon</span>
+      </button>
+    </div>
+
+    <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-settings">
+      <span>Settings</span>
+      <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
+    </button>
+    <div class="mobile-submenu" id="submenu-settings" hidden>
+      <label class="mobile-switch">
+        <span>Reduce motion</span>
+        <input type="checkbox" id="setting-reduce-motion">
+        <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
+      </label>
+      <p class="mobile-setting-note">Turns off the moving starfield and scrolling photo strip.</p>
+    </div>
+  </div>
+</nav>
 
 <main>
 
