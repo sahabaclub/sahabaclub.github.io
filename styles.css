@@ -950,7 +950,7 @@ body.lightbox-open { overflow: hidden; }
 }
 .stats-stage {
   position: relative;
-  height: 360px;
+  height: 330px;
   border-radius: 28px;
   overflow: hidden;
   border: 1px solid var(--glass-border);
@@ -1018,11 +1018,12 @@ body.lightbox-open { overflow: hidden; }
   max-width: 84%;
 }
 
-/* Sizes differ slightly so the group reads as having depth. */
-.orb-1 { width: 178px; height: 178px; left: 3%;  top: 20%; animation: drift1 13s ease-in-out infinite; }
-.orb-2 { width: 152px; height: 152px; left: 27%; top: 6%;  animation: drift2 16s ease-in-out infinite; }
-.orb-3 { width: 166px; height: 166px; left: 52%; top: 32%; animation: drift3 14s ease-in-out infinite; }
-.orb-4 { width: 158px; height: 158px; left: 76%; top: 10%; animation: drift4 18s ease-in-out infinite; }
+/* Sizes differ slightly so the group reads as having depth, and the tops
+   zig-zag so the spheres fill the stage instead of sitting in a row. */
+.orb-1 { width: 178px; height: 178px; left: 3%;  top: 14%; animation: drift1 13s ease-in-out infinite; }
+.orb-2 { width: 152px; height: 152px; left: 27%; top: 44%; animation: drift2 16s ease-in-out infinite; }
+.orb-3 { width: 166px; height: 166px; left: 52%; top: 10%; animation: drift3 14s ease-in-out infinite; }
+.orb-4 { width: 158px; height: 158px; left: 76%; top: 40%; animation: drift4 18s ease-in-out infinite; }
 .orb-2 .orb-num, .orb-4 .orb-num { font-size: 26px; }
 .orb-4 .orb-num { font-size: 19px; }
 
