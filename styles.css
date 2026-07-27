@@ -194,8 +194,19 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
 
 @media (max-width: 900px) { .nav-slogan { font-size: 21px; } }
 @media (max-width: 620px) { .nav-slogan { font-size: 18px; } }
-/* Below this the logo and buttons need the room more than the slogan does. */
-@media (max-width: 460px) { .nav-slogan { display: none; } }
+/* Below this the logo and buttons need the whole top row, so the slogan
+   drops onto its own full-width line beneath them, set on a single line. */
+@media (max-width: 460px) {
+  .nav.has-drawer .nav-inner { flex-wrap: wrap; row-gap: 2px; }
+  .nav-slogan {
+    order: 3;
+    flex: 0 0 100%;
+    font-size: 17px;
+    line-height: 1.1;
+    padding-bottom: 2px;
+  }
+  .nav-slogan span { display: inline; }
+}
 
 /* Dark / light switch in the desktop nav */
 .theme-toggle {
