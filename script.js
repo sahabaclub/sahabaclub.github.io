@@ -742,10 +742,6 @@
     });
   }
 
-  // If the viewport grows past the compact-header breakpoint, drop the drawer.
-  window.addEventListener("resize", function () {
-    if (window.innerWidth > 1200 && isOpen()) closeMenu();
-  });
 })();
 
 // Gallery lightbox — click a past-event photo to view it full screen,
