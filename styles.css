@@ -414,24 +414,21 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
   transition-duration: 0.001ms !important;
 }
 
-/* Phones, tablets and small laptops all get the compact header. */
-@media (max-width: 1200px) {
-  .nav-inner { flex-wrap: nowrap; padding: 14px 20px; gap: 14px; }
-  .nav-inner .tab-toggle,
-  .nav-inner .nav-actions { display: none; }
-  .nav-toggle { display: flex; }
-  .mobile-audience-bar {
-    display: flex;
-    justify-content: center;
-    padding: 20px 20px 0;
-  }
-  /* The strip now occupies the gap, so pull the hero up to match. */
-  .hero { padding-top: 44px; }
+/* The compact header applies at every screen size — on pages that carry
+   the drawer, the links live in the menu rather than the top bar. */
+.nav.has-drawer .nav-inner { flex-wrap: nowrap; padding: 14px 20px; gap: 14px; }
+.nav.has-drawer .tab-toggle,
+.nav.has-drawer .nav-actions { display: none; }
+.nav.has-drawer .nav-toggle { display: flex; }
+.nav-compact { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.mobile-audience-bar {
+  display: flex;
+  justify-content: center;
+  padding: 20px 20px 0;
 }
-
-/* On tablets and laptops the drawer reads better as a right-aligned
-   dropdown than as a full-width sheet. */
-@media (min-width: 721px) and (max-width: 1200px) {
+/* Above phone width the drawer reads better as a right-aligned dropdown
+   than as a full-width sheet. */
+@media (min-width: 721px) {
   .mobile-menu {
     max-width: var(--max-width);
     margin-left: auto;
@@ -443,13 +440,8 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
 }
 
 @media (max-width: 720px) {
-  .nav-inner { padding: 12px 16px; gap: 12px; }
+  .nav.has-drawer .nav-inner { padding: 12px 16px; gap: 12px; }
   .mobile-audience-bar { padding: 18px 16px 0; }
-  .hero { padding-top: 34px; }
-}
-
-@media (min-width: 1201px) {
-  .mobile-menu, .mobile-menu-backdrop { display: none !important; }
 }
 @media (max-width: 380px) {
   .logo-img { height: 40px; }
@@ -488,8 +480,13 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
 .hero {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 88px 20px 56px;
+  /* The audience strip sits above the hero on every screen now, so the
+     old 88px top gap would leave too much dead space. */
+  padding: 44px 20px 56px;
   text-align: center;
+}
+@media (max-width: 720px) {
+  .hero { padding-top: 34px; }
 }
 .eyebrow {
   display: inline-flex;

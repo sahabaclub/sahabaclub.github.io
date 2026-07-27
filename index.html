@@ -26,7 +26,7 @@
 <div class="nebula-bg" aria-hidden="true"></div>
 <div class="noise-bg" aria-hidden="true"></div>
 
-<header class="nav">
+<header class="nav has-drawer">
   <div class="nav-inner">
     <a href="#" class="logo" aria-label="Sahaba Club — home">
       <img src="assets/logo.png" class="logo-img" alt="Sahaba Club" width="185" height="120">
@@ -38,6 +38,11 @@
     <div class="nav-actions">
       <a href="events.html" class="nav-link">Events</a>
       <a href="admin.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
+      <a href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in" class="btn btn-ghost">Sign in</a>
+      <a href="#join" class="btn btn-glow nav-cta indiv-only">Join free</a>
+      <a href="#join" class="btn btn-glow nav-cta corp-only">Talk to sales</a>
+    </div>
+    <div class="nav-compact">
       <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
         <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
           <circle cx="12" cy="12" r="4.2"/>
@@ -47,15 +52,12 @@
           <path d="M20.5 13.4A8.4 8.4 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z"/>
         </svg>
       </button>
-      <a href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in" class="btn btn-ghost">Sign in</a>
-      <a href="#join" class="btn btn-glow nav-cta indiv-only">Join free</a>
-      <a href="#join" class="btn btn-glow nav-cta corp-only">Talk to sales</a>
+      <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
     </div>
-    <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
-      <span class="nav-toggle-bar"></span>
-      <span class="nav-toggle-bar"></span>
-      <span class="nav-toggle-bar"></span>
-    </button>
   </div>
 </header>
 
