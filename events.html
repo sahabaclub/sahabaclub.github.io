@@ -106,9 +106,62 @@
     <p class="lead">Hackathons, meetups, and conferences from across the AI universe &mdash; curated by Sahaba Club. Free and paid, in the UAE and beyond.</p>
   </section>
 
+  <!-- Search + filters. Tag chips are built from the data at runtime, so
+       adding an event with a new tag needs no change here. -->
+  <section class="events-filters" aria-label="Search and filter events">
+    <div class="filter-search">
+      <svg class="filter-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+      </svg>
+      <input type="search" id="filter-q" placeholder="Search events by name, topic or venue…" autocomplete="off" aria-label="Search events">
+      <button type="button" class="filter-clear-q hidden" id="filter-clear-q" aria-label="Clear search">&times;</button>
+    </div>
+
+    <div class="filter-row">
+      <div class="filter-group" role="group" aria-label="When">
+        <span class="filter-legend">When</span>
+        <div class="filter-chips" id="filter-when">
+          <button type="button" class="filter-chip is-active" data-when="all">Any date</button>
+          <button type="button" class="filter-chip" data-when="today">Today</button>
+          <button type="button" class="filter-chip" data-when="7">Next 7 days</button>
+          <button type="button" class="filter-chip" data-when="30">Next 30 days</button>
+        </div>
+      </div>
+
+      <div class="filter-group" role="group" aria-label="Format">
+        <span class="filter-legend">Format</span>
+        <div class="filter-chips" id="filter-mode">
+          <button type="button" class="filter-chip is-active" data-mode="all">All</button>
+          <button type="button" class="filter-chip" data-mode="In-Person">In-Person</button>
+          <button type="button" class="filter-chip" data-mode="Online">Online</button>
+        </div>
+      </div>
+
+      <div class="filter-group" role="group" aria-label="Price">
+        <span class="filter-legend">Price</span>
+        <div class="filter-chips" id="filter-price">
+          <button type="button" class="filter-chip is-active" data-price="all">All</button>
+          <button type="button" class="filter-chip" data-price="free">Free</button>
+          <button type="button" class="filter-chip" data-price="paid">Paid</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-group filter-group-tags" role="group" aria-label="Topics">
+      <span class="filter-legend">Topics</span>
+      <div class="filter-chips" id="filter-tags"></div>
+    </div>
+
+    <div class="filter-summary">
+      <p class="filter-count" id="filter-count" role="status" aria-live="polite"></p>
+      <button type="button" class="filter-reset hidden" id="filter-reset">Reset filters</button>
+    </div>
+  </section>
+
   <section class="events-list">
     <div class="event-card-grid" id="events-grid"></div>
     <p class="events-empty hidden" id="events-empty">No upcoming events right now &mdash; check back soon, or follow us on social for updates.</p>
+    <p class="events-empty hidden" id="events-no-match">No events match your search. Try a different word or clear a filter.</p>
   </section>
 
 </main>

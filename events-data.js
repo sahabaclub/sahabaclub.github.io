@@ -400,6 +400,7 @@ var EVENTS = [
     mode: "Online",
     tags: ["AI", "Business"],
     registerLink: "https://www.meetup.com/ai-professionals-dubai/events/315673086/",
+    image: "https://secure.meetupstatic.com/photos/event/6/9/8/b/600_531567019.jpeg",
     description: "Session five of the AI Professionals Dubai July cohort working through the Google AI certification together. Drop in to see how the group runs.",
   },
   {
@@ -412,6 +413,7 @@ var EVENTS = [
     mode: "In-Person",
     tags: ["Startups", "AI"],
     registerLink: "https://www.meetup.com/spark-ventures/events/315757428/",
+    image: "https://secure.meetupstatic.com/photos/event/6/c/b/7/600_535287831.jpeg",
     mapsLink: "https://www.google.com/maps/search/?api=1&query=Rove%20Downtown%20Dubai",
     description: "An evening on Spark Ventures' Start-Up in a Box — going from idea to launched AI venture in about 30 days without hiring developers, with real examples of what they've shipped.",
   },
@@ -425,6 +427,7 @@ var EVENTS = [
     mode: "Online",
     tags: ["AI", "Business"],
     registerLink: "https://www.meetup.com/ai-professionals-dubai/events/315675786/",
+    image: "https://secure.meetupstatic.com/photos/event/6/9/8/b/600_531567019.jpeg",
     description: "Session six of the AI Professionals Dubai July cohort working through the Google AI certification together.",
   },
 ];
