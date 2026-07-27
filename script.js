@@ -119,6 +119,11 @@
     ctx.restore();
   }
 
+  // Labels and orbit rings need to flip with the theme, or they vanish.
+  function isLight() {
+    return document.documentElement.classList.contains("light-mode");
+  }
+
   function drawNode(x, y, depth, color, label, alignRight, scale) {
     var baseR = 5.5 * scale;
     var r = baseR * (0.65 + depth * 0.7);
@@ -146,7 +151,7 @@
 
     ctx.save();
     ctx.globalAlpha = 0.55 + depth * 0.45;
-    ctx.fillStyle = "#f3f4f8";
+    ctx.fillStyle = isLight() ? "#101627" : "#f3f4f8";
     ctx.font = "600 " + Math.round(12 * scale) + "px -apple-system, Segoe UI, Roboto, sans-serif";
     ctx.textBaseline = "middle";
     var pad = r + 8 * scale;
@@ -172,7 +177,7 @@
       var radius = minDim * ring.radiusRatio;
       drawRingPath(radius, ring.tilt);
       ctx.save();
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.strokeStyle = isLight() ? "rgba(16, 22, 39, 0.14)" : "rgba(255, 255, 255, 0.08)";
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.restore();
@@ -688,6 +693,17 @@
     motionBox.addEventListener("change", function () {
       document.documentElement.classList.toggle("reduce-motion", motionBox.checked);
       localStorage.setItem(KEY, motionBox.checked ? "1" : "0");
+    });
+  }
+
+  // Settings — light mode. The class is applied early by an inline
+  // snippet in <head>; here we just keep the switch in sync.
+  var lightBox = document.getElementById("setting-light-mode");
+  if (lightBox) {
+    lightBox.checked = document.documentElement.classList.contains("light-mode");
+    lightBox.addEventListener("change", function () {
+      document.documentElement.classList.toggle("light-mode", lightBox.checked);
+      localStorage.setItem("sc_light_mode", lightBox.checked ? "1" : "0");
     });
   }
 
