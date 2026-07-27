@@ -173,6 +173,30 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
 .nav-link { font-size: 14px; font-weight: 600; color: var(--text-secondary); padding: 8px 4px; transition: color 0.2s; }
 .nav-link:hover { color: var(--text); }
 
+/* Handwritten brand slogan, centred in the header bar */
+.nav-slogan {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-family: "Caveat", "Segoe Script", "Bradley Hand", "Brush Script MT", cursive;
+  font-weight: 600;
+  font-size: 25px;
+  line-height: 1.12;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  opacity: 0.92;
+  pointer-events: none;
+  user-select: none;
+}
+.nav-slogan span { display: block; }
+.nav-slogan span:last-child { color: var(--cyan); }
+
+@media (max-width: 900px) { .nav-slogan { font-size: 21px; } }
+@media (max-width: 620px) { .nav-slogan { font-size: 18px; } }
+/* Below this the logo and buttons need the room more than the slogan does. */
+@media (max-width: 460px) { .nav-slogan { display: none; } }
+
 /* Dark / light switch in the desktop nav */
 .theme-toggle {
   display: inline-flex;
@@ -493,7 +517,7 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 7px 20px;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.03em;
@@ -504,7 +528,14 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
   border-radius: 999px;
   margin-bottom: 26px;
 }
-.eyebrow-sep { opacity: 0.45; margin: 0 -2px; }
+/* Each credential keeps its own dot and never splits across lines —
+   on narrow screens the whole item drops to the next line together. */
+.eyebrow-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
 .dot {
   width: 6px;
   height: 6px;
@@ -1432,19 +1463,49 @@ html.light-mode .hl { background: rgba(139, 92, 246, 0.22); }
 .footer {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 28px 20px 48px;
+  padding: 28px 20px 40px;
+  font-size: 13px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--glass-border);
+}
+.footer-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
-  font-size: 13px;
-  color: var(--text-muted);
-  border-top: 1px solid var(--glass-border);
 }
 .footer-links a, .footer-social a { margin-right: 16px; color: var(--text-secondary); transition: color 0.2s; }
 .footer-links a:hover, .footer-social a:hover { color: #8be9fd; }
 .footer-social a:last-child, .footer-links a:last-child { margin-right: 0; }
+
+/* Signed off in the middle of the footer, like a hand-signed line */
+.footer-signature {
+  margin: 26px 0 0;
+  text-align: center;
+  font-family: "Caveat", "Segoe Script", "Bradley Hand", "Brush Script MT", cursive;
+  font-weight: 500;
+  font-size: 21px;
+  line-height: 1.2;
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+/* Faint credit line — present but never competing for attention. */
+.footer-watermark {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.42;
+}
+
+@media (max-width: 720px) {
+  .footer-top { justify-content: center; text-align: center; }
+  .footer-signature { font-size: 19px; margin-top: 22px; }
+  .footer-watermark { font-size: 10px; }
+}
 
 @media (max-width: 720px) {
   .story { grid-template-columns: 1fr; }

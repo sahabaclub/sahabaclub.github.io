@@ -7,6 +7,9 @@
 <meta name="description" content="Join Sahaba Club, a global AI and cloud community founded by a Microsoft partner. Get Microsoft 365 free for 3 months when you join.">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 <script>
   // Apply saved theme before first paint so the page never flashes dark.
@@ -42,6 +45,10 @@
       <a href="#join" class="btn btn-glow nav-cta indiv-only">Join free</a>
       <a href="#join" class="btn btn-glow nav-cta corp-only">Talk to sales</a>
     </div>
+    <p class="nav-slogan" aria-label="We don't teach tech, we coach IT">
+      <span>We Don&rsquo;t Teach Tech,</span>
+      <span>We Coach IT&hellip;</span>
+    </p>
     <div class="nav-compact">
       <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
         <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
@@ -115,7 +122,7 @@
 <main>
 
   <section class="hero">
-    <span class="eyebrow"><span class="dot"></span>Microsoft AI Cloud Partner <span class="eyebrow-sep">·</span> <span class="dot"></span>DIFC AI Campus, Dubai</span>
+    <span class="eyebrow"><span class="eyebrow-item"><span class="dot"></span>Microsoft AI Cloud Partner</span><span class="eyebrow-item"><span class="dot"></span>DIFC AI Campus, Dubai</span></span>
     <h1 class="glow-text indiv-only">
       <span class="line-big">Join the AI Universe</span>
       <span class="line-small">Get Microsoft 365 free for 3 months</span>
@@ -385,19 +392,23 @@
 </main>
 
 <footer class="footer">
-  <div class="footer-links">
-    <a href="#">About</a>
-    <a href="events.html">Events</a>
-    <a href="mailto:info@sahabaclub.com">Contact</a>
-    <a href="#">Privacy</a>
+  <div class="footer-top">
+    <div class="footer-links">
+      <a href="#">About</a>
+      <a href="events.html">Events</a>
+      <a href="mailto:info@sahabaclub.com">Contact</a>
+      <a href="#">Privacy</a>
+    </div>
+    <div class="footer-social">
+      <a href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="LinkedIn">LinkedIn</a>
+      <a href="https://youtube.com/@sahabaclub" target="_blank" rel="noopener" aria-label="YouTube">YouTube</a>
+      <a href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
+      <a href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
+      <a href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
+    </div>
   </div>
-  <div class="footer-social">
-    <a href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="LinkedIn">LinkedIn</a>
-    <a href="https://youtube.com/@sahabaclub" target="_blank" rel="noopener" aria-label="YouTube">YouTube</a>
-    <a href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
-    <a href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
-    <a href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
-  </div>
+  <p class="footer-signature">We Don&rsquo;t Teach Tech, We Coach IT&hellip;</p>
+  <p class="footer-watermark">Developed by Sahaba Club Technologies</p>
 </footer>
 
 <script src="script.js"></script>
