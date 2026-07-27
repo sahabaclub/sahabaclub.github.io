@@ -8,6 +8,17 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
+<script>
+  // Apply saved theme before first paint so the page never flashes dark.
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+    if (localStorage.getItem("sc_reduce_motion") === "1") {
+      document.documentElement.classList.add("reduce-motion");
+    }
+  } catch (e) {}
+</script>
 </head>
 <body>
 
@@ -43,11 +54,6 @@
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
 <nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
   <div class="mobile-menu-panel">
-    <div class="tab-toggle mobile-tab-toggle" role="tablist" aria-label="Audience">
-      <button class="tab-btn active" data-tab="individual" role="tab" aria-selected="true">Individuals</button>
-      <button class="tab-btn" data-tab="corporate" role="tab" aria-selected="false">Corporate</button>
-    </div>
-
     <a class="mobile-menu-item" href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in">Sign in</a>
     <a class="mobile-menu-item is-primary" href="#join">Join the Club</a>
     <a class="mobile-menu-item" href="events.html">Events</a>
@@ -70,6 +76,12 @@
     </button>
     <div class="mobile-submenu" id="submenu-settings" hidden>
       <label class="mobile-switch">
+        <span>Light mode</span>
+        <input type="checkbox" id="setting-light-mode">
+        <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
+      </label>
+      <p class="mobile-setting-note">Switches the whole site to a light colour scheme.</p>
+      <label class="mobile-switch">
         <span>Reduce motion</span>
         <input type="checkbox" id="setting-reduce-motion">
         <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
@@ -78,6 +90,15 @@
     </div>
   </div>
 </nav>
+
+<!-- Audience switcher — lives under the header on phones, where it
+     doesn't fit in the top bar. Stays in sync with the desktop toggle. -->
+<div class="mobile-audience-bar">
+  <div class="tab-toggle mobile-tab-toggle" role="tablist" aria-label="Audience">
+    <button class="tab-btn active" data-tab="individual" role="tab" aria-selected="true">Individuals</button>
+    <button class="tab-btn" data-tab="corporate" role="tab" aria-selected="false">Corporate</button>
+  </div>
+</div>
 
 <main>
 

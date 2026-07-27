@@ -8,6 +8,17 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="stylesheet" href="styles.css">
+<script>
+  // Apply saved theme before first paint so the page never flashes dark.
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+    if (localStorage.getItem("sc_reduce_motion") === "1") {
+      document.documentElement.classList.add("reduce-motion");
+    }
+  } catch (e) {}
+</script>
 </head>
 <body>
 
@@ -59,6 +70,12 @@
       <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
     </button>
     <div class="mobile-submenu" id="submenu-settings" hidden>
+      <label class="mobile-switch">
+        <span>Light mode</span>
+        <input type="checkbox" id="setting-light-mode">
+        <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
+      </label>
+      <p class="mobile-setting-note">Switches the whole site to a light colour scheme.</p>
       <label class="mobile-switch">
         <span>Reduce motion</span>
         <input type="checkbox" id="setting-reduce-motion">

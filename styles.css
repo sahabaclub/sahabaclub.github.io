@@ -343,6 +343,10 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
 }
 body.menu-open { overflow: hidden; }
 
+/* Audience switcher strip — phones only, sits under the header */
+.mobile-audience-bar { display: none; }
+.mobile-audience-bar .mobile-tab-toggle { width: 100%; max-width: 340px; }
+
 /* User-chosen reduced motion (Settings → Reduce motion) */
 html.reduce-motion .event-gallery-track { animation: none !important; }
 html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after {
@@ -357,6 +361,13 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
   .nav-inner .nav-actions { display: none; }
   .nav-toggle { display: flex; }
   .logo-img { height: 46px; }
+  .mobile-audience-bar {
+    display: flex;
+    justify-content: center;
+    padding: 18px 16px 0;
+  }
+  /* The strip now occupies the gap, so pull the hero up to match. */
+  .hero { padding-top: 34px; }
 }
 @media (min-width: 821px) {
   .mobile-menu, .mobile-menu-backdrop { display: none !important; }
@@ -1162,3 +1173,137 @@ body.lightbox-open { overflow: hidden; }
 @media (max-width: 420px) {
   #universe-canvas { height: 260px; }
 }
+
+/* ============================================================
+   LIGHT MODE
+   Toggled from the mobile menu (Settings → Light mode). The class
+   goes on <html>, so every page picks it up and it persists.
+   ============================================================ */
+html.light-mode {
+  --bg: #f4f7fc;
+  --text: #101627;
+  --text-secondary: #4a5570;
+  --text-muted: #78829a;
+  --violet: #6d28d9;
+  --cyan: #0e7490;
+  --gold: #b8791f;
+  --gold-light: #7a5210;
+  --glass: rgba(16, 22, 39, 0.035);
+  --glass-border: rgba(16, 22, 39, 0.13);
+}
+
+/* Background layers: the starfield reads as dirt on a light page. */
+html.light-mode #stars { display: none; }
+html.light-mode .noise-bg { opacity: 0.02; }
+html.light-mode .nebula-bg {
+  background:
+    radial-gradient(620px 420px at 12% 8%, rgba(109, 40, 217, 0.10), transparent 62%),
+    radial-gradient(560px 380px at 88% 12%, rgba(14, 116, 144, 0.10), transparent 62%),
+    radial-gradient(700px 460px at 50% 100%, rgba(109, 40, 217, 0.07), transparent 60%);
+}
+
+html.light-mode .nav { background: rgba(255, 255, 255, 0.82); }
+html.light-mode .logo-img { filter: none; }
+
+/* Gradient headline text needs dark stops to stay readable. */
+html.light-mode .glow-text {
+  background: linear-gradient(90deg, #1a1f38 10%, #4c3a9e 48%, #0e7490 85%);
+}
+html.light-mode .logo-word {
+  background: linear-gradient(90deg, #101627, #4c3a9e);
+}
+html.light-mode .kicker { color: #0e7490; }
+
+/* Buttons: keep the vivid gradient, darken outline/ghost surfaces. */
+html.light-mode .btn-glow {
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(109, 40, 217, 0.28);
+}
+html.light-mode .btn-glow:hover { box-shadow: 0 6px 24px rgba(109, 40, 217, 0.38); }
+html.light-mode .btn-ghost { background: #fff; border-color: var(--glass-border); }
+html.light-mode .tab-btn.active { color: #fff; }
+html.light-mode .mobile-menu-item.is-primary { color: #fff; }
+
+/* Cards and panels */
+html.light-mode .card,
+html.light-mode .glass,
+html.light-mode .event-card,
+html.light-mode .stat,
+html.light-mode .signup-card {
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(16, 22, 39, 0.05);
+}
+html.light-mode .event-card:hover {
+  border-color: rgba(109, 40, 217, 0.35);
+  box-shadow: 0 12px 32px rgba(109, 40, 217, 0.14);
+}
+html.light-mode .mobile-menu-panel {
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(16, 22, 39, 0.22);
+}
+html.light-mode .mobile-menu-item:hover,
+html.light-mode .mobile-menu-item:focus-visible,
+html.light-mode .mobile-submenu-item:hover { background: rgba(16, 22, 39, 0.05); }
+html.light-mode .mobile-menu-backdrop { background: rgba(16, 22, 39, 0.35); }
+html.light-mode .mobile-switch-track { background: rgba(16, 22, 39, 0.15); }
+html.light-mode .mobile-switch-thumb { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
+html.light-mode .nav-toggle-bar { background: var(--text); }
+
+/* Forms */
+html.light-mode .signup-form input,
+html.light-mode .signup-form select,
+html.light-mode .signup-form textarea {
+  background: #fff;
+  color: var(--text);
+  border-color: var(--glass-border);
+}
+html.light-mode .signup-form select { color: var(--text); }
+html.light-mode .signup-form input::placeholder,
+html.light-mode .signup-form textarea::placeholder { color: var(--text-muted); }
+
+/* Event page badges — darken text so they pass contrast on white */
+html.light-mode .event-price-badge.is-free { color: #1d4ed8; background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.4); }
+html.light-mode .event-price-badge.is-paid { color: #92620a; background: rgba(234, 179, 8, 0.16); border-color: rgba(202, 138, 4, 0.45); }
+html.light-mode .event-mode-badge.is-online { color: #15803d; background: rgba(34, 197, 94, 0.13); border-color: rgba(34, 197, 94, 0.4); }
+html.light-mode .event-mode-badge.is-in-person { color: #334155; background: rgba(16, 22, 39, 0.05); border-color: rgba(16, 22, 39, 0.18); }
+html.light-mode .event-tag-badge.tag-ai { --tag-color: #6d28d9; --tag-bg: rgba(139, 92, 246, 0.12); --tag-border: rgba(109, 40, 217, 0.35); }
+html.light-mode .event-tag-badge.tag-agentic { --tag-color: #4338ca; --tag-bg: rgba(99, 102, 241, 0.12); --tag-border: rgba(67, 56, 202, 0.35); }
+html.light-mode .event-tag-badge.tag-cloud { --tag-color: #0369a1; --tag-bg: rgba(14, 165, 233, 0.12); --tag-border: rgba(3, 105, 161, 0.35); }
+html.light-mode .event-tag-badge.tag-media { --tag-color: #be185d; --tag-bg: rgba(236, 72, 153, 0.12); --tag-border: rgba(190, 24, 93, 0.32); }
+html.light-mode .event-tag-badge.tag-coding { --tag-color: #c2410c; --tag-bg: rgba(249, 115, 22, 0.12); --tag-border: rgba(194, 65, 12, 0.32); }
+html.light-mode .event-tag-badge.tag-security { --tag-color: #b91c1c; --tag-bg: rgba(239, 68, 68, 0.12); --tag-border: rgba(185, 28, 28, 0.32); }
+html.light-mode .event-tag-badge.tag-business { --tag-color: #0f766e; --tag-bg: rgba(20, 184, 166, 0.12); --tag-border: rgba(15, 118, 110, 0.32); }
+html.light-mode .event-tag-badge.tag-startups { --tag-color: #be123c; --tag-bg: rgba(244, 63, 94, 0.12); --tag-border: rgba(190, 18, 60, 0.3); }
+html.light-mode .event-tag-badge.tag-investors { --tag-color: #a16207; --tag-bg: rgba(217, 119, 6, 0.14); --tag-border: rgba(161, 98, 7, 0.32); }
+html.light-mode .event-tag-badge.tag-hackathon { --tag-color: #a21caf; --tag-bg: rgba(217, 70, 239, 0.12); --tag-border: rgba(162, 28, 175, 0.32); }
+html.light-mode .event-desc-toggle { color: #0e7490; }
+html.light-mode .event-ms-placeholder {
+  background: linear-gradient(135deg, rgba(109, 40, 217, 0.07), rgba(14, 116, 144, 0.06));
+}
+html.light-mode .event-photo { background: rgba(16, 22, 39, 0.04); }
+
+/* Social icons + footer */
+html.light-mode .social-icon-circle { background: #fff; }
+html.light-mode .footer { border-top-color: var(--glass-border); }
+
+/* The photo viewer stays dark — photos read better against it. */
+html.light-mode .lightbox { background: rgba(10, 13, 22, 0.94); }
+html.light-mode .lightbox-close,
+html.light-mode .lightbox-nav { color: #fff; }
+html.light-mode .lightbox-counter { color: rgba(255, 255, 255, 0.8); }
+
+/* Admin panel in light mode (its own styles live inline in admin.html) */
+html.light-mode .admin-card { background: #fff; box-shadow: 0 2px 10px rgba(16, 22, 39, 0.06); }
+html.light-mode .admin-field input[type="text"],
+html.light-mode .admin-field input[type="date"],
+html.light-mode .admin-field input[type="password"],
+html.light-mode .admin-field input[type="url"],
+html.light-mode .admin-field select,
+html.light-mode .admin-field textarea {
+  background: #fff;
+  color: var(--text);
+  border-color: var(--glass-border);
+}
+html.light-mode .admin-btn-primary { color: #fff; }
+html.light-mode .admin-btn-secondary { background: #fff; }
+html.light-mode .admin-event-row { background: #fff; }
