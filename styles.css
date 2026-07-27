@@ -930,6 +930,19 @@ body.lightbox-open { overflow: hidden; }
   box-shadow: 0 10px 26px rgba(139, 92, 246, 0.25);
 }
 .card-title { font-weight: 700; margin: 0 0 8px; font-size: 17px; color: var(--text); }
+/* Programme name on its own line under the category, in the brand
+   gradient. The negative top margin tucks it under the title without
+   needing a different title rule for cards that have no subtitle. */
+.card-subtitle {
+  font-weight: 700;
+  font-size: 15px;
+  margin: -6px 0 8px;
+  letter-spacing: 0.01em;
+  background: linear-gradient(90deg, var(--violet), var(--cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 .card-desc { font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.55; }
 
 /* Stats */
@@ -1234,6 +1247,7 @@ body.lightbox-open { overflow: hidden; }
   .card-icon { width: 66px; height: 66px; border-radius: 16px; margin-bottom: 14px; }
   .card-icon img { width: 46px; height: 46px; }
   .card-title { font-size: 15px; }
+  .card-subtitle { font-size: 13.5px; margin-top: -5px; }
   .hero h1 { font-size: 32px; }
   .hero h1 .line-small { font-size: 0.48em; }
   .universe-heading { font-size: 24px; }
