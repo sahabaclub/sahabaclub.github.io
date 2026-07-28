@@ -124,13 +124,6 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   align-items: center;
   gap: 10px;
 }
-/* Two logo files rather than one recoloured mark: the wordmark is artwork,
-   and the white version is invisible on a light page. Only the one matching
-   the active theme is rendered. */
-.logo-img-light { display: none; }
-html.light-mode .logo-img-dark { display: none; }
-html.light-mode .logo-img-light { display: block; }
-
 .logo-img {
   height: 58px;
   width: auto;
@@ -138,6 +131,13 @@ html.light-mode .logo-img-light { display: block; }
   flex-shrink: 0;
   filter: drop-shadow(0 0 12px rgba(59, 179, 224, 0.35));
 }
+/* Two logo files rather than one recoloured mark: the wordmark is artwork,
+   and the white version is invisible on a light page. Only the one matching
+   the active theme is rendered. */
+.logo-img-light { display: none; }
+html.light-mode .logo-img-dark { display: none; }
+html.light-mode .logo-img-light { display: block; }
+
 .logo-suffix {
   font-weight: 600;
   font-size: 14px;
