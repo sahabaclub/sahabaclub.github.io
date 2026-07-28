@@ -2214,8 +2214,12 @@ html.light-mode .logo {
 
 /* Gradient headline text needs dark stops to stay readable. */
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  /* background-image, never the `background` shorthand: the shorthand resets
+     background-clip to border-box, which paints the gradient over the whole
+     heading and leaves the transparent text invisible — a solid colour bar
+     where the headline should be. */
   html.light-mode .glow-text {
-    background: linear-gradient(90deg, #1a1f38 10%, #4c3a9e 48%, #0e7490 85%);
+    background-image: linear-gradient(90deg, #1a1f38 10%, #4c3a9e 48%, #0e7490 85%);
   }
 }
 html.light-mode .kicker { color: #0e7490; }
