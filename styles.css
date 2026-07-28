@@ -1430,10 +1430,10 @@ html.light-mode .featured-card { background: rgba(255, 255, 255, 0.9); }
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: 13px 20px 12px;
+  padding: 12px 20px 11px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   border-left: 3px solid var(--accent, var(--violet));
 }
 .featured-card-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
@@ -1476,6 +1476,10 @@ html.light-mode .featured-soon { background: rgba(16, 22, 39, 0.07); }
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  /* Without this the flex column steals a couple of pixels back from the
+     description on cards that also carry a countdown chip, which shaves the
+     bottom off the second line. */
+  flex: 0 0 auto;
 }
 /* Must never wrap: a second line here pushes the title up and out of the
    fixed-height card. The venue truncates instead. */
