@@ -56,7 +56,7 @@ var FEATURED_EVENTS = [
     note: "Hosted by Dubai Future Foundation with DIFC — now at a bigger venue.",
     scale: "150+ sessions · 120+ countries",
     image: "https://dubaiaifestival.com/wp-content/uploads/2025/02/daif-25-featured-image.jpg",
-    fit: "cover",
+    fit: "contain",
     link: "https://dubaiaifestival.com/",
     accent: "gold"
   },
@@ -69,7 +69,7 @@ var FEATURED_EVENTS = [
     note: "Keynotes, panels and exhibitions across healthcare, finance and security.",
     scale: "5,000+ attendees · 100+ speakers",
     image: "https://www.globalaishow.com/wp-content/uploads/2026/07/global-ai-show-abu-dhabi-og.webp",
-    fit: "cover",
+    fit: "contain",
     link: "https://www.globalaishow.com/abu-dhabi/",
     accent: "violet"
   },
@@ -81,7 +81,7 @@ var FEATURED_EVENTS = [
     city: "Dubai, UAE",
     note: "The world's largest tech expo, with a dedicated AI & DeepTech track.",
     scale: "200,000+ attendees · 180 countries",
-    image: "https://www.gitex.com/images/GitexGlobalDubaiNew.png",
+    image: "https://www.gitex.com/images/GITEX_GLOBAL_2026_logo_lockup_1-0211.png",
     fit: "contain",
     link: "https://www.gitex.com/gitex-global-2026",
     accent: "cyan"

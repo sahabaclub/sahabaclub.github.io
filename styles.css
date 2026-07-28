@@ -1295,21 +1295,33 @@ html.light-mode .featured-card { background: rgba(255, 255, 255, 0.9); }
   height: 100%;
   object-fit: cover;
 }
-/* Logos get breathing room and keep their proportions. */
+/* Logos and key visuals are shown whole on a white tile. Most event
+   wordmarks are dark ink on transparent, so a dark panel swallowed them —
+   and cover-cropping a text-heavy poster into this narrow panel only ever
+   showed a fragment of a word. */
 .featured-img.is-contain {
   object-fit: contain;
-  padding: 16px;
-  background: rgba(4, 7, 14, 0.55);
+  inset: 13px;
+  width: auto;
+  height: auto;
+  padding: 11px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
 }
-html.light-mode .featured-img.is-contain { background: rgba(255, 255, 255, 0.9); }
 
+/* Five stacked rows have to fit a fixed 4:1 card height, so the padding
+   and gaps are deliberately tight and overflow is clipped rather than
+   allowed to push the title under the description. */
 .featured-body {
   flex: 1;
   min-width: 0;
-  padding: 16px 20px 14px;
+  min-height: 0;
+  overflow: hidden;
+  padding: 13px 20px 12px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
   border-left: 3px solid var(--accent, var(--violet));
 }
 .featured-card-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
@@ -1389,9 +1401,14 @@ html.light-mode .featured-soon { background: rgba(16, 22, 39, 0.07); }
 .featured-cta svg { width: 15px; height: 15px; transition: transform 0.2s; }
 .featured-card:hover .featured-cta svg { transform: translateX(3px); }
 
+/* The 560px card is only 140px tall, so the description drops to one line
+   to keep everything inside the frame. */
 @media (max-width: 900px) {
   .featured-card { width: 560px; }
-  .featured-name { font-size: 19px; }
+  .featured-body { padding: 12px 17px 11px; gap: 2px; }
+  .featured-name { font-size: 18px; }
+  .featured-note { -webkit-line-clamp: 1; font-size: 12.5px; }
+  .featured-img.is-contain { inset: 11px; padding: 9px; }
 }
 /* Below tablet width a strict 4:1 leaves no room for the copy, so the
    card keeps its banner shape but grows to fit its content. */
