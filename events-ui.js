@@ -110,10 +110,12 @@
     var media = document.createElement("div");
     media.className = "featured-media";
 
-    var fallback = document.createElement("span");
-    fallback.className = "featured-initials";
-    fallback.textContent = initials(f.name);
-    media.appendChild(fallback);
+    function addInitials() {
+      var fallback = document.createElement("span");
+      fallback.className = "featured-initials";
+      fallback.textContent = initials(f.name);
+      media.appendChild(fallback);
+    }
 
     if (f.live === "mct") {
       media.appendChild(buildMctLogo());
@@ -126,12 +128,16 @@
       // Deliberately not lazy: the strip sits above the fold, and cards are
       // moved by scrolling their container rather than entering the page.
       img.decoding = "async";
-      // If a logo ever goes missing, fall back to the initials underneath
-      // rather than showing a broken-image icon.
+      // The initials are only ever a stand-in for a missing logo. They must
+      // not be rendered alongside one — logos have transparent backgrounds,
+      // so the letters would show straight through the artwork.
       img.addEventListener("error", function () {
         img.parentNode && img.parentNode.removeChild(img);
+        addInitials();
       });
       media.appendChild(img);
+    } else {
+      addInitials();
     }
     a.appendChild(media);
 

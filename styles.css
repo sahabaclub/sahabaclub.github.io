@@ -1184,6 +1184,10 @@ body.lightbox-open { overflow: hidden; }
   padding: 22px 0 20px;
   position: relative;
 }
+/* The panel behind the strip fades away towards the left and right, so the
+   cards look like they carry on past it rather than being cut off by a box.
+   The border is dropped for the same reason — a hard edge would reappear
+   exactly where the fade is meant to be. */
 .featured-strip::before {
   content: "";
   position: absolute;
@@ -1193,7 +1197,8 @@ body.lightbox-open { overflow: hidden; }
     radial-gradient(120% 140% at 12% 0%, rgba(139, 92, 246, 0.20), transparent 62%),
     radial-gradient(120% 140% at 88% 100%, rgba(34, 211, 238, 0.16), transparent 62%),
     var(--glass);
-  border: 1px solid var(--glass-border);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
   pointer-events: none;
 }
 .featured-head {
@@ -1469,13 +1474,22 @@ html.light-mode .featured-soon { background: rgba(16, 22, 39, 0.07); }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.featured-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* Must never wrap: a second line here pushes the title up and out of the
+   fixed-height card. The venue truncates instead. */
+.featured-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
 .featured-place {
   font-size: 12.5px;
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 .featured-place svg { width: 14px; height: 14px; flex-shrink: 0; }
@@ -1491,6 +1505,7 @@ html.light-mode .featured-soon { background: rgba(16, 22, 39, 0.07); }
   border: 1px solid var(--glass-border);
   border-color: color-mix(in srgb, var(--accent) 38%, transparent);
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 .featured-cta {
   margin-top: auto;
