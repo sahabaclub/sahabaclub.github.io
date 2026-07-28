@@ -2309,3 +2309,387 @@ html.light-mode .admin-field textarea {
 html.light-mode .admin-btn-primary { color: #fff; }
 html.light-mode .admin-btn-secondary { background: #fff; }
 html.light-mode .admin-event-row { background: #fff; }
+
+/* ============================================================
+   Podcast — Tech Talk with Zoka
+   ============================================================ */
+.pod-hero {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 60px 20px 8px;
+  text-align: center;
+}
+.pod-title {
+  margin: 8px 0 14px;
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.pod-title span {
+  display: block;
+  background: linear-gradient(90deg, var(--violet), var(--cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.pod-hero .lead { margin: 0 auto 30px; }
+
+/* ---- trailer stage ---- */
+.pod-stage-wrap { max-width: 900px; margin: 0 auto; padding: 0 4px; }
+.pod-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: #05070d;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.5);
+}
+/* A slow conic sweep behind the frame — the "on air" glow. */
+.pod-stage-wrap::before {
+  content: "";
+  display: block;
+  position: relative;
+  height: 0;
+}
+.pod-stage::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 22px;
+  padding: 2px;
+  background: conic-gradient(from 0deg, var(--violet), var(--cyan), var(--gold), var(--violet));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: pod-spin 9s linear infinite;
+  pointer-events: none;
+  z-index: 3;
+}
+@keyframes pod-spin { to { transform: rotate(1turn); } }
+.pod-stage-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s, filter 0.4s;
+}
+.pod-stage:hover .pod-stage-img { transform: scale(1.03); filter: brightness(0.8); }
+.pod-stage.is-playing .pod-stage-img,
+.pod-stage.is-playing .pod-play,
+.pod-stage.is-playing .pod-stage-cap { display: none; }
+.pod-stage-frame { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; }
+.pod-stage-cap {
+  position: absolute;
+  left: 20px;
+  bottom: 18px;
+  z-index: 2;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+}
+
+/* Play button: two pulsing rings around a solid core. */
+.pod-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  width: 92px;
+  height: 92px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.pod-play-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  animation: pod-pulse 2.6s ease-out infinite;
+}
+.pod-play-ring-2 { animation-delay: 1.3s; }
+@keyframes pod-pulse {
+  0% { transform: scale(0.75); opacity: 0.9; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+.pod-play-core {
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #05070d;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  box-shadow: 0 10px 30px rgba(34, 211, 238, 0.4);
+  transition: transform 0.2s;
+}
+.pod-play:hover .pod-play-core { transform: scale(1.08); }
+.pod-play:focus-visible { outline: 2px solid var(--cyan); outline-offset: 6px; border-radius: 50%; }
+.pod-play-core svg { width: 30px; height: 30px; margin-left: 3px; }
+
+/* ---- episode wall ---- */
+.pod-episodes {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 56px 20px 10px;
+}
+.pod-episodes-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+.pod-h2 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.pod-filters { display: flex; gap: 8px; }
+.pod-chip {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 8px 16px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.pod-chip:hover { color: var(--text); border-color: rgba(139, 92, 246, 0.45); }
+.pod-chip.is-active {
+  color: #05070d;
+  background: linear-gradient(90deg, var(--violet), var(--cyan));
+  border-color: transparent;
+}
+html.light-mode .pod-chip.is-active { color: #fff; }
+.pod-count { margin: 0 0 0 auto; font-size: 13px; color: var(--text-secondary); }
+
+.pod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 22px;
+}
+.pod-card {
+  position: relative;
+  border-radius: var(--radius);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.5s ease var(--pod-delay, 0ms),
+              transform 0.5s cubic-bezier(0.22, 1, 0.36, 1) var(--pod-delay, 0ms),
+              border-color 0.25s, box-shadow 0.25s;
+}
+.pod-card.is-in { opacity: 1; transform: translateY(0); }
+.pod-card:hover {
+  border-color: rgba(34, 211, 238, 0.5);
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.45);
+}
+/* Gradient edge that lights up on hover. */
+.pod-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  padding: 1px;
+  background: linear-gradient(135deg, var(--violet), var(--cyan), transparent 70%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  z-index: 2;
+}
+.pod-card:hover::before { opacity: 1; }
+
+.pod-card-media {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  border: none;
+  background: #05070d;
+  cursor: pointer;
+  overflow: hidden;
+}
+.pod-card-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.45s, filter 0.3s;
+}
+.pod-card:hover .pod-card-media img { transform: scale(1.07); filter: brightness(0.62); }
+.pod-card-media:focus-visible { outline: 2px solid var(--cyan); outline-offset: -3px; }
+
+.pod-num {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  color: #05070d;
+  background: linear-gradient(90deg, var(--violet), var(--cyan));
+}
+html.light-mode .pod-num { color: #fff; }
+.pod-num span { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; opacity: 0.75; }
+.pod-lang {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  z-index: 2;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(5, 7, 13, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  backdrop-filter: blur(4px);
+}
+.pod-card-play {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 2;
+  width: 54px;
+  height: 54px;
+  transform: translate(-50%, -50%) scale(0.8);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #05070d;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  opacity: 0;
+  transition: opacity 0.28s, transform 0.28s;
+  pointer-events: none;
+}
+.pod-card-play svg { width: 22px; height: 22px; margin-left: 2px; }
+.pod-card:hover .pod-card-play,
+.pod-card-media:focus-visible .pod-card-play {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.pod-card-body { padding: 15px 17px 17px; display: flex; flex-direction: column; gap: 7px; flex: 1; }
+.pod-card-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.28;
+  color: var(--text);
+}
+.pod-card-ar { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-secondary); }
+.pod-card-links { margin-top: auto; padding-top: 6px; }
+.pod-card-yt {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-decoration: none;
+}
+.pod-card-yt:hover { text-decoration: underline; }
+
+/* ---- lightbox ---- */
+.pod-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.pod-modal[hidden] { display: none; }
+.pod-modal-backdrop { position: absolute; inset: 0; background: rgba(3, 6, 14, 0.86); backdrop-filter: blur(4px); }
+.pod-modal-box { position: relative; width: min(1000px, 100%); }
+.pod-modal-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid var(--glass-border);
+}
+.pod-modal-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; }
+.pod-modal-bar { display: flex; align-items: center; gap: 14px; padding: 12px 2px 0; }
+.pod-modal-title { margin: 0; font-size: 15px; font-weight: 600; color: #fff; }
+.pod-modal-close {
+  margin-left: auto;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  font-size: 24px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.pod-modal-close:hover { background: rgba(255, 255, 255, 0.22); }
+body.pod-modal-open { overflow: hidden; }
+
+/* ---- follow CTA ---- */
+.pod-cta { max-width: var(--max-width); margin: 20px auto 0; padding: 40px 20px 70px; }
+.pod-cta-inner {
+  position: relative;
+  text-align: center;
+  padding: 44px 24px 46px;
+  border-radius: 26px;
+  border: 1px solid var(--glass-border);
+  background:
+    radial-gradient(120% 150% at 50% 0%, rgba(255, 0, 60, 0.14), transparent 60%),
+    radial-gradient(120% 150% at 50% 100%, rgba(139, 92, 246, 0.16), transparent 60%),
+    var(--glass);
+}
+.pod-cta-mark { width: 54px; height: 54px; color: #ff0033; margin-bottom: 10px; }
+.pod-cta-inner h2 { margin: 0 0 8px; font-size: 26px; font-weight: 700; color: var(--text); }
+.pod-cta-inner p { margin: 0 0 22px; font-size: 15px; color: var(--text-secondary); }
+.pod-cta-btn { font-size: 15px; padding: 14px 28px; }
+
+@media (max-width: 720px) {
+  .pod-hero { padding: 40px 16px 6px; }
+  .pod-title { font-size: 32px; }
+  .pod-stage { border-radius: 16px; }
+  .pod-play { width: 70px; height: 70px; }
+  .pod-play-core { inset: 11px; }
+  .pod-play-core svg { width: 23px; height: 23px; }
+  .pod-stage-cap { left: 14px; bottom: 12px; font-size: 11px; }
+  .pod-episodes { padding: 40px 16px 6px; }
+  .pod-h2 { font-size: 24px; }
+  .pod-count { margin-left: 0; width: 100%; }
+  .pod-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .pod-card-title { font-size: 15.5px; }
+  .pod-modal { padding: 14px; }
+  .pod-cta { padding: 24px 16px 54px; }
+  .pod-cta-inner { padding: 34px 18px 36px; }
+  .pod-cta-inner h2 { font-size: 21px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pod-stage::after, .pod-play-ring { animation: none; }
+  .pod-card { opacity: 1; transform: none; transition: border-color 0.25s, box-shadow 0.25s; }
+}
+html.reduce-motion .pod-stage::after,
+html.reduce-motion .pod-play-ring { animation: none; }
