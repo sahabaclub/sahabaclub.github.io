@@ -113,15 +113,47 @@
     <p class="lead">Hackathons, meetups, and conferences from across the AI universe &mdash; curated by Sahaba Club. Free and paid, in the UAE and beyond.</p>
   </section>
 
+  <!-- Featured banner for the region's landmark AI conferences. Cards are
+       injected by events-ui.js from featured-events.js. -->
+  <section class="featured-strip" id="featured-strip" aria-label="Major AI events">
+    <div class="featured-head">
+      <p class="kicker center">Mark your calendar</p>
+      <h2 class="featured-title">Mega AI Events</h2>
+      <p class="featured-sub">The region&rsquo;s landmark AI summits, expos and deep-tech showcases.</p>
+    </div>
+    <div class="featured-viewport">
+      <div class="featured-track" id="featured-track"></div>
+    </div>
+  </section>
+
   <!-- Search + filters. Tag chips are built from the data at runtime, so
-       adding an event with a new tag needs no change here. -->
+       adding an event with a new tag needs no change here. On phones the
+       panel below becomes a bottom sheet opened by the Filters button. -->
   <section class="events-filters" aria-label="Search and filter events">
-    <div class="filter-search">
-      <svg class="filter-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-        <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
-      </svg>
-      <input type="search" id="filter-q" placeholder="Search events by name, topic or venue…" autocomplete="off" aria-label="Search events">
-      <button type="button" class="filter-clear-q hidden" id="filter-clear-q" aria-label="Clear search">&times;</button>
+    <div class="filter-bar">
+      <div class="filter-search">
+        <svg class="filter-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+        </svg>
+        <input type="search" id="filter-q" placeholder="Search events by name, topic or venue…" autocomplete="off" aria-label="Search events">
+        <button type="button" class="filter-clear-q hidden" id="filter-clear-q" aria-label="Clear search">&times;</button>
+      </div>
+      <button type="button" class="filter-open" id="filter-open" aria-expanded="false" aria-controls="filter-panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M7 12h10M10 17h4"/>
+        </svg>
+        <span>Filters</span>
+        <span class="filter-badge hidden" id="filter-badge">0</span>
+      </button>
+    </div>
+
+    <div class="filter-backdrop" id="filter-backdrop" hidden></div>
+
+    <div class="filter-panel" id="filter-panel">
+    <div class="filter-panel-head">
+      <span class="filter-panel-grip" aria-hidden="true"></span>
+      <h2 class="filter-panel-title">Filters</h2>
+      <button type="button" class="filter-close" id="filter-close" aria-label="Close filters">&times;</button>
     </div>
 
     <div class="filter-row">
@@ -159,6 +191,12 @@
       <div class="filter-chips" id="filter-tags"></div>
     </div>
 
+    <div class="filter-panel-foot">
+      <button type="button" class="filter-reset-sheet" id="filter-reset-sheet">Reset</button>
+      <button type="button" class="filter-apply" id="filter-apply">Show <span id="filter-apply-count"></span></button>
+    </div>
+    </div>
+
     <div class="filter-summary">
       <p class="filter-count" id="filter-count" role="status" aria-live="polite"></p>
       <button type="button" class="filter-reset hidden" id="filter-reset">Reset filters</button>
@@ -194,6 +232,7 @@
 </footer>
 
 <script src="events-data.js"></script>
+<script src="featured-events.js"></script>
 <script src="script.js"></script>
 <script src="events-ui.js"></script>
 </body>

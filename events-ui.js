@@ -5,6 +5,111 @@
 // filter bar. Loaded only by events.html, after events-data.js.
 // ============================================================
 
+// ---- Featured mega-events banner --------------------------------------
+// Builds the scrolling strip at the top of the events page from
+// FEATURED_EVENTS (featured-events.js). The track holds two copies of
+// the card list so the CSS marquee can loop without a visible seam.
+(function () {
+  var track = document.getElementById("featured-track");
+  var strip = document.getElementById("featured-strip");
+  if (!track || typeof FEATURED_EVENTS === "undefined") return;
+
+  var now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  // Drop editions that have already finished, but keep entries whose dates
+  // haven't been announced (empty sortDate) and park them at the end.
+  var live = FEATURED_EVENTS.filter(function (f) {
+    if (!f.sortDate) return true;
+    return new Date(f.sortDate + "T23:59:59") >= now;
+  }).sort(function (a, b) {
+    if (!a.sortDate) return 1;
+    if (!b.sortDate) return -1;
+    return new Date(a.sortDate) - new Date(b.sortDate);
+  });
+
+  if (!live.length) {
+    if (strip) strip.parentNode.removeChild(strip);
+    return;
+  }
+
+  var pin = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>';
+  var arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>';
+
+  function daysUntil(dateStr) {
+    if (!dateStr) return null;
+    return Math.round((new Date(dateStr + "T00:00:00") - now) / 86400000);
+  }
+
+  function buildFeatured(f) {
+    var a = document.createElement("a");
+    a.className = "featured-card accent-" + (f.accent || "violet");
+    a.href = f.link;
+    a.target = "_blank";
+    a.rel = "noopener";
+
+    var head = document.createElement("div");
+    head.className = "featured-card-head";
+
+    var date = document.createElement("span");
+    date.className = "featured-date";
+    date.textContent = f.dateLabel;
+    head.appendChild(date);
+
+    var d = daysUntil(f.sortDate);
+    if (d !== null && d >= 0 && d <= 60) {
+      var soon = document.createElement("span");
+      soon.className = "featured-soon";
+      soon.textContent = d === 0 ? "Today" : d === 1 ? "Tomorrow" : "In " + d + " days";
+      head.appendChild(soon);
+    }
+    a.appendChild(head);
+
+    var name = document.createElement("h3");
+    name.className = "featured-name";
+    name.textContent = f.name;
+    a.appendChild(name);
+
+    if (f.note) {
+      var note = document.createElement("p");
+      note.className = "featured-note";
+      note.textContent = f.note;
+      a.appendChild(note);
+    }
+
+    var place = document.createElement("p");
+    place.className = "featured-place";
+    place.innerHTML = pin + " <span></span>";
+    place.querySelector("span").textContent =
+      f.venue ? f.venue + " · " + f.city : f.city;
+    a.appendChild(place);
+
+    var cta = document.createElement("span");
+    cta.className = "featured-cta";
+    cta.innerHTML = "Event details " + arrow;
+    a.appendChild(cta);
+
+    return a;
+  }
+
+  // Two passes: the second is a visual duplicate, hidden from assistive
+  // tech and keyboard focus so the list is only announced once.
+  [0, 1].forEach(function (pass) {
+    live.forEach(function (f) {
+      var card = buildFeatured(f);
+      if (pass === 1) {
+        card.setAttribute("aria-hidden", "true");
+        card.setAttribute("tabindex", "-1");
+      }
+      track.appendChild(card);
+    });
+  });
+
+  // Longer lists need proportionally longer to travel the same distance,
+  // otherwise the strip speeds up every time an event is added.
+  track.style.setProperty("--featured-duration", (live.length * 8) + "s");
+})();
+
 // Upcoming events grid — reads from the EVENTS array defined in
 // events-data.js (only present on events.html). Automatically hides
 // past events, sorts what's left by date, and loads results in
@@ -62,6 +167,14 @@
   var tagsWrap = document.getElementById("filter-tags");
   var countEl = document.getElementById("filter-count");
   var resetBtn = document.getElementById("filter-reset");
+  var resetSheetBtn = document.getElementById("filter-reset-sheet");
+  var openBtn = document.getElementById("filter-open");
+  var closeBtn = document.getElementById("filter-close");
+  var applyBtn = document.getElementById("filter-apply");
+  var applyCount = document.getElementById("filter-apply-count");
+  var panel = document.getElementById("filter-panel");
+  var backdrop = document.getElementById("filter-backdrop");
+  var badge = document.getElementById("filter-badge");
 
   var state = { q: "", when: "all", mode: "all", price: "all", tags: [] };
   var filtered = upcoming.slice();
@@ -339,6 +452,16 @@
            state.price !== "all" || state.tags.length > 0;
   }
 
+  // Counts only the panel controls, not the search box — the search term is
+  // already visible in its own field, so counting it would look like a bug.
+  function activeFilterCount() {
+    var n = state.tags.length;
+    if (state.when !== "all") n++;
+    if (state.mode !== "all") n++;
+    if (state.price !== "all") n++;
+    return n;
+  }
+
   function updateSummary() {
     if (countEl) {
       countEl.textContent = filtered.length === upcoming.length
@@ -347,6 +470,17 @@
     }
     if (resetBtn) resetBtn.classList.toggle("hidden", !isFiltering());
     if (clearQBtn) clearQBtn.classList.toggle("hidden", !state.q);
+
+    var n = activeFilterCount();
+    if (badge) {
+      badge.textContent = n;
+      badge.classList.toggle("hidden", n === 0);
+    }
+    if (openBtn) openBtn.classList.toggle("has-filters", n > 0);
+    if (applyCount) {
+      applyCount.textContent = filtered.length === 1
+        ? "1 event" : filtered.length + " events";
+    }
   }
 
   function applyFilters() {
@@ -426,26 +560,62 @@
       qInput.focus();
     });
   }
-  if (resetBtn) {
-    resetBtn.addEventListener("click", function () {
-      state = { q: "", when: "all", mode: "all", price: "all", tags: [] };
-      if (qInput) qInput.value = "";
-      ["filter-when", "filter-mode", "filter-price"].forEach(function (id) {
-        var box = document.getElementById(id);
-        if (!box) return;
-        Array.prototype.forEach.call(box.querySelectorAll(".filter-chip"), function (b, idx) {
-          b.classList.toggle("is-active", idx === 0);
-        });
+  function resetAll() {
+    state = { q: "", when: "all", mode: "all", price: "all", tags: [] };
+    if (qInput) qInput.value = "";
+    ["filter-when", "filter-mode", "filter-price"].forEach(function (id) {
+      var box = document.getElementById(id);
+      if (!box) return;
+      Array.prototype.forEach.call(box.querySelectorAll(".filter-chip"), function (b, idx) {
+        b.classList.toggle("is-active", idx === 0);
       });
-      if (tagsWrap) {
-        Array.prototype.forEach.call(tagsWrap.querySelectorAll(".filter-chip"), function (b) {
-          b.classList.remove("is-active");
-          b.setAttribute("aria-pressed", "false");
-        });
-      }
-      applyFilters();
     });
+    if (tagsWrap) {
+      Array.prototype.forEach.call(tagsWrap.querySelectorAll(".filter-chip"), function (b) {
+        b.classList.remove("is-active");
+        b.setAttribute("aria-pressed", "false");
+      });
+    }
+    applyFilters();
   }
+  if (resetBtn) resetBtn.addEventListener("click", resetAll);
+  if (resetSheetBtn) resetSheetBtn.addEventListener("click", resetAll);
+
+  // ---- mobile filter sheet ---------------------------------------------
+  // Above 820px the panel is just part of the page, so these handlers sit
+  // idle; the sheet chrome is hidden by CSS at that width.
+  var lastFocus = null;
+
+  function openSheet() {
+    if (!panel) return;
+    lastFocus = document.activeElement;
+    panel.classList.add("is-open");
+    if (backdrop) backdrop.hidden = false;
+    document.body.classList.add("filters-open");
+    if (openBtn) openBtn.setAttribute("aria-expanded", "true");
+    if (closeBtn) closeBtn.focus();
+  }
+
+  function closeSheet() {
+    if (!panel) return;
+    panel.classList.remove("is-open");
+    if (backdrop) backdrop.hidden = true;
+    document.body.classList.remove("filters-open");
+    if (openBtn) openBtn.setAttribute("aria-expanded", "false");
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+
+  if (openBtn) openBtn.addEventListener("click", openSheet);
+  if (closeBtn) closeBtn.addEventListener("click", closeSheet);
+  if (applyBtn) applyBtn.addEventListener("click", closeSheet);
+  if (backdrop) backdrop.addEventListener("click", closeSheet);
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && panel && panel.classList.contains("is-open")) closeSheet();
+  });
+  // Leaving phone width with the sheet open would strand body scroll-lock on.
+  window.addEventListener("resize", function () {
+    if (window.innerWidth > 820 && panel && panel.classList.contains("is-open")) closeSheet();
+  });
 
   applyFilters();
 })();

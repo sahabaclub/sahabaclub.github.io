@@ -1173,6 +1173,178 @@ body.lightbox-open { overflow: hidden; }
 }
 .events-hero h1 { font-size: 40px; margin: 8px 0 14px; font-weight: 700; letter-spacing: -0.01em; }
 .events-hero .lead { margin: 0 auto; }
+/* ---- Featured mega-events banner ------------------------------------
+   A marquee of the region's landmark AI conferences. The track holds two
+   copies of the card list and slides exactly half its width, so the loop
+   is seamless. Cards use margin-right rather than flex gap because gap
+   would leave half a gap unaccounted for at the wrap point. */
+.featured-strip {
+  max-width: var(--max-width);
+  margin: 0 auto 30px;
+  padding: 22px 0 26px;
+  position: relative;
+}
+.featured-strip::before {
+  content: "";
+  position: absolute;
+  inset: 0 20px;
+  border-radius: 26px;
+  background:
+    radial-gradient(120% 140% at 12% 0%, rgba(139, 92, 246, 0.20), transparent 62%),
+    radial-gradient(120% 140% at 88% 100%, rgba(34, 211, 238, 0.16), transparent 62%),
+    var(--glass);
+  border: 1px solid var(--glass-border);
+  pointer-events: none;
+}
+.featured-head {
+  position: relative;
+  text-align: center;
+  padding: 6px 24px 18px;
+}
+.featured-title {
+  margin: 6px 0 8px;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  background: linear-gradient(90deg, var(--violet), var(--cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.featured-sub {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+/* The mask fades cards in and out at the edges so they don't appear to be
+   chopped off by the container. */
+.featured-viewport {
+  position: relative;
+  overflow: hidden;
+  padding: 4px 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+}
+.featured-track {
+  display: flex;
+  width: max-content;
+  animation: featured-scroll var(--featured-duration, 48s) linear infinite;
+}
+@keyframes featured-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.featured-viewport:hover .featured-track,
+.featured-track:focus-within { animation-play-state: paused; }
+
+.featured-card {
+  flex: 0 0 auto;
+  width: 292px;
+  margin-right: 16px;
+  padding: 20px 20px 18px;
+  border-radius: var(--radius);
+  background: rgba(10, 14, 26, 0.72);
+  border: 1px solid var(--glass-border);
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.22s, border-color 0.22s, box-shadow 0.22s;
+}
+html.light-mode .featured-card { background: rgba(255, 255, 255, 0.82); }
+/* Coloured spine down the left edge, one per accent. */
+.featured-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent, var(--violet));
+}
+.featured-card.accent-violet { --accent: #8b5cf6; }
+.featured-card.accent-cyan { --accent: #22d3ee; }
+.featured-card.accent-gold { --accent: #fbbf24; }
+.featured-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--accent);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+.featured-card:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.featured-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.featured-date {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent, var(--violet));
+}
+.featured-soon {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--glass-border);
+}
+.featured-name {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text);
+}
+.featured-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.featured-place {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.featured-place svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 2px; }
+.featured-cta {
+  margin-top: auto;
+  padding-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent, var(--violet));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.featured-cta svg { width: 15px; height: 15px; transition: transform 0.2s; }
+.featured-card:hover .featured-cta svg { transform: translateX(3px); }
+
+@media (max-width: 720px) {
+  .featured-strip { margin-bottom: 22px; padding: 18px 0 20px; }
+  .featured-strip::before { inset: 0 14px; border-radius: 20px; }
+  .featured-title { font-size: 24px; }
+  .featured-sub { font-size: 13.5px; }
+  .featured-head { padding: 4px 18px 14px; }
+  .featured-card { width: 250px; padding: 17px 17px 15px; }
+  .featured-name { font-size: 17px; }
+}
+/* With motion turned off the strip becomes an ordinary swipeable row. */
+@media (prefers-reduced-motion: reduce) {
+  .featured-track { animation: none; }
+  .featured-viewport { overflow-x: auto; scroll-snap-type: x mandatory; }
+  .featured-card { scroll-snap-align: start; }
+}
+html.reduce-motion .featured-track { animation: none; }
+html.reduce-motion .featured-viewport { overflow-x: auto; scroll-snap-type: x mandatory; }
+html.reduce-motion .featured-card { scroll-snap-align: start; }
+
 /* Events search + filters */
 .events-filters {
   max-width: var(--max-width);
@@ -1288,11 +1460,166 @@ html.light-mode .filter-chip.is-active { color: #fff; }
 .hl { background: rgba(139, 92, 246, 0.32); border-radius: 3px; padding: 0 2px; color: var(--text); }
 html.light-mode .hl { background: rgba(139, 92, 246, 0.22); }
 
+/* ---- Filter bar + panel ---------------------------------------------
+   On wide screens the panel is simply part of the page and the sheet
+   chrome (grip, title, close, footer) and the Filters button are hidden.
+   Below 820px the same panel becomes a bottom sheet. */
+.filter-bar { display: flex; align-items: center; gap: 12px; }
+.filter-bar .filter-search { flex: 1; min-width: 0; }
+.filter-open,
+.filter-panel-head,
+.filter-panel-foot,
+.filter-backdrop { display: none; }
+.filter-panel { display: flex; flex-direction: column; gap: 16px; }
+
+@media (max-width: 820px) {
+  .filter-open {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+    padding: 12px 15px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .filter-open svg { width: 17px; height: 17px; }
+  .filter-open.has-filters { border-color: rgba(139, 92, 246, 0.6); }
+  .filter-badge {
+    min-width: 19px;
+    height: 19px;
+    padding: 0 5px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 19px;
+    text-align: center;
+    color: #05070d;
+    background: linear-gradient(90deg, var(--violet), var(--cyan));
+    border-radius: 999px;
+  }
+  html.light-mode .filter-badge { color: #fff; }
+
+  .filter-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 119;
+    background: rgba(3, 6, 14, 0.62);
+    backdrop-filter: blur(2px);
+  }
+  .filter-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 120;
+    max-height: 84vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 18px;
+    padding: 0 18px calc(18px + env(safe-area-inset-bottom));
+    background: var(--bg);
+    border-top: 1px solid var(--glass-border);
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -18px 50px rgba(0, 0, 0, 0.5);
+    transform: translateY(102%);
+    transition: transform 0.28s ease;
+  }
+  .filter-panel.is-open { transform: translateY(0); }
+
+  /* Sticky so the title and close stay reachable while the chips scroll. */
+  .filter-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 16px 0 12px;
+    background: var(--bg);
+  }
+  .filter-panel-grip {
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 38px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--glass-border);
+  }
+  .filter-panel-title { margin: 0; font-size: 17px; font-weight: 700; }
+  .filter-close {
+    width: 34px;
+    height: 34px;
+    font-size: 24px;
+    line-height: 1;
+    color: var(--text-secondary);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  .filter-row { flex-direction: column; gap: 16px; }
+  .filter-group { width: 100%; align-items: flex-start; flex-direction: column; gap: 8px; }
+  .filter-chip { padding: 9px 15px; font-size: 13.5px; }
+
+  .filter-panel-foot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    bottom: 0;
+    padding: 12px 0 4px;
+    background: var(--bg);
+    box-shadow: 0 -10px 18px -12px rgba(0, 0, 0, 0.9);
+  }
+  .filter-reset-sheet {
+    flex-shrink: 0;
+    padding: 13px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .filter-apply {
+    flex: 1;
+    padding: 13px 18px;
+    font-size: 14.5px;
+    font-weight: 700;
+    font-family: inherit;
+    color: #05070d;
+    background: linear-gradient(90deg, var(--violet), var(--cyan));
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  html.light-mode .filter-apply { color: #fff; }
+
+  /* The sheet footer already offers Reset, so hide the inline one. */
+  .filter-summary .filter-reset { display: none; }
+  body.filters-open { overflow: hidden; }
+}
+
 @media (max-width: 720px) {
   .events-filters { gap: 14px; }
-  .filter-row { gap: 12px 16px; }
-  .filter-group { width: 100%; }
   .filter-search input { padding: 13px 42px 13px 44px; font-size: 14px; }
+  .filter-search input::placeholder { font-size: 13.5px; }
+}
+@media (max-width: 420px) {
+  .filter-open { padding: 12px 13px; }
+  .filter-open span:not(.filter-badge) { display: none; }
 }
 
 .events-list {
