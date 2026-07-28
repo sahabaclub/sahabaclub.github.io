@@ -71,7 +71,10 @@
       img.className = "featured-img" + (f.fit === "contain" ? " is-contain" : "");
       img.src = f.image;
       img.alt = f.name;
-      img.loading = "lazy";
+      // Deliberately not lazy: the strip is above the fold and cards are
+      // moved by a CSS transform, which doesn't reliably trigger lazy loads
+      // as they slide into view.
+      img.decoding = "async";
       // If the event's site moves or blocks the asset, drop back to the
       // initials underneath rather than showing a broken-image icon.
       img.addEventListener("error", function () {
