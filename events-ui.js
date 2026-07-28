@@ -216,6 +216,9 @@
   var hovering = false;
   var dragging = false;
   var raf = null;
+  // Auto-advance writes scrollLeft every frame, which cancels an in-flight
+  // smooth scroll. Holding it off briefly lets an arrow press complete.
+  var holdUntil = 0;
 
   function half() { return track.scrollWidth / 2; }
 
@@ -229,7 +232,7 @@
   }
 
   function frame() {
-    if (playing && !hovering && !dragging) step(SPEED);
+    if (playing && !hovering && !dragging && Date.now() > holdUntil) step(SPEED);
     raf = window.requestAnimationFrame(frame);
   }
 
@@ -245,6 +248,7 @@
   function nudge(dir) {
     var h = half();
     var stride = cardStride();
+    holdUntil = Date.now() + 700;
     var target = viewport.scrollLeft + dir * stride;
     if (target < 0 || target >= h) {
       step(dir * stride);
