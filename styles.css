@@ -476,18 +476,26 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
 /* On small phones the logo and buttons need the whole top row, so the slogan
    drops onto its own full-width line beneath them, set on a single line.
    This has to sit after the .nav.has-drawer nowrap rule to win over it. */
+/* Phones: the theme toggle comes out of the header — Settings in the menu
+   already carries the Dark/Light choice — and the space it frees lets the
+   slogan sit on the same row as the logo and the menu button. */
+@media (max-width: 720px) {
+  .nav.has-drawer .nav-compact .theme-toggle { display: none; }
+}
 @media (max-width: 460px) {
-  .nav.has-drawer .nav-inner { flex-wrap: wrap; row-gap: 0; }
+  .nav.has-drawer .nav-inner { flex-wrap: nowrap; gap: 10px; }
   .nav-slogan {
-    order: 3;
-    flex: 0 0 100%;
-    font-size: 17px;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
     line-height: 1.15;
-    padding-bottom: 2px;
+    padding-bottom: 0;
   }
-  /* Two lines on phones: the full slogan on one line is too small to read
-     once it has to share the row width. */
+  /* Stacked on two short lines so it stays legible at this size. */
   .nav-slogan span { display: block; }
+}
+@media (max-width: 360px) {
+  .nav-slogan { font-size: 12px; }
 }
 
 /* Buttons */
