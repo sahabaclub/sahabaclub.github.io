@@ -29,7 +29,7 @@ var FEATURED_EVENTS = [
     city: "Abu Dhabi, UAE",
     note: "The world's leading AI show — summit on 5 Oct, expo 6 – 7 Oct.",
     scale: "Global flagship",
-    image: "https://aieverythingabudhabi.com/contents/Theme-26/images/AiELogo12.png",
+    image: "https://aieverythingabudhabi.com/contents/Theme-26/images/AiEverythinglogo12-black.png",
     fit: "contain",
     link: "https://aieverythingabudhabi.com/home",
     accent: "violet"
