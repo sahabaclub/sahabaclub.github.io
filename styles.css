@@ -189,7 +189,8 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   pointer-events: none;
   user-select: none;
 }
-.nav-slogan span { display: block; }
+/* One line on desktop, where there's width to spare. */
+.nav-slogan span { display: inline; }
 .nav-slogan span:last-child { color: var(--cyan); }
 
 @media (max-width: 900px) { .nav-slogan { font-size: 21px; } }
@@ -484,7 +485,9 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
     line-height: 1.15;
     padding-bottom: 2px;
   }
-  .nav-slogan span { display: inline; }
+  /* Two lines on phones: the full slogan on one line is too small to read
+     once it has to share the row width. */
+  .nav-slogan span { display: block; }
 }
 
 /* Buttons */

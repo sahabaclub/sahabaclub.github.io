@@ -334,6 +334,36 @@
   }
 })();
 
+// ---- Mega events also join the main list ------------------------------
+// The featured strip and the grid below it are two views of the same
+// events, so these are derived from FEATURED_EVENTS rather than typed out
+// again — one place to edit, no chance of the two drifting apart. They
+// carry a "Mega Event" tag so they can be filtered as a group.
+(function () {
+  if (typeof EVENTS === "undefined" || typeof FEATURED_EVENTS === "undefined") return;
+
+  FEATURED_EVENTS.forEach(function (f) {
+    // The grid sorts and filters on a real date, so an edition whose dates
+    // haven't been announced can't be placed in it. It stays in the strip.
+    if (!f.sortDate) return;
+    // Guard against a double-add if this ever runs twice.
+    if (EVENTS.some(function (e) { return e.title === f.name; })) return;
+
+    EVENTS.push({
+      title: f.name,
+      country: f.city,
+      location: f.venue,
+      date: f.sortDate,
+      time: f.dateLabel,
+      price: "Paid",
+      mode: "In-Person",
+      tags: ["AI", "Mega Event"],
+      registerLink: f.link,
+      description: f.note + (f.scale ? " " + f.scale + "." : "")
+    });
+  });
+})();
+
 // Upcoming events grid — reads from the EVENTS array defined in
 // events-data.js (only present on events.html). Automatically hides
 // past events, sorts what's left by date, and loads results in
