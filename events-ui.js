@@ -41,12 +41,49 @@
     return Math.round((new Date(dateStr + "T00:00:00") - now) / 86400000);
   }
 
+  // First letter of each significant word, e.g. "GITEX GLOBAL" -> "GG".
+  function initials(name) {
+    return name.split(/\s+/)
+      .filter(function (w) { return !/^(the|of|and|can|&)$/i.test(w); })
+      .slice(0, 2)
+      .map(function (w) { return w.charAt(0).toUpperCase(); })
+      .join("");
+  }
+
   function buildFeatured(f) {
     var a = document.createElement("a");
     a.className = "featured-card accent-" + (f.accent || "violet");
     a.href = f.link;
     a.target = "_blank";
     a.rel = "noopener";
+
+    // --- left media panel ---
+    var media = document.createElement("div");
+    media.className = "featured-media";
+
+    var fallback = document.createElement("span");
+    fallback.className = "featured-initials";
+    fallback.textContent = initials(f.name);
+    media.appendChild(fallback);
+
+    if (f.image) {
+      var img = document.createElement("img");
+      img.className = "featured-img" + (f.fit === "contain" ? " is-contain" : "");
+      img.src = f.image;
+      img.alt = f.name;
+      img.loading = "lazy";
+      // If the event's site moves or blocks the asset, drop back to the
+      // initials underneath rather than showing a broken-image icon.
+      img.addEventListener("error", function () {
+        img.parentNode && img.parentNode.removeChild(img);
+      });
+      media.appendChild(img);
+    }
+    a.appendChild(media);
+
+    // --- right content panel ---
+    var body = document.createElement("div");
+    body.className = "featured-body";
 
     var head = document.createElement("div");
     head.className = "featured-card-head";
@@ -57,38 +94,50 @@
     head.appendChild(date);
 
     var d = daysUntil(f.sortDate);
-    if (d !== null && d >= 0 && d <= 60) {
+    if (d !== null && d >= 0 && d <= 120) {
       var soon = document.createElement("span");
       soon.className = "featured-soon";
-      soon.textContent = d === 0 ? "Today" : d === 1 ? "Tomorrow" : "In " + d + " days";
+      soon.textContent = d === 0 ? "Today" : d === 1 ? "Tomorrow" : d + " days to go";
       head.appendChild(soon);
     }
-    a.appendChild(head);
+    body.appendChild(head);
 
     var name = document.createElement("h3");
     name.className = "featured-name";
     name.textContent = f.name;
-    a.appendChild(name);
+    body.appendChild(name);
 
     if (f.note) {
       var note = document.createElement("p");
       note.className = "featured-note";
       note.textContent = f.note;
-      a.appendChild(note);
+      body.appendChild(note);
     }
 
-    var place = document.createElement("p");
+    var meta = document.createElement("div");
+    meta.className = "featured-meta";
+
+    var place = document.createElement("span");
     place.className = "featured-place";
     place.innerHTML = pin + " <span></span>";
     place.querySelector("span").textContent =
       f.venue ? f.venue + " · " + f.city : f.city;
-    a.appendChild(place);
+    meta.appendChild(place);
+
+    if (f.scale) {
+      var scale = document.createElement("span");
+      scale.className = "featured-scale";
+      scale.textContent = f.scale;
+      meta.appendChild(scale);
+    }
+    body.appendChild(meta);
 
     var cta = document.createElement("span");
     cta.className = "featured-cta";
     cta.innerHTML = "Event details " + arrow;
-    a.appendChild(cta);
+    body.appendChild(cta);
 
+    a.appendChild(body);
     return a;
   }
 
@@ -105,9 +154,18 @@
     });
   });
 
-  // Longer lists need proportionally longer to travel the same distance,
-  // otherwise the strip speeds up every time an event is added.
-  track.style.setProperty("--featured-duration", (live.length * 8) + "s");
+  // Drive the marquee at a fixed reading speed rather than a fixed duration,
+  // so adding an event or changing the card width doesn't change how fast
+  // the text goes past. Measured after layout settles.
+  function setPace() {
+    var half = track.scrollWidth / 2;
+    if (!half) return;
+    track.style.setProperty("--featured-duration", Math.round(half / 55) + "s");
+  }
+  if (document.readyState === "complete") setPace();
+  else window.addEventListener("load", setPace);
+  setTimeout(setPace, 400);
+  window.addEventListener("resize", setPace);
 })();
 
 // Upcoming events grid — reads from the EVENTS array defined in
