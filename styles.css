@@ -1464,10 +1464,13 @@ html.light-mode .featured-soon { background: rgba(16, 22, 39, 0.07); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Whole-pixel line-height on purpose: with a fractional one the two-line
+   clamp box lands a fraction short and shaves the descenders off the last
+   line, which reads as a truncated sentence. */
 .featured-note {
   margin: 0;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 18px;
   color: var(--text-secondary);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1524,7 +1527,7 @@ html.light-mode .featured-soon { background: rgba(16, 22, 39, 0.07); }
   .featured-body { padding: 11px 17px 9px; gap: 2px; }
   .featured-name { font-size: 17.5px; }
   .featured-date { font-size: 11.5px; }
-  .featured-note { -webkit-line-clamp: 1; font-size: 12.5px; }
+  .featured-note { -webkit-line-clamp: 1; font-size: 12.5px; line-height: 17px; }
   .mct-chip { width: 40px; height: 40px; }
   .mct-words { font-size: 13.5px; }
 }
@@ -1562,7 +1565,7 @@ html.light-mode .featured-soon { background: rgba(16, 22, 39, 0.07); }
     border-left: none;
   }
   .featured-name { font-size: 17px; }
-  .featured-note { -webkit-line-clamp: 2; font-size: 12.5px; }
+  .featured-note { -webkit-line-clamp: 2; font-size: 12.5px; line-height: 17px; }
   .featured-place { font-size: 11.5px; }
   .featured-scale { display: none; }
   .mct-chip { width: 42px; height: 42px; }
