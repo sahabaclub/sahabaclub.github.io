@@ -1618,6 +1618,10 @@ html.light-mode .hl { background: rgba(139, 92, 246, 0.22); }
     background: rgba(3, 6, 14, 0.62);
     backdrop-filter: blur(2px);
   }
+  /* This must follow the rule above: a class selector's display:block beats
+     the browser's own [hidden] styling, which would otherwise leave the
+     dimming layer covering — and blocking taps on — the whole page. */
+  .filter-backdrop[hidden] { display: none; }
   .filter-panel {
     position: fixed;
     left: 0;
