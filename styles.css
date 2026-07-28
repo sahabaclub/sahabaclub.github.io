@@ -1,3 +1,11 @@
+/* Declaring a colour scheme is what stops Samsung Internet's dark mode and
+   Chrome for Android's "auto dark theme" from algorithmically repainting the
+   page. Left undeclared, those features invert our own light-on-dark
+   headings into dark-on-dark, which is unreadable. The site keeps full
+   control of its own theming instead. */
+:root { color-scheme: dark; }
+html.light-mode { color-scheme: light; }
+
 :root {
   --bg: #05070d;
   --violet: #8b5cf6;
@@ -142,10 +150,7 @@ header.nav, main, footer.footer { position: relative; z-index: 2; }
   font-weight: 700;
   font-size: 18px;
   letter-spacing: 0.02em;
-  background: linear-gradient(90deg, #fff, #c9c3ff);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--text);
 }
 .tab-toggle {
   display: inline-flex;
@@ -578,11 +583,20 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
 }
 .hero h1 .line-big { display: block; font-size: 1em; }
 .hero h1 .line-small { display: block; font-size: 0.42em; font-weight: 600; margin-top: 10px; letter-spacing: 0; }
-.glow-text {
-  background: linear-gradient(90deg, #fff 10%, #c9c3ff 45%, #8be9fd 80%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+/* Gradient headings are applied only where the browser really clips the
+   gradient to the glyphs. Without the guard, a browser that ignores
+   background-clip paints the gradient across the whole box while the text
+   stays transparent — the headline disappears and you get a solid colour
+   bar instead. The unguarded rule below is the readable fallback. */
+.glow-text { color: var(--text); }
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .glow-text {
+    background: linear-gradient(90deg, #fff 10%, #c9c3ff 45%, #8be9fd 80%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
 }
 .lead {
   font-size: 17px;
@@ -1222,10 +1236,16 @@ body.lightbox-open { overflow: hidden; }
   font-size: 30px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  background: linear-gradient(90deg, var(--violet), var(--cyan));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: var(--violet);
+}
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .featured-title {
+    background: linear-gradient(90deg, var(--violet), var(--cyan));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
 }
 .featured-sub { margin: 0; font-size: 15px; color: var(--text-secondary); }
 
@@ -2163,10 +2183,10 @@ html.light-mode {
   --bg: #f4f7fc;
   --text: #101627;
   --text-secondary: #4a5570;
-  --text-muted: #78829a;
+  --text-muted: #646e88;
   --violet: #6d28d9;
   --cyan: #0e7490;
-  --gold: #b8791f;
+  --gold: #9a6413;
   --gold-light: #7a5210;
   --glass: rgba(16, 22, 39, 0.035);
   --glass-border: rgba(16, 22, 39, 0.13);
@@ -2184,13 +2204,19 @@ html.light-mode .nebula-bg {
 
 html.light-mode .nav { background: rgba(255, 255, 255, 0.82); }
 html.light-mode .logo-img { filter: none; }
+/* The logo PNG is white artwork; on a light page it disappears entirely, so
+   it keeps its own dark backdrop. */
+html.light-mode .logo {
+  background: linear-gradient(135deg, #101627, #1d2745);
+  border-radius: 14px;
+  padding: 3px 10px;
+}
 
 /* Gradient headline text needs dark stops to stay readable. */
-html.light-mode .glow-text {
-  background: linear-gradient(90deg, #1a1f38 10%, #4c3a9e 48%, #0e7490 85%);
-}
-html.light-mode .logo-word {
-  background: linear-gradient(90deg, #101627, #4c3a9e);
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  html.light-mode .glow-text {
+    background: linear-gradient(90deg, #1a1f38 10%, #4c3a9e 48%, #0e7490 85%);
+  }
 }
 html.light-mode .kicker { color: #0e7490; }
 
@@ -2327,12 +2353,15 @@ html.light-mode .admin-event-row { background: #fff; }
   letter-spacing: -0.02em;
   color: var(--text);
 }
-.pod-title span {
-  display: block;
-  background: linear-gradient(90deg, var(--violet), var(--cyan));
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+.pod-title span { display: block; color: var(--violet); }
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .pod-title span {
+    background: linear-gradient(90deg, var(--violet), var(--cyan));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
 }
 .pod-hero .lead { margin: 0 auto 30px; }
 
