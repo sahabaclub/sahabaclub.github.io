@@ -243,18 +243,27 @@
     return card.getBoundingClientRect().width + parseFloat(style.marginRight || 0);
   }
 
-  // Arrow presses jump a whole card. Wrapping is handled up front so the
-  // smooth scroll never has to animate across the seam.
+  // Arrow presses jump a whole card. The position is always assigned
+  // directly so the button can never appear dead — the easing comes from
+  // temporarily switching the container to smooth scrolling, which degrades
+  // to an instant jump wherever that isn't honoured. scrollTo({behavior})
+  // was unreliable here because the per-frame auto-advance cancels it.
   function nudge(dir) {
     var h = half();
-    var stride = cardStride();
+    if (!h) return;
     holdUntil = Date.now() + 700;
-    var target = viewport.scrollLeft + dir * stride;
-    if (target < 0 || target >= h) {
-      step(dir * stride);
-      return;
+    var target = viewport.scrollLeft + dir * cardStride();
+    var wraps = target < 0 || target >= h;
+    if (wraps) {
+      // Jumping across the seam must not be animated, or the strip visibly
+      // rewinds through every card.
+      viewport.style.scrollBehavior = "auto";
+      step(dir * cardStride());
+    } else {
+      viewport.style.scrollBehavior = "smooth";
+      viewport.scrollLeft = target;
     }
-    viewport.scrollTo({ left: target, behavior: "smooth" });
+    window.setTimeout(function () { viewport.style.scrollBehavior = "auto"; }, 700);
   }
 
   function setPlaying(on) {
