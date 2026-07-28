@@ -1174,14 +1174,14 @@ body.lightbox-open { overflow: hidden; }
 .events-hero h1 { font-size: 40px; margin: 8px 0 14px; font-weight: 700; letter-spacing: -0.01em; }
 .events-hero .lead { margin: 0 auto; }
 /* ---- Featured mega-events banner ------------------------------------
-   A marquee of the region's landmark AI conferences. The track holds two
-   copies of the card list and slides exactly half its width, so the loop
-   is seamless. Cards use margin-right rather than flex gap because gap
-   would leave half a gap unaccounted for at the wrap point. */
+   Wide 4:1 banner cards on desktop: the event's own logo on a tile at the
+   left, details at the right. On phones a 4:1 sliver is far too narrow for
+   a horizontal wordmark, so the whole card flips and the logo becomes a
+   full-width bar across the top. */
 .featured-strip {
   max-width: var(--max-width);
   margin: 0 auto 30px;
-  padding: 22px 0 26px;
+  padding: 22px 0 20px;
   position: relative;
 }
 .featured-strip::before {
@@ -1211,33 +1211,76 @@ body.lightbox-open { overflow: hidden; }
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
-.featured-sub {
-  margin: 0;
-  font-size: 15px;
-  color: var(--text-secondary);
-}
-/* The mask fades cards in and out at the edges so they don't appear to be
-   chopped off by the container. */
+.featured-sub { margin: 0; font-size: 15px; color: var(--text-secondary); }
+
+/* Stage holds the arrows either side of the scrolling viewport. */
+.featured-stage { position: relative; }
 .featured-viewport {
   position: relative;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   padding: 4px 0;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
 }
-.featured-track {
-  display: flex;
-  width: max-content;
-  animation: featured-scroll var(--featured-duration, 48s) linear infinite;
-}
-@keyframes featured-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-.featured-viewport:hover .featured-track,
-.featured-track:focus-within { animation-play-state: paused; }
+.featured-viewport::-webkit-scrollbar { display: none; }
+.featured-viewport:focus-visible { outline: 2px solid var(--cyan); outline-offset: 4px; }
+.featured-track { display: flex; width: max-content; }
 
-/* Wide 4:1 banner cards: artwork panel on the left, details on the right. */
+.featured-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--text);
+  background: rgba(10, 14, 26, 0.86);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+html.light-mode .featured-nav { background: rgba(255, 255, 255, 0.92); }
+.featured-nav svg { width: 21px; height: 21px; }
+.featured-nav:hover { border-color: var(--cyan); transform: translateY(-50%) scale(1.06); }
+.featured-nav:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.featured-nav-prev { left: 6px; }
+.featured-nav-next { right: 6px; }
+
+.featured-controls {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+}
+.featured-play {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 15px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.featured-play:hover { color: var(--text); border-color: var(--cyan); }
+.featured-play:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.featured-play svg { width: 14px; height: 14px; }
+.featured-play .icon-play { display: none; }
+.featured-play.is-paused .icon-play { display: block; }
+.featured-play.is-paused .icon-pause { display: none; }
+
 .featured-card {
   flex: 0 0 auto;
   width: 672px;
@@ -1265,54 +1308,118 @@ html.light-mode .featured-card { background: rgba(255, 255, 255, 0.9); }
 }
 .featured-card:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 
-/* Media panel. The gradient sits underneath, so a logo on a transparent
-   background reads as branded artwork and a failed image falls back to
-   the initials rather than an empty box. */
+/* ---- logo tile ---- */
 .featured-media {
   position: relative;
-  flex: 0 0 30%;
+  flex: 0 0 32%;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  /* Plain fallback first for browsers without color-mix(). */
-  background: linear-gradient(150deg, rgba(139, 92, 246, 0.4), rgba(6, 9, 18, 0.9));
-  background:
-    linear-gradient(150deg, color-mix(in srgb, var(--accent) 42%, transparent), rgba(6, 9, 18, 0.9));
-  border-right: 1px solid var(--glass-border);
+  padding: 15px;
 }
-.featured-initials {
-  font-size: 40px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.9);
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.5);
+/* Most of these wordmarks are white and need a dark tile; the ones drawn
+   in black ink need a light one, or they vanish. */
+.featured-card.tile-dark .featured-media {
+  background: linear-gradient(150deg, rgba(20, 27, 46, 0.96), rgba(6, 9, 18, 0.98));
 }
-.featured-img {
+.featured-card.tile-light .featured-media { background: #fff; }
+.featured-media::before {
+  content: "";
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  background: linear-gradient(150deg, rgba(139, 92, 246, 0.16), transparent 60%);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%);
+  pointer-events: none;
 }
-/* Logos and key visuals are shown whole on a white tile. Most event
-   wordmarks are dark ink on transparent, so a dark panel swallowed them —
-   and cover-cropping a text-heavy poster into this narrow panel only ever
-   showed a fragment of a word. */
-.featured-img.is-contain {
+.featured-card.tile-light .featured-media::before { opacity: 0.5; }
+/* A slow sheen travelling across the tile — enough motion to catch the eye
+   without competing with the marquee itself. */
+.featured-media::after {
+  content: "";
+  position: absolute;
+  top: -60%;
+  left: -70%;
+  width: 45%;
+  height: 220%;
+  transform: rotate(18deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  animation: featured-sheen 7s ease-in-out infinite;
+  pointer-events: none;
+}
+.featured-card.tile-light .featured-media::after {
+  background: linear-gradient(90deg, transparent, rgba(80, 120, 200, 0.14), transparent);
+}
+@keyframes featured-sheen {
+  0%, 62% { left: -70%; }
+  92%, 100% { left: 125%; }
+}
+.featured-logo {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
-  inset: 13px;
-  width: auto;
-  height: auto;
-  padding: 11px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  animation: featured-logo-float 6s ease-in-out infinite;
+}
+@keyframes featured-logo-float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.022); }
+}
+.featured-initials {
+  position: absolute;
+  font-size: 34px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.85);
+}
+.featured-card.tile-light .featured-initials { color: rgba(20, 30, 60, 0.7); }
+
+/* ---- Machines Can Think animated wordmark ---- */
+.mct {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #fff;
+  animation: featured-logo-float 6s ease-in-out infinite;
+}
+.mct-chip { width: 46px; height: 46px; flex-shrink: 0; }
+.mct-eye { animation: mct-blink 5s ease-in-out infinite; transform-origin: 32px 32px; }
+@keyframes mct-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.12); }
+}
+.mct-words {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.12;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  font-size: 15px;
+}
+.mct-l2 { display: flex; align-items: baseline; gap: 0.4em; }
+/* The verb slot is sized by an invisible copy of the longest word so the
+   mark doesn't jump width as it cycles. */
+.mct-cycle { position: relative; display: inline-block; }
+.mct-ghost { visibility: hidden; }
+.mct-verb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  color: #f59e0b;
+  opacity: 0;
+  animation: mct-verb 8s linear infinite;
+}
+@keyframes mct-verb {
+  0%    { opacity: 0; transform: translateY(5px); }
+  4%    { opacity: 1; transform: translateY(0); }
+  21%   { opacity: 1; transform: translateY(0); }
+  25%   { opacity: 0; transform: translateY(-5px); }
+  100%  { opacity: 0; transform: translateY(-5px); }
 }
 
-/* Five stacked rows have to fit a fixed 4:1 card height, so the padding
-   and gaps are deliberately tight and overflow is clipped rather than
-   allowed to push the title under the description. */
 .featured-body {
   flex: 1;
   min-width: 0;
@@ -1372,11 +1479,7 @@ html.light-mode .featured-soon { background: rgba(16, 22, 39, 0.07); }
   min-width: 0;
 }
 .featured-place svg { width: 14px; height: 14px; flex-shrink: 0; }
-.featured-place span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.featured-place span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .featured-scale {
   font-size: 11px;
   font-weight: 700;
@@ -1401,54 +1504,74 @@ html.light-mode .featured-soon { background: rgba(16, 22, 39, 0.07); }
 .featured-cta svg { width: 15px; height: 15px; transition: transform 0.2s; }
 .featured-card:hover .featured-cta svg { transform: translateX(3px); }
 
-/* The 560px card is only 140px tall, so the description drops to one line
-   to keep everything inside the frame. */
 @media (max-width: 900px) {
   .featured-card { width: 560px; }
   .featured-body { padding: 11px 17px 9px; gap: 2px; }
   .featured-name { font-size: 17.5px; }
   .featured-date { font-size: 11.5px; }
   .featured-note { -webkit-line-clamp: 1; font-size: 12.5px; }
-  .featured-img.is-contain { inset: 11px; padding: 9px; }
+  .mct-chip { width: 40px; height: 40px; }
+  .mct-words { font-size: 13.5px; }
 }
-/* Below tablet width a strict 4:1 leaves no room for the copy, so the
-   card keeps its banner shape but grows to fit its content. */
+
+/* Phones: stack the card so the logo gets a full-width horizontal bar on
+   top. A 4:1 card's side panel is far too narrow for a wide wordmark. */
 @media (max-width: 720px) {
-  .featured-strip { margin-bottom: 22px; padding: 18px 0 20px; }
+  .featured-strip { margin-bottom: 22px; padding: 18px 0 16px; }
   .featured-strip::before { inset: 0 14px; border-radius: 20px; }
   .featured-title { font-size: 24px; }
   .featured-sub { font-size: 13.5px; }
   .featured-head { padding: 4px 18px 14px; }
+  .featured-nav { width: 36px; height: 36px; }
+  .featured-nav svg { width: 18px; height: 18px; }
+  .featured-nav-prev { left: 2px; }
+  .featured-nav-next { right: 2px; }
+
   .featured-card {
-    width: 340px;
+    width: 320px;
     aspect-ratio: auto;
-    min-height: 132px;
     margin-right: 14px;
+    flex-direction: column;
+    align-items: stretch;
   }
-  .featured-media { flex: 0 0 108px; }
-  .featured-initials { font-size: 30px; }
-  .featured-img.is-contain { padding: 10px; }
-  .featured-body { padding: 13px 15px 12px; gap: 4px; }
+  .featured-media {
+    flex: 0 0 auto;
+    width: 100%;
+    height: 84px;
+    padding: 13px 18px;
+    border-bottom: 3px solid var(--accent, var(--violet));
+  }
+  .featured-body {
+    padding: 12px 16px 13px;
+    gap: 3px;
+    border-left: none;
+  }
   .featured-name { font-size: 17px; }
-  .featured-note { font-size: 12.5px; -webkit-line-clamp: 2; }
+  .featured-note { -webkit-line-clamp: 2; font-size: 12.5px; }
   .featured-place { font-size: 11.5px; }
   .featured-scale { display: none; }
+  .mct-chip { width: 42px; height: 42px; }
+  .mct-words { font-size: 14px; }
 }
-/* Only the genuinely small handsets need the narrower card — a 390px
-   phone has room for the 340px one above, with the next card peeking. */
 @media (max-width: 360px) {
-  .featured-card { width: 292px; }
-  .featured-media { flex: 0 0 96px; }
+  .featured-card { width: 282px; }
+  .featured-media { height: 76px; }
 }
-/* With motion turned off the strip becomes an ordinary swipeable row. */
+
+/* With motion turned down, nothing drifts on its own — the arrows and
+   swiping still work. */
 @media (prefers-reduced-motion: reduce) {
-  .featured-track { animation: none; }
-  .featured-viewport { overflow-x: auto; scroll-snap-type: x mandatory; }
+  .featured-media::after,
+  .featured-logo,
+  .mct,
+  .mct-eye { animation: none; }
+  .featured-viewport { scroll-snap-type: x mandatory; }
   .featured-card { scroll-snap-align: start; }
 }
-html.reduce-motion .featured-track { animation: none; }
-html.reduce-motion .featured-viewport { overflow-x: auto; scroll-snap-type: x mandatory; }
-html.reduce-motion .featured-card { scroll-snap-align: start; }
+html.reduce-motion .featured-media::after,
+html.reduce-motion .featured-logo,
+html.reduce-motion .mct,
+html.reduce-motion .mct-eye { animation: none; }
 
 /* Events search + filters */
 .events-filters {

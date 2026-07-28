@@ -6,13 +6,21 @@
 // ============================================================
 
 // ---- Featured mega-events banner --------------------------------------
-// Builds the scrolling strip at the top of the events page from
-// FEATURED_EVENTS (featured-events.js). The track holds two copies of
-// the card list so the CSS marquee can loop without a visible seam.
+// A hand-controllable carousel of the region's landmark AI conferences,
+// built from FEATURED_EVENTS (featured-events.js). The track holds two
+// copies of the list and the scroll position wraps at the halfway mark,
+// so it loops seamlessly in either direction. Auto-advance is a scroll
+// nudge per frame rather than a CSS animation, which is what lets the
+// arrows, swipe and pause button all share one source of truth.
 (function () {
   var track = document.getElementById("featured-track");
+  var viewport = document.getElementById("featured-viewport");
   var strip = document.getElementById("featured-strip");
-  if (!track || typeof FEATURED_EVENTS === "undefined") return;
+  if (!track || !viewport || typeof FEATURED_EVENTS === "undefined") return;
+
+  var prevBtn = document.getElementById("featured-prev");
+  var nextBtn = document.getElementById("featured-next");
+  var playBtn = document.getElementById("featured-play");
 
   var now = new Date();
   now.setHours(0, 0, 0, 0);
@@ -36,6 +44,46 @@
   var pin = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>';
   var arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>';
 
+  // The Machines Can Think mark: a chip with an eye, and a wordmark whose
+  // last verb cycles. Drawn in markup so it stays crisp and recolourable
+  // instead of being baked into a video.
+  var MCT_CHIP = '<svg class="mct-chip" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true">' +
+    '<rect x="14" y="14" width="36" height="36" rx="4.5"/>' +
+    '<path d="M21 8v6M28 8v6M36 8v6M43 8v6M21 50v6M28 50v6M36 50v6M43 50v6M8 21h6M8 28h6M8 36h6M8 43h6M50 21h6M50 28h6M50 36h6M50 43h6"/>' +
+    '<path d="M4.5 32h9.5M50 32h9.5"/>' +
+    '<circle cx="3" cy="32" r="2.4"/><circle cx="61" cy="32" r="2.4"/>' +
+    '<circle cx="21.5" cy="21.5" r="1.7" fill="currentColor" stroke="none"/>' +
+    '<circle cx="42.5" cy="21.5" r="1.7" fill="currentColor" stroke="none"/>' +
+    '<circle cx="21.5" cy="42.5" r="1.7" fill="currentColor" stroke="none"/>' +
+    '<circle cx="42.5" cy="42.5" r="1.7" fill="currentColor" stroke="none"/>' +
+    '<path class="mct-eye" d="M22 32q10-8.5 20 0-10 8.5-20 0z"/>' +
+    '<circle cx="32" cy="32" r="3.4"/>' +
+    '</svg>';
+
+  var MCT_VERBS = ["SEE", "THINK", "LEARN", "CREATE"];
+  // Must match the mct-verb animation duration in styles.css: each verb
+  // holds the slot for CYCLE / verbs.length seconds.
+  var MCT_CYCLE = 8;
+
+  function buildMctLogo() {
+    var wrap = document.createElement("div");
+    wrap.className = "mct";
+    var slot = MCT_CYCLE / MCT_VERBS.length;
+    var cycle = MCT_VERBS.map(function (w, i) {
+      return '<span class="mct-verb" style="animation-delay:' +
+        (i * slot).toFixed(2) + 's">' + w + '</span>';
+    }).join("");
+    wrap.innerHTML = MCT_CHIP +
+      '<span class="mct-words">' +
+        '<span class="mct-l1">MACHINES</span>' +
+        '<span class="mct-l2">CAN <span class="mct-cycle">' + cycle +
+          '<span class="mct-ghost">' + MCT_VERBS.slice().sort(function (a, b) {
+            return b.length - a.length;
+          })[0] + '</span></span></span>' +
+      '</span>';
+    return wrap;
+  }
+
   function daysUntil(dateStr) {
     if (!dateStr) return null;
     return Math.round((new Date(dateStr + "T00:00:00") - now) / 86400000);
@@ -52,12 +100,13 @@
 
   function buildFeatured(f) {
     var a = document.createElement("a");
-    a.className = "featured-card accent-" + (f.accent || "violet");
+    a.className = "featured-card accent-" + (f.accent || "violet") +
+      " tile-" + (f.tile === "light" ? "light" : "dark");
     a.href = f.link;
     a.target = "_blank";
     a.rel = "noopener";
 
-    // --- left media panel ---
+    // --- logo panel: left side on desktop, a bar across the top on phones ---
     var media = document.createElement("div");
     media.className = "featured-media";
 
@@ -66,17 +115,19 @@
     fallback.textContent = initials(f.name);
     media.appendChild(fallback);
 
-    if (f.image) {
+    if (f.live === "mct") {
+      media.appendChild(buildMctLogo());
+      media.classList.add("has-live");
+    } else if (f.logo) {
       var img = document.createElement("img");
-      img.className = "featured-img" + (f.fit === "contain" ? " is-contain" : "");
-      img.src = f.image;
-      img.alt = f.name;
-      // Deliberately not lazy: the strip is above the fold and cards are
-      // moved by a CSS transform, which doesn't reliably trigger lazy loads
-      // as they slide into view.
+      img.className = "featured-logo";
+      img.src = f.logo;
+      img.alt = f.name + " logo";
+      // Deliberately not lazy: the strip sits above the fold, and cards are
+      // moved by scrolling their container rather than entering the page.
       img.decoding = "async";
-      // If the event's site moves or blocks the asset, drop back to the
-      // initials underneath rather than showing a broken-image icon.
+      // If a logo ever goes missing, fall back to the initials underneath
+      // rather than showing a broken-image icon.
       img.addEventListener("error", function () {
         img.parentNode && img.parentNode.removeChild(img);
       });
@@ -84,7 +135,7 @@
     }
     a.appendChild(media);
 
-    // --- right content panel ---
+    // --- content panel ---
     var body = document.createElement("div");
     body.className = "featured-body";
 
@@ -144,8 +195,9 @@
     return a;
   }
 
-  // Two passes: the second is a visual duplicate, hidden from assistive
-  // tech and keyboard focus so the list is only announced once.
+  // Two passes: the second is a visual duplicate that makes the wrap
+  // invisible. It's hidden from assistive tech and taken out of the tab
+  // order so the list is only announced once.
   [0, 1].forEach(function (pass) {
     live.forEach(function (f) {
       var card = buildFeatured(f);
@@ -157,18 +209,110 @@
     });
   });
 
-  // Drive the marquee at a fixed reading speed rather than a fixed duration,
-  // so adding an event or changing the card width doesn't change how fast
-  // the text goes past. Measured after layout settles.
-  function setPace() {
-    var half = track.scrollWidth / 2;
-    if (!half) return;
-    track.style.setProperty("--featured-duration", Math.round(half / 55) + "s");
+  // ---- carousel motion + controls ---------------------------------------
+  var SPEED = 0.55;            // px per frame at 60fps — a readable drift
+  var playing = true;
+  var pausedByUser = false;
+  var hovering = false;
+  var dragging = false;
+  var raf = null;
+
+  function half() { return track.scrollWidth / 2; }
+
+  function step(px) {
+    var h = half();
+    if (!h) return;
+    var x = viewport.scrollLeft + px;
+    if (x >= h) x -= h;
+    if (x < 0) x += h;
+    viewport.scrollLeft = x;
   }
-  if (document.readyState === "complete") setPace();
-  else window.addEventListener("load", setPace);
-  setTimeout(setPace, 400);
-  window.addEventListener("resize", setPace);
+
+  function frame() {
+    if (playing && !hovering && !dragging) step(SPEED);
+    raf = window.requestAnimationFrame(frame);
+  }
+
+  function cardStride() {
+    var card = track.querySelector(".featured-card");
+    if (!card) return 320;
+    var style = window.getComputedStyle(card);
+    return card.getBoundingClientRect().width + parseFloat(style.marginRight || 0);
+  }
+
+  // Arrow presses jump a whole card. Wrapping is handled up front so the
+  // smooth scroll never has to animate across the seam.
+  function nudge(dir) {
+    var h = half();
+    var stride = cardStride();
+    var target = viewport.scrollLeft + dir * stride;
+    if (target < 0 || target >= h) {
+      step(dir * stride);
+      return;
+    }
+    viewport.scrollTo({ left: target, behavior: "smooth" });
+  }
+
+  function setPlaying(on) {
+    playing = on;
+    pausedByUser = !on;
+    if (!playBtn) return;
+    playBtn.setAttribute("aria-pressed", on ? "false" : "true");
+    playBtn.setAttribute("aria-label", on ? "Pause the events carousel" : "Play the events carousel");
+    playBtn.title = on ? "Pause" : "Play";
+    playBtn.classList.toggle("is-paused", !on);
+  }
+
+  if (prevBtn) prevBtn.addEventListener("click", function () { nudge(-1); });
+  if (nextBtn) nextBtn.addEventListener("click", function () { nudge(1); });
+  if (playBtn) playBtn.addEventListener("click", function () { setPlaying(!playing); });
+
+  // Hovering or focusing a card holds the strip still so it can be read
+  // and clicked; leaving resumes unless the user pressed pause.
+  viewport.addEventListener("mouseenter", function () { hovering = true; });
+  viewport.addEventListener("mouseleave", function () { hovering = false; });
+  viewport.addEventListener("focusin", function () { hovering = true; });
+  viewport.addEventListener("focusout", function () { hovering = false; });
+
+  // Touch and mouse dragging: the browser scrolls the container natively,
+  // we just stop auto-advance while a finger is down and wrap afterwards.
+  viewport.addEventListener("pointerdown", function () { dragging = true; });
+  window.addEventListener("pointerup", function () {
+    if (!dragging) return;
+    dragging = false;
+    var h = half();
+    if (h && viewport.scrollLeft >= h) viewport.scrollLeft -= h;
+  });
+  viewport.addEventListener("scroll", function () {
+    if (dragging) return;
+    var h = half();
+    if (h && viewport.scrollLeft >= h) viewport.scrollLeft -= h;
+  }, { passive: true });
+
+  // Keyboard control when the strip itself has focus.
+  viewport.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") { e.preventDefault(); nudge(1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); nudge(-1); }
+  });
+
+  // Don't burn frames while the page is in a background tab.
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      if (raf) { window.cancelAnimationFrame(raf); raf = null; }
+    } else if (!raf) {
+      raf = window.requestAnimationFrame(frame);
+    }
+  });
+
+  // Respect a stated preference for less motion: the strip still scrolls by
+  // hand, it just doesn't drift on its own.
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce || document.documentElement.classList.contains("reduce-motion")) {
+    setPlaying(false);
+  } else {
+    setPlaying(true);
+    raf = window.requestAnimationFrame(frame);
+  }
 })();
 
 // Upcoming events grid — reads from the EVENTS array defined in

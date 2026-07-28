@@ -12,12 +12,15 @@
 // Use sortDate "" for an edition whose dates aren't announced yet
 // — it stays pinned at the end of the strip.
 //
-// image  — the event's own artwork, taken from its official site.
-// fit    — "cover" for photos and wide key visuals, "contain" for
-//          logos, which would otherwise be cropped or blurred.
-// scale  — a size figure worth shouting about, shown as a chip.
-// If an image ever 404s the card falls back to the event's initials
-// on its accent gradient, so a card is never left with a blank panel.
+// logo  — the event's official logo, hosted in assets/event-logos.
+// tile  — "dark" or "light": the panel the logo sits on. Most of
+//         these wordmarks are white, so they need a dark tile;
+//         the ones drawn in black ink need a light one. Getting
+//         this wrong makes the logo invisible, so check both.
+// live  — set instead of logo when the logo is rendered in markup
+//         rather than loaded as a file (see Machines Can Think,
+//         whose wordmark animates through several verbs).
+// scale — a size figure worth shouting about, shown as a chip.
 // ============================================================
 
 var FEATURED_EVENTS = [
@@ -29,23 +32,10 @@ var FEATURED_EVENTS = [
     city: "Abu Dhabi, UAE",
     note: "The world's leading AI show — summit on 5 Oct, expo 6 – 7 Oct.",
     scale: "Global flagship",
-    image: "https://aieverythingabudhabi.com/contents/Theme-26/images/AiEverythinglogo12-black.png",
-    fit: "contain",
+    logo: "assets/event-logos/ai-everything.png",
+    tile: "dark",
     link: "https://aieverythingabudhabi.com/home",
     accent: "violet"
-  },
-  {
-    name: "World AI Technology Expo",
-    dateLabel: "7 – 8 Oct 2026",
-    sortDate: "2026-10-07",
-    venue: "Mövenpick Grand Al Bustan",
-    city: "Dubai, UAE",
-    note: "Robotics, intelligent automation and applied AI across industries.",
-    scale: "Trade fair + conference",
-    image: "https://worldaiexpo.io/assets/images/cover/home-hero.jpg",
-    fit: "cover",
-    link: "https://worldaiexpo.io/",
-    accent: "cyan"
   },
   {
     name: "Dubai AI Festival",
@@ -55,8 +45,8 @@ var FEATURED_EVENTS = [
     city: "Dubai, UAE",
     note: "Hosted by Dubai Future Foundation with DIFC — now at a bigger venue.",
     scale: "150+ sessions · 120+ countries",
-    image: "https://dubaiaifestival.com/wp-content/uploads/2025/02/daif-25-featured-image.jpg",
-    fit: "contain",
+    logo: "assets/event-logos/dubai-ai-festival.svg",
+    tile: "dark",
     link: "https://dubaiaifestival.com/",
     accent: "gold"
   },
@@ -68,10 +58,26 @@ var FEATURED_EVENTS = [
     city: "Abu Dhabi, UAE",
     note: "Keynotes, panels and exhibitions across healthcare, finance and security.",
     scale: "5,000+ attendees · 100+ speakers",
-    image: "https://www.globalaishow.com/wp-content/uploads/2026/07/global-ai-show-abu-dhabi-og.webp",
-    fit: "contain",
+    logo: "assets/event-logos/global-ai-show.svg",
+    tile: "dark",
     link: "https://www.globalaishow.com/abu-dhabi/",
     accent: "violet"
+  },
+  {
+    // Dates and venue confirmed on the organiser's own event-details page.
+    // Several third-party event directories still list an October date at
+    // the Mövenpick, which is out of date — don't trust those.
+    name: "World AI Technology Expo",
+    dateLabel: "17 – 18 Nov 2026",
+    sortDate: "2026-11-17",
+    venue: "Millennium Airport Hotel",
+    city: "Dubai, UAE",
+    note: "Enterprise AI in practice, plus the Entrepreneur & Investor Summit on 19 Nov.",
+    scale: "Three-day programme",
+    logo: "assets/event-logos/world-ai-expo.png",
+    tile: "light",
+    link: "https://worldaiexpo.io/",
+    accent: "cyan"
   },
   {
     name: "GITEX GLOBAL",
@@ -81,8 +87,8 @@ var FEATURED_EVENTS = [
     city: "Dubai, UAE",
     note: "The world's largest tech expo, with a dedicated AI & DeepTech track.",
     scale: "200,000+ attendees · 180 countries",
-    image: "https://www.gitex.com/images/GITEX_GLOBAL_2026_logo_lockup_1-0211.png",
-    fit: "contain",
+    logo: "assets/event-logos/gitex-global.png",
+    tile: "light",
     link: "https://www.gitex.com/gitex-global-2026",
     accent: "cyan"
   },
@@ -94,8 +100,8 @@ var FEATURED_EVENTS = [
     city: "United Arab Emirates",
     note: "Research-led summit by Polynome, with MBZUAI — keynotes and workshops.",
     scale: "50+ keynotes · 10+ workshops",
-    image: "https://framerusercontent.com/assets/uV5FgoVHmPT6v1sDlZPYI57fHM.png",
-    fit: "cover",
+    live: "mct",
+    tile: "dark",
     link: "https://machinescanthink.ai/",
     accent: "gold"
   }

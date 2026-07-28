@@ -121,8 +121,23 @@
       <h2 class="featured-title">Mega AI Events</h2>
       <p class="featured-sub">The region&rsquo;s landmark AI summits, expos and deep-tech showcases.</p>
     </div>
-    <div class="featured-viewport">
-      <div class="featured-track" id="featured-track"></div>
+    <div class="featured-stage">
+      <button type="button" class="featured-nav featured-nav-prev" id="featured-prev" aria-label="Previous event">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <div class="featured-viewport" id="featured-viewport" tabindex="0" role="group" aria-label="Major AI events carousel">
+        <div class="featured-track" id="featured-track"></div>
+      </div>
+      <button type="button" class="featured-nav featured-nav-next" id="featured-next" aria-label="Next event">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+    <div class="featured-controls">
+      <button type="button" class="featured-play" id="featured-play" aria-pressed="false" aria-label="Pause the events carousel" title="Pause">
+        <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg>
+        <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>
+        <span class="featured-play-label">Pause</span>
+      </button>
     </div>
   </section>
 
