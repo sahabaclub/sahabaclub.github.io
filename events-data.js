@@ -23,6 +23,7 @@
 //   image: "https://... or assets/events/photo.jpg",  // optional
 //   brand: "microsoft",       // optional — if set and no image, shows an official-training placeholder graphic
 //   description: "Optional 1-2 sentence blurb.",       // optional
+//   tierRequired: "premium",  // optional — omit for "everyone"; "premium" locks it to signed-in Premium members
 // }
 // ============================================================
 

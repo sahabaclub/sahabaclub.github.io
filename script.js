@@ -1,4 +1,4 @@
-// Drifting starfield behind the whole page â the "AI universe" backdrop.
+// Drifting starfield behind the whole page — the "AI universe" backdrop.
 (function () {
   var canvas = document.getElementById("stars");
   if (!canvas || !canvas.getContext) return;
@@ -50,7 +50,7 @@
   frame();
 })();
 
-// The AI universe orbit visual â a glowing core with the Sahaba Club
+// The AI universe orbit visual — a glowing core with the Sahaba Club
 // activities orbiting around it on tilted, depth-shaded rings.
 (function () {
   var canvas = document.getElementById("universe-canvas");
@@ -293,10 +293,10 @@
   setTab("individual");
 })();
 
-// Sign-up / consultation forms â post to the Sahaba Club Power Automate
+// Sign-up / consultation forms — post to the Sahaba Club Power Automate
 // flow, which emails the team for every submission.
 (function () {
-  var FLOW_URL = "https://default23e9f3d3e0d04d38b8cf44b82c7fab.db.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/15/workflows/b950546181014f17b4fec3b3cfe6c139/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xD3SzgK_AVwsu89BqjT2I3vIcwojfFKT5yiZqvupEvk";
+  var FLOW_URL = "FLOW_ENDPOINT_URL_HERE";
 
   function wireForm(formId, formType, thanksId) {
     var form = document.getElementById(formId);
@@ -537,6 +537,7 @@
     show(i);
     box.hidden = false;
     document.body.classList.add("lightbox-open");
+    // Next frame so the opacity/scale transition actually runs.
     window.requestAnimationFrame(function () {
       box.classList.add("is-open");
     });
@@ -561,8 +562,12 @@
     open(at === -1 ? 0 : at);
   });
 
+  // Clicking the backdrop closes; clicking the photo or buttons does not.
   box.addEventListener("click", function (e) {
-    if (e.target === boxImg) { close(); return; }
+    if (e.target === boxImg) {
+      close();
+      return;
+    }
     if (e.target === box) close();
   });
 
@@ -621,4 +626,35 @@
   });
 })();
 
-// build: 1785136222411
+// Sign-in links on the public pages, in three states:
+//
+//   Supabase not set up yet  → the original "email us" link (unchanged)
+//   Set up, signed out       → the real login page
+//   Set up, signed in        → straight to the dashboard
+//
+// The links ship pointing at the email address, so this repo can go live
+// before the Supabase project exists without leaving a dead button on the
+// site. Marked with data-signin-link in the HTML; app/ pages have none of
+// these, so this whole block no-ops there (their paths differ anyway).
+(function () {
+  var links = Array.prototype.slice.call(
+    document.querySelectorAll("[data-signin-link]")
+  );
+  if (!links.length) return;
+
+  import("./lib/supabase-client.js").then(function (mod) {
+    if (!mod.isConfigured) return null;
+    links.forEach(function (link) { link.href = "login.html"; });
+    return import("./lib/auth.js").then(function (auth) { return auth.getSession(); });
+  }).then(function (session) {
+    if (!session) return;
+    links.forEach(function (link) {
+      // "Join free" and friends become "Dashboard" too — once you're in,
+      // every one of these is pointing at somewhere you've already been.
+      link.textContent = "Dashboard";
+      link.href = "app/dashboard.html";
+    });
+  }).catch(function () {
+    // Offline, or the CDN is unreachable — leave the email links alone.
+  });
+})();

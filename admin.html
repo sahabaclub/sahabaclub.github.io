@@ -242,6 +242,11 @@
         <textarea id="f-desc" placeholder="1-2 casual sentences about the event."></textarea>
       </div>
 
+      <label style="display:flex; align-items:center; gap:8px; font-size:14px; margin-bottom:14px;">
+        <input type="checkbox" id="f-tier-required" style="width:auto;">
+        Premium members only (locked for Standard members and signed-out visitors)
+      </label>
+
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <button type="submit" class="admin-btn-primary" id="save-btn">Save &amp; Publish</button>
         <button type="button" class="admin-btn-secondary admin-hidden" id="cancel-edit-btn">Cancel edit</button>
@@ -333,6 +338,7 @@
     '//   image: "https://... or assets/events/photo.jpg",  // optional',
     '//   brand: "microsoft",       // optional',
     '//   description: "Optional 1-2 sentence blurb.",       // optional',
+    '//   tierRequired: "premium",  // optional — locks it to signed-in Premium members',
     "// }",
     "// ============================================================",
     "",
@@ -340,7 +346,7 @@
 
   function serializeEvent(evt) {
     var lines = [];
-    var order = ["title", "country", "location", "date", "time", "price", "mode", "tags", "registerLink", "mapsLink", "image", "brand", "description"];
+    var order = ["title", "country", "location", "date", "time", "price", "mode", "tags", "registerLink", "mapsLink", "image", "brand", "description", "tierRequired"];
     order.forEach(function (key) {
       var val = evt[key];
       if (val === undefined || val === null || val === "") return;
@@ -472,6 +478,7 @@
           '<div class="event-badges" style="margin-top:6px;">' +
             '<span class="event-price-badge ' + (/paid/i.test(evt.price) ? "is-paid" : "is-free") + '">' + escapeHtml(evt.price) + "</span>" +
             (evt.mode ? '<span class="event-mode-badge ' + (evt.mode === "Online" ? "is-online" : "is-in-person") + '">' + escapeHtml(evt.mode) + "</span>" : "") +
+            (evt.tierRequired === "premium" ? '<span class="event-tier-badge">Premium</span>' : "") +
             tagsHtml +
           "</div>" +
         "</div>" +
@@ -521,6 +528,7 @@
     imageFile: document.getElementById("f-image-file"),
     brand: document.getElementById("f-brand"),
     desc: document.getElementById("f-desc"),
+    tierRequired: document.getElementById("f-tier-required"),
   };
 
   function updateTagPreview() {
@@ -562,6 +570,7 @@
     fields.image.value = evt.image || "";
     fields.brand.value = evt.brand || "";
     fields.desc.value = evt.description || "";
+    fields.tierRequired.checked = evt.tierRequired === "premium";
     updateTagPreview();
     formHeading.textContent = "Edit Event";
     saveBtn.textContent = "Save Changes & Publish";
@@ -608,6 +617,7 @@
         image: imagePath || fields.image.value.trim(),
         brand: fields.brand.value,
         description: fields.desc.value.trim(),
+        tierRequired: fields.tierRequired.checked ? "premium" : "",
       };
       return evt;
     };

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — Sahaba Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+<style>
+  .auth-wrap { max-width: 440px; margin: 0 auto; padding: 48px 20px 100px; }
+  .auth-hero { text-align: center; margin-bottom: 28px; }
+  .auth-hero h1 { font-size: 26px; margin: 0 0 8px; }
+  .auth-hero p { font-size: 14.5px; color: var(--text-secondary); margin: 0; }
+  .auth-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 24px; }
+  .auth-providers { display: flex; flex-direction: column; gap: 12px; }
+  .auth-btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 12px 16px; border-radius: 999px; font-size: 14.5px; font-weight: 600;
+    border: 1px solid var(--glass-border); background: rgba(255,255,255,0.03); color: var(--text);
+    cursor: pointer; font-family: inherit;
+  }
+  .auth-btn:hover { background: rgba(255,255,255,0.07); }
+  .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .auth-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .auth-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--text-muted); font-size: 12px; }
+  .auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--glass-border); }
+  .auth-phone-field { display: flex; flex-direction: column; gap: 8px; }
+  .auth-phone-field input {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: 8px;
+    padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .auth-hidden { display: none !important; }
+  .auth-status { font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-top: 14px; }
+  .auth-status.ok { background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.4); color: #4ade80; }
+  .auth-status.err { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
+  .auth-status.info { background: rgba(56,189,248,0.14); border: 1px solid rgba(56,189,248,0.4); color: #7dd3fc; }
+  .auth-fine-print { text-align: center; font-size: 12.5px; color: var(--text-muted); margin-top: 18px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="events.html" class="nav-link">Events</a>
+      <a href="podcast.html" class="nav-link">Podcast</a>
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
+        <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/>
+          <path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/>
+        </svg>
+        <svg class="theme-icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.5 13.4A8.4 8.4 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="auth-wrap">
+  <div class="auth-hero">
+    <h1 class="glow-text">Sign in to Sahaba Club</h1>
+    <p>New here? Signing in creates your free Standard account automatically — including your Microsoft 365 setup, right after.</p>
+  </div>
+
+  <div class="auth-card">
+    <div class="auth-providers">
+      <button type="button" class="auth-btn" id="btn-google">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#EA4335" d="M12 10.2v3.96h5.52c-.24 1.44-1.68 4.2-5.52 4.2-3.32 0-6.03-2.75-6.03-6.14s2.71-6.14 6.03-6.14c1.89 0 3.16.8 3.89 1.5l2.65-2.55C16.9 3.7 14.68 2.7 12 2.7 6.94 2.7 2.82 6.82 2.82 12s4.12 9.3 9.18 9.3c5.3 0 8.82-3.72 8.82-8.96 0-.6-.07-1.06-.15-1.5H12z"/></svg>
+        Continue with Google
+      </button>
+      <button type="button" class="auth-btn" id="btn-microsoft">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="2.5" width="8.5" height="8.5" fill="#F25022"/><rect x="12.5" y="2.5" width="8.5" height="8.5" fill="#7FBA00"/><rect x="2.5" y="12.5" width="8.5" height="8.5" fill="#00A4EF"/><rect x="12.5" y="12.5" width="8.5" height="8.5" fill="#FFB900"/></svg>
+        Continue with Microsoft
+      </button>
+      <button type="button" class="auth-btn" id="btn-phone-toggle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18h2"/></svg>
+        Continue with phone number
+      </button>
+    </div>
+
+    <div class="auth-phone-field auth-hidden" id="phone-panel" style="margin-top:16px;">
+      <label for="phone-input" style="font-size:13px; color:var(--text-secondary);">Phone number</label>
+      <input type="tel" id="phone-input" placeholder="+971 5X XXX XXXX" autocomplete="tel">
+      <button type="button" class="auth-btn" id="btn-send-code">Send code</button>
+
+      <div class="auth-hidden" id="code-panel" style="margin-top:6px;">
+        <label for="code-input" style="font-size:13px; color:var(--text-secondary);">Enter the code we texted you</label>
+        <input type="text" id="code-input" inputmode="numeric" placeholder="123456" autocomplete="one-time-code">
+        <button type="button" class="auth-btn" id="btn-verify-code">Verify &amp; continue</button>
+      </div>
+    </div>
+
+    <div id="auth-status"></div>
+  </div>
+
+  <p class="auth-fine-print">By continuing you agree to receive a welcome email and, unless you opt out later, occasional Sahaba Club updates.</p>
+</main>
+
+<script type="module">
+  import { signInWithGoogle, signInWithMicrosoft, sendPhoneCode, verifyPhoneCode, getSession, hasCompletedOnboarding } from "./lib/auth.js";
+
+  var statusEl = document.getElementById("auth-status");
+  function showStatus(msg, kind) {
+    statusEl.innerHTML = '<div class="auth-status ' + kind + '">' + msg + "</div>";
+  }
+
+  // Already signed in (or just came back from an OAuth redirect)? Skip
+  // straight to onboarding or the dashboard rather than showing the
+  // provider buttons again.
+  (async function routeIfAlreadySignedIn() {
+    var session = await getSession();
+    if (!session) return;
+    var done = await hasCompletedOnboarding(session.user.id);
+    window.location.href = done ? "app/dashboard.html" : "app/onboarding.html";
+  })();
+
+  document.getElementById("btn-google").addEventListener("click", function () {
+    showStatus("Redirecting to Google…", "info");
+    signInWithGoogle();
+  });
+
+  document.getElementById("btn-microsoft").addEventListener("click", function () {
+    showStatus("Redirecting to Microsoft…", "info");
+    signInWithMicrosoft();
+  });
+
+  var phonePanel = document.getElementById("phone-panel");
+  var codePanel = document.getElementById("code-panel");
+  var phoneInput = document.getElementById("phone-input");
+  var codeInput = document.getElementById("code-input");
+
+  document.getElementById("btn-phone-toggle").addEventListener("click", function () {
+    phonePanel.classList.remove("auth-hidden");
+  });
+
+  document.getElementById("btn-send-code").addEventListener("click", function () {
+    var phone = phoneInput.value.trim();
+    if (!phone) { showStatus("Enter a phone number first.", "err"); return; }
+    showStatus("Sending code…", "info");
+    sendPhoneCode(phone).then(function (res) {
+      if (res.error) { showStatus(res.error.message, "err"); return; }
+      codePanel.classList.remove("auth-hidden");
+      showStatus("Code sent — check your texts.", "ok");
+    });
+  });
+
+  document.getElementById("btn-verify-code").addEventListener("click", function () {
+    var phone = phoneInput.value.trim();
+    var code = codeInput.value.trim();
+    if (!code) { showStatus("Enter the code first.", "err"); return; }
+    showStatus("Verifying…", "info");
+    verifyPhoneCode(phone, code).then(function (res) {
+      if (res.error) { showStatus(res.error.message, "err"); return; }
+      window.location.href = "app/onboarding.html";
+    });
+  });
+</script>
+<script src="script.js"></script>
+</body>
+</html>

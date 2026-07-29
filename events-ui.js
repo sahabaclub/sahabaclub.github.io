@@ -373,6 +373,32 @@
   if (!grid || typeof EVENTS === "undefined") return;
   var emptyMsg = document.getElementById("events-empty");
 
+  // Premium-only events render locked until we know better. "guest" is
+  // the safe default — it's what an unauthenticated visitor actually is,
+  // and it means nobody sees a Premium event unlocked for a flash before
+  // we've confirmed their tier. refreshAccessThenRerender() (bottom of
+  // this file) swaps in the real tier once lib/tier-gate.js resolves.
+  var ACCESS = { tier: "guest", canSignIn: false };
+
+  function refreshAccessThenRerender() {
+    import("./lib/supabase-client.js").then(function (client) {
+      // Before the Supabase project exists there is no sign-in page worth
+      // sending anyone to, so locked events point at membership.html
+      // instead. Same reasoning as the nav links in script.js.
+      if (!client.isConfigured) return null;
+      ACCESS.canSignIn = true;
+      return import("./lib/tier-gate.js").then(function (mod) {
+        return mod.getAccessLevel();
+      });
+    }).then(function (level) {
+      if (!level) return;
+      ACCESS.tier = level.tier;
+      applyFilters();
+    }).catch(function () {
+      // Offline or CDN unreachable — stay on the safe "guest" default.
+    });
+  }
+
   var pinIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>';
   var calIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>';
 
@@ -483,8 +509,9 @@
 
   function buildCard(evt) {
     var isPaid = /paid/i.test(evt.price);
+    var isPremiumLocked = evt.tierRequired === "premium" && ACCESS.tier !== "premium";
     var card = document.createElement("div");
-    card.className = "event-card";
+    card.className = "event-card" + (isPremiumLocked ? " event-card-locked" : "");
 
     if (evt.image) {
       var img = document.createElement("img");
@@ -533,6 +560,13 @@
       modeBadge.className = "event-mode-badge " + modeSlug;
       modeBadge.textContent = evt.mode;
       badges.appendChild(modeBadge);
+    }
+
+    if (evt.tierRequired === "premium") {
+      var tierBadge = document.createElement("span");
+      tierBadge.className = "event-tier-badge";
+      tierBadge.textContent = "Premium";
+      badges.appendChild(tierBadge);
     }
 
     if (evt.tags && evt.tags.length) {
@@ -616,7 +650,18 @@
     var actions = document.createElement("div");
     actions.className = "event-actions";
 
-    if (evt.registerLink) {
+    if (isPremiumLocked) {
+      var lockBtn = document.createElement("a");
+      lockBtn.className = "btn btn-outline";
+      if (ACCESS.tier === "guest" && ACCESS.canSignIn) {
+        lockBtn.href = "login.html";
+        lockBtn.textContent = "Sign in to see if you can attend";
+      } else {
+        lockBtn.href = "membership.html";
+        lockBtn.textContent = "Premium members only";
+      }
+      actions.appendChild(lockBtn);
+    } else if (evt.registerLink) {
       var registerBtn = document.createElement("a");
       registerBtn.className = "btn btn-glow";
       registerBtn.href = evt.registerLink;
@@ -872,4 +917,5 @@
   });
 
   applyFilters();
+  refreshAccessThenRerender();
 })();
