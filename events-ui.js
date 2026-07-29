@@ -428,16 +428,49 @@
   var today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  var upcoming = EVENTS.filter(function (e) {
-    var d = new Date(e.date + "T23:59:59");
-    return d >= today;
-  }).sort(function (a, b) {
-    return new Date(a.date) - new Date(b.date);
-  });
+  // Events come from the database now, not events-data.js. Staff add and edit
+  // them in the admin dashboard and the change is live immediately — no code
+  // commit, and no GitHub token handed to whoever manages the calendar.
+  //
+  // Filled in by loadEventsFromDatabase() before anything renders. Declared
+  // here because every function below closes over it.
+  var upcoming = [];
 
-  if (upcoming.length === 0) {
-    if (emptyMsg) emptyMsg.classList.remove("hidden");
-    return;
+  // The database uses clearer column names than the old file did; the render
+  // code below still speaks the original shape, so translate once here rather
+  // than touching a dozen call sites.
+  function fromRow(row) {
+    return {
+      title: row.title,
+      country: row.country,
+      location: row.location,
+      date: row.event_date,
+      time: row.time_label,
+      price: row.price_label,
+      mode: row.mode,
+      tags: row.tags || [],
+      registerLink: row.register_link,
+      mapsLink: row.maps_link,
+      image: row.image_url,
+      brand: row.brand,
+      description: row.description,
+      tierRequired: row.tier_required,
+    };
+  }
+
+  function loadEventsFromDatabase() {
+    return import("./lib/supabase-client.js").then(function (mod) {
+      var todayIso = new Date().toISOString().slice(0, 10);
+      return mod.supabase
+        .from("events")
+        .select("*")
+        .eq("is_published", true)
+        .gte("event_date", todayIso)
+        .order("event_date", { ascending: true });
+    }).then(function (res) {
+      if (res.error) throw res.error;
+      upcoming = (res.data || []).map(fromRow);
+    });
   }
 
   // ---- search + filter state -------------------------------------------
@@ -807,8 +840,11 @@
   wireChipGroup("filter-price", "data-price", "price");
 
   // Topic chips are generated from the data, with a count of how many
-  // upcoming events carry each tag.
-  if (tagsWrap) {
+  // upcoming events carry each tag. Now that events arrive from the database
+  // this has to run *after* they load, so it's a function rather than inline.
+  function buildTagChips() {
+    if (!tagsWrap) return;
+    tagsWrap.innerHTML = "";
     var counts = {};
     upcoming.forEach(function (e) {
       (e.tags || []).forEach(function (t) {
@@ -828,7 +864,10 @@
         b.innerHTML = escapeHtml(counts[k].label) + '<span class="chip-count">' + counts[k].n + "</span>";
         tagsWrap.appendChild(b);
       });
+  }
 
+  // The click handler doesn't depend on the data, so it can be wired once.
+  if (tagsWrap) {
     tagsWrap.addEventListener("click", function (e) {
       var btn = e.target.closest ? e.target.closest(".filter-chip") : null;
       if (!btn || !tagsWrap.contains(btn)) return;
@@ -916,6 +955,23 @@
     if (window.innerWidth > 820 && panel && panel.classList.contains("is-open")) closeSheet();
   });
 
-  applyFilters();
-  refreshAccessThenRerender();
+  // Nothing can render until the events arrive, so this is the one entry
+  // point. On failure the page says so rather than sitting on a spinner or
+  // pretending there are simply no events on.
+  loadEventsFromDatabase().then(function () {
+    if (upcoming.length === 0) {
+      if (emptyMsg) emptyMsg.classList.remove("hidden");
+      return;
+    }
+    buildTagChips();
+    applyFilters();
+    refreshAccessThenRerender();
+  }).catch(function (err) {
+    console.error("Could not load events:", err);
+    if (emptyMsg) {
+      emptyMsg.textContent =
+        "We couldn't load the events just now. Please refresh, or try again shortly.";
+      emptyMsg.classList.remove("hidden");
+    }
+  });
 })();

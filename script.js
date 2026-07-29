@@ -583,10 +583,15 @@
   });
 })();
 
-// Admin nav link — shown only when this browser is connected to the
-// Events Admin panel with a GitHub token that still has access. This is
-// an interim stand-in for real sign-in/sign-up (coming later): for now,
-// "logged in" means "holds a valid, working admin token in this browser."
+// Admin nav link — shown only to club staff and admins.
+//
+// This used to depend on a GitHub token stored in the browser, back when
+// the only "admin panel" edited the repo directly. That's gone: staff now
+// sign in with an ordinary account and their role decides what they see.
+//
+// Hiding the link is a courtesy, not a control. Someone who types the
+// address anyway gets stopped by the dashboard's own check, and by the
+// database policies underneath it.
 (function () {
   var links = [
     document.getElementById("nav-admin-link"),
@@ -594,36 +599,32 @@
   ].filter(Boolean);
   if (!links.length) return;
 
-  var TOKEN_KEY = "sc_admin_gh_token";
-  var token = localStorage.getItem(TOKEN_KEY);
-  if (!token) return;
-
-  // Note: this repo is public, so a plain "can I read it" check would pass
-  // for anyone, token or not. We specifically check the authenticated
-  // user's push (write) permission on the repo, which GitHub only returns
-  // when the request carries a valid token belonging to someone with real
-  // access — that's the actual admin signal.
-  fetch("https://api.github.com/repos/sahabaclub/sahabaclub.github.io", {
-    headers: {
-      "Authorization": "Bearer " + token,
-      "Accept": "application/vnd.github+json",
-    },
-  }).then(function (resp) {
-    if (resp.status === 401 || resp.status === 403) {
-      localStorage.removeItem(TOKEN_KEY);
-      return null;
-    }
-    return resp.ok ? resp.json() : null;
-  }).then(function (data) {
-    if (data && data.permissions && data.permissions.push) {
+  import("./lib/supabase-client.js").then(function (mod) {
+    if (!mod.isConfigured) return null;
+    return mod.supabase.auth.getSession().then(function (res) {
+      var session = res.data.session;
+      if (!session) return null;
+      return mod.supabase
+        .from("profiles")
+        .select("role")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+    });
+  }).then(function (res) {
+    if (!res || !res.data) return;
+    if (res.data.role === "admin" || res.data.role === "staff") {
       links.forEach(function (l) { l.classList.remove("admin-hidden"); });
-    } else if (data) {
-      // Valid token, but this account has no write access to the repo.
-      localStorage.removeItem(TOKEN_KEY);
     }
   }).catch(function () {
-    // Network hiccup — leave the link hidden rather than guess.
+    // Offline, or Supabase not configured — leave the link hidden.
   });
+})();
+
+// One-time cleanup: the old admin panel saved a GitHub token in this
+// browser. Nothing reads it any more, so remove it rather than leaving a
+// credential sitting in local storage on every machine that used it.
+(function () {
+  try { localStorage.removeItem("sc_admin_gh_token"); } catch (e) {}
 })();
 
 // Sign-in links on the public pages, in three states:
