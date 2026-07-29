@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My profile — Sahaba Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+<style>
+  .prof-wrap { max-width: 640px; margin: 0 auto; padding: 40px 20px 100px; }
+  .prof-hero { margin-bottom: 24px; }
+  .prof-hero h1 { font-size: 26px; margin: 0 0 6px; }
+  .prof-hero p { color: var(--text-secondary); font-size: 14.5px; margin: 0; }
+  .prof-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 24px; }
+  .prof-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .prof-field label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .prof-field input, .prof-field select, .prof-field textarea {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: 8px;
+    padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .prof-field textarea { min-height: 70px; resize: vertical; }
+  .prof-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 560px) { .prof-row { grid-template-columns: 1fr; } }
+  .prof-status { font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-top: 14px; }
+  .prof-status.ok { background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.4); color: #4ade80; }
+  .prof-status.err { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
+  .prof-status.info { background: rgba(56,189,248,0.14); border: 1px solid rgba(56,189,248,0.4); color: #7dd3fc; }
+  .prof-btn-primary {
+    background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
+    font-weight: 700; border-radius: 999px; cursor: pointer; padding: 11px 22px; font-size: 14.5px; font-family: inherit;
+  }
+  .prof-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .prof-note { font-size: 12.5px; color: var(--text-muted); margin-top: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="../assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="../events.html" class="nav-link">Events</a>
+    </div>
+  </div>
+</header>
+
+<main class="prof-wrap">
+  <div class="prof-hero">
+    <h1 class="glow-text">My profile</h1>
+    <p>This is what we use to match you with coaches and content — keep it current and the matches get better.</p>
+  </div>
+
+  <div class="prof-card">
+    <form id="profile-form">
+      <div class="prof-field">
+        <label for="f-name">Full name</label>
+        <input type="text" id="f-name" required>
+      </div>
+      <div class="prof-field">
+        <label for="f-bio">Short bio</label>
+        <textarea id="f-bio"></textarea>
+      </div>
+      <div class="prof-row">
+        <div class="prof-field">
+          <label for="f-experience">Experience level</label>
+          <select id="f-experience">
+            <option value="">Select one</option>
+            <option value="student">Student</option>
+            <option value="early-career">Early career</option>
+            <option value="mid-career">Mid career</option>
+            <option value="senior">Senior / leadership</option>
+          </select>
+        </div>
+        <div class="prof-field">
+          <label for="f-industry">Industry</label>
+          <input type="text" id="f-industry" placeholder="e.g. Fintech">
+        </div>
+      </div>
+      <div class="prof-row">
+        <div class="prof-field">
+          <label for="f-timezone">Timezone</label>
+          <input type="text" id="f-timezone" placeholder="e.g. Asia/Dubai">
+        </div>
+        <div class="prof-field">
+          <label for="f-language">Preferred language</label>
+          <input type="text" id="f-language" placeholder="e.g. English">
+        </div>
+      </div>
+      <div class="prof-field">
+        <label for="f-skills">Skills (comma-separated)</label>
+        <input type="text" id="f-skills">
+      </div>
+      <div class="prof-field">
+        <label for="f-interests">Interests (comma-separated)</label>
+        <input type="text" id="f-interests">
+      </div>
+      <div class="prof-field">
+        <label for="f-goals">What you're hoping to get out of Sahaba Club (comma-separated)</label>
+        <input type="text" id="f-goals">
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--text-secondary); margin-bottom:18px;">
+        <input type="checkbox" id="f-newsletter" style="width:auto;">
+        Send me the Sahaba Club newsletter, tailored to my interests
+      </label>
+      <button type="submit" class="prof-btn-primary" id="btn-save">Save changes</button>
+      <div id="profile-status"></div>
+      <p class="prof-note">Your interests decide which newsletters reach you — untick the box above to stop all of them.</p>
+    </form>
+  </div>
+</main>
+
+<script type="module">
+  import { supabase } from "../lib/supabase-client.js";
+  import { getSession } from "../lib/auth.js";
+
+  var session;
+
+  function showStatus(msg, kind) {
+    document.getElementById("profile-status").innerHTML =
+      '<div class="prof-status ' + kind + '">' + msg + "</div>";
+  }
+
+  function splitTags(value) {
+    return value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  (async function init() {
+    session = await getSession();
+    if (!session) {
+      window.location.href = "../login.html";
+      return;
+    }
+
+    var { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    if (error || !data) {
+      showStatus("Couldn't load your profile. Refresh to try again.", "err");
+      return;
+    }
+
+    document.getElementById("f-name").value = data.full_name || "";
+    document.getElementById("f-bio").value = data.bio || "";
+    document.getElementById("f-experience").value = data.experience_level || "";
+    document.getElementById("f-industry").value = data.industry || "";
+    document.getElementById("f-timezone").value = data.timezone || "";
+    document.getElementById("f-language").value = data.language || "";
+    document.getElementById("f-skills").value = (data.skills || []).join(", ");
+    document.getElementById("f-interests").value = (data.interests || []).join(", ");
+    document.getElementById("f-goals").value = (data.goals || []).join(", ");
+    document.getElementById("f-newsletter").checked = Boolean(data.newsletter_opt_in);
+  })();
+
+  document.getElementById("profile-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var saveBtn = document.getElementById("btn-save");
+    saveBtn.disabled = true;
+    showStatus("Saving…", "info");
+
+    var { error } = await supabase.from("profiles").update({
+      full_name: document.getElementById("f-name").value.trim(),
+      bio: document.getElementById("f-bio").value.trim(),
+      experience_level: document.getElementById("f-experience").value,
+      industry: document.getElementById("f-industry").value.trim(),
+      timezone: document.getElementById("f-timezone").value.trim(),
+      language: document.getElementById("f-language").value.trim(),
+      skills: splitTags(document.getElementById("f-skills").value),
+      interests: splitTags(document.getElementById("f-interests").value),
+      goals: splitTags(document.getElementById("f-goals").value),
+      newsletter_opt_in: document.getElementById("f-newsletter").checked,
+    }).eq("user_id", session.user.id);
+
+    saveBtn.disabled = false;
+    if (error) {
+      showStatus("Couldn't save: " + error.message, "err");
+      return;
+    }
+    showStatus("Saved.", "ok");
+  });
+</script>
+<script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Set up your account — Sahaba Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+<style>
+  .onb-wrap { max-width: 640px; margin: 0 auto; padding: 40px 20px 100px; }
+  .onb-steps { display: flex; gap: 8px; justify-content: center; margin-bottom: 28px; }
+  .onb-step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--glass-border); }
+  .onb-step-dot.is-active { background: var(--cyan); }
+  .onb-step-dot.is-done { background: var(--violet); }
+  .onb-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 26px; margin-bottom: 20px; }
+  .onb-card h2 { margin: 0 0 8px; font-size: 20px; }
+  .onb-card p.onb-sub { color: var(--text-secondary); font-size: 14.5px; margin: 0 0 20px; }
+  .onb-choice-row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .onb-choice {
+    flex: 1; min-width: 220px; text-align: left; padding: 16px 18px; border-radius: 12px;
+    border: 1px solid var(--glass-border); background: rgba(255,255,255,0.03); color: var(--text);
+    cursor: pointer; font-family: inherit;
+  }
+  .onb-choice:hover { background: rgba(255,255,255,0.07); }
+  .onb-choice strong { display: block; margin-bottom: 4px; font-size: 15px; }
+  .onb-choice span { font-size: 13px; color: var(--text-secondary); }
+  .onb-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .onb-field label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .onb-field input, .onb-field select, .onb-field textarea {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: 8px;
+    padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .onb-field textarea { min-height: 70px; resize: vertical; }
+  .onb-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 560px) { .onb-row { grid-template-columns: 1fr; } }
+  .onb-hidden { display: none !important; }
+  .onb-status { font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-top: 14px; }
+  .onb-status.ok { background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.4); color: #4ade80; }
+  .onb-status.err { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
+  .onb-status.info { background: rgba(56,189,248,0.14); border: 1px solid rgba(56,189,248,0.4); color: #7dd3fc; }
+  .onb-note { font-size: 12.5px; color: var(--text-muted); margin-top: 14px; line-height: 1.6; }
+  .onb-back { background: none; border: none; color: var(--text-secondary); font-size: 13px; cursor: pointer; padding: 0; margin-bottom: 14px; }
+  .onb-future { border: 1px dashed var(--glass-border); border-radius: 10px; padding: 12px 14px; font-size: 12.5px; color: var(--text-muted); margin-bottom: 18px; }
+  .onb-btn-primary {
+    background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
+    font-weight: 700; border-radius: 999px; cursor: pointer; padding: 11px 22px; font-size: 14.5px; font-family: inherit;
+  }
+  .onb-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="../assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+  </div>
+</header>
+
+<main class="onb-wrap">
+  <div class="onb-steps">
+    <span class="onb-step-dot" id="dot-1"></span>
+    <span class="onb-step-dot" id="dot-2"></span>
+  </div>
+
+  <!-- Step 1: Microsoft 365 -->
+  <section class="onb-card" id="step-ms365">
+    <h2>Your free Microsoft 365 account</h2>
+    <p class="onb-sub">Every Standard member gets Microsoft 365 free for 3 months. Have you had a Sahaba Club Microsoft 365 account before?</p>
+
+    <div class="onb-choice-row" id="ms365-choice">
+      <button type="button" class="onb-choice" id="choice-existing">
+        <strong>Yes, I've had one before</strong>
+        <span>Reclaim your existing @sahabaclub.com mailbox with a new password</span>
+      </button>
+      <button type="button" class="onb-choice" id="choice-new">
+        <strong>No, this is my first time</strong>
+        <span>We'll create a brand new @sahabaclub.com mailbox for you</span>
+      </button>
+    </div>
+
+    <div class="onb-hidden" id="ms365-existing-form" style="margin-top:18px;">
+      <button type="button" class="onb-back" id="back-from-existing">&larr; Back</button>
+      <div class="onb-field">
+        <label for="existing-mailbox">Your existing @sahabaclub.com address</label>
+        <input type="email" id="existing-mailbox" placeholder="you@sahabaclub.com">
+      </div>
+      <button type="button" class="onb-btn-primary" id="btn-reset-mailbox">Reset my password &amp; continue</button>
+    </div>
+
+    <div class="onb-hidden" id="ms365-new-confirm" style="margin-top:18px;">
+      <button type="button" class="onb-back" id="back-from-new">&larr; Back</button>
+      <p style="font-size:14px; color:var(--text-secondary);">We'll generate your new mailbox from your name, and email you a sign-in link once it's ready.</p>
+      <button type="button" class="onb-btn-primary" id="btn-create-mailbox">Create my Microsoft 365 account</button>
+    </div>
+
+    <div id="ms365-status"></div>
+
+    <p style="margin-top:18px; font-size:13px;">
+      <button type="button" class="onb-back" id="skip-ms365" style="margin:0;">Set up my Microsoft 365 account later &rarr;</button>
+    </p>
+  </section>
+
+  <!-- Step 2: profile -->
+  <section class="onb-card onb-hidden" id="step-profile">
+    <h2>Build your profile</h2>
+    <p class="onb-sub">This is what we use to match you with the right coaches and content — the more specific, the better the match.</p>
+
+    <div id="intake-choice">
+      <p style="font-size:13.5px; color:var(--text-secondary); margin:0 0 12px;">Start from a document, or just type it in — the fields are the same either way.</p>
+      <div class="onb-choice-row">
+        <button type="button" class="onb-choice" id="choice-upload">
+          <strong>Upload a CV or LinkedIn PDF</strong>
+          <span>We'll read it and fill in the form. You review everything before it saves.</span>
+        </button>
+        <button type="button" class="onb-choice" id="choice-manual">
+          <strong>Fill it in myself</strong>
+          <span>Go straight to the form</span>
+        </button>
+      </div>
+      <p class="onb-note">On LinkedIn: open your profile, choose <em>More &rarr; Save to PDF</em>, then upload that file here. Word documents need saving as PDF first.</p>
+    </div>
+
+    <div class="onb-hidden" id="upload-panel" style="margin-bottom:18px;">
+      <button type="button" class="onb-back" id="back-from-upload">&larr; Back</button>
+      <div class="onb-field">
+        <label for="f-document">Your CV or LinkedIn PDF</label>
+        <input type="file" id="f-document" accept="application/pdf,text/plain">
+      </div>
+      <button type="button" class="onb-btn-primary" id="btn-parse-document">Read my document</button>
+      <div id="upload-status"></div>
+    </div>
+
+    <div class="onb-hidden" id="review-banner" style="border:1px solid rgba(56,189,248,0.4); background:rgba(56,189,248,0.1); border-radius:10px; padding:12px 14px; font-size:13.5px; color:#7dd3fc; margin-bottom:18px;">
+      Here's what we read from your document. Check it over and fix anything that's off — nothing is saved until you finish below.
+    </div>
+
+    <form id="profile-form" class="onb-hidden">
+      <div class="onb-field">
+        <label for="f-name">Full name</label>
+        <input type="text" id="f-name" required>
+      </div>
+      <div class="onb-field">
+        <label for="f-bio">Short bio</label>
+        <textarea id="f-bio" placeholder="A couple of sentences about your background."></textarea>
+      </div>
+      <div class="onb-row">
+        <div class="onb-field">
+          <label for="f-experience">Experience level</label>
+          <select id="f-experience">
+            <option value="">Select one</option>
+            <option value="student">Student</option>
+            <option value="early-career">Early career</option>
+            <option value="mid-career">Mid career</option>
+            <option value="senior">Senior / leadership</option>
+          </select>
+        </div>
+        <div class="onb-field">
+          <label for="f-industry">Industry</label>
+          <input type="text" id="f-industry" placeholder="e.g. Fintech">
+        </div>
+      </div>
+      <div class="onb-row">
+        <div class="onb-field">
+          <label for="f-timezone">Timezone</label>
+          <input type="text" id="f-timezone" placeholder="e.g. Asia/Dubai">
+        </div>
+        <div class="onb-field">
+          <label for="f-language">Preferred language</label>
+          <input type="text" id="f-language" placeholder="e.g. English">
+        </div>
+      </div>
+      <div class="onb-field">
+        <label for="f-skills">Skills (comma-separated)</label>
+        <input type="text" id="f-skills" placeholder="Power Apps, Copilot Studio, Python">
+      </div>
+      <div class="onb-field">
+        <label for="f-interests">Interests (comma-separated)</label>
+        <input type="text" id="f-interests" placeholder="Agentic AI, Hackathons, Low-code">
+      </div>
+      <div class="onb-field">
+        <label for="f-goals">What are you hoping to get out of Sahaba Club? (comma-separated)</label>
+        <input type="text" id="f-goals" placeholder="Break into AI, find a coach, ship a side project">
+      </div>
+      <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--text-secondary); margin-bottom:18px;">
+        <input type="checkbox" id="f-newsletter" checked style="width:auto;">
+        Send me the Sahaba Club newsletter, tailored to my interests
+      </label>
+      <button type="submit" class="onb-btn-primary" id="btn-save-profile">Finish &amp; go to my dashboard</button>
+      <div id="profile-status"></div>
+    </form>
+  </section>
+</main>
+
+<script type="module">
+  import { supabase } from "../lib/supabase-client.js";
+  import { getSession } from "../lib/auth.js";
+
+  var stepMs365 = document.getElementById("step-ms365");
+  var stepProfile = document.getElementById("step-profile");
+  var dot1 = document.getElementById("dot-1");
+  var dot2 = document.getElementById("dot-2");
+
+  var session;
+
+  (async function init() {
+    session = await getSession();
+    if (!session) {
+      window.location.href = "../login.html";
+      return;
+    }
+    dot1.classList.add("is-active");
+
+    // Already provisioned? Skip straight to the profile step.
+    var { data } = await supabase
+      .from("ms365_accounts")
+      .select("status")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+    if (data && data.status && data.status !== "provisioning") {
+      goToProfileStep();
+    }
+  })();
+
+  function showStatus(elId, msg, kind) {
+    document.getElementById(elId).innerHTML = '<div class="onb-status ' + kind + '">' + msg + "</div>";
+  }
+
+  // ---- Step 1: Microsoft 365 ----
+  var choiceRow = document.getElementById("ms365-choice");
+  var existingForm = document.getElementById("ms365-existing-form");
+  var newConfirm = document.getElementById("ms365-new-confirm");
+
+  document.getElementById("choice-existing").addEventListener("click", function () {
+    choiceRow.classList.add("onb-hidden");
+    existingForm.classList.remove("onb-hidden");
+  });
+  document.getElementById("choice-new").addEventListener("click", function () {
+    choiceRow.classList.add("onb-hidden");
+    newConfirm.classList.remove("onb-hidden");
+  });
+  document.getElementById("back-from-existing").addEventListener("click", function () {
+    existingForm.classList.add("onb-hidden");
+    choiceRow.classList.remove("onb-hidden");
+  });
+  document.getElementById("back-from-new").addEventListener("click", function () {
+    newConfirm.classList.add("onb-hidden");
+    choiceRow.classList.remove("onb-hidden");
+  });
+
+  // Both buttons call the same Edge Function — it's one action
+  // ("provision"), the difference is just whether a mailbox already
+  // exists. See supabase/functions/provision-ms365.
+  async function callProvision(action, mailbox) {
+    showStatus("ms365-status", "Working on it…", "info");
+    var { data, error } = await supabase.functions.invoke("provision-ms365", {
+      body: { action: action, mailbox: mailbox || null },
+    });
+    if (error) {
+      // Most likely the provision-ms365 function isn't deployed yet — the
+      // rest of onboarding doesn't depend on it, so say so and let them
+      // carry on rather than stranding them on step 1.
+      showStatus(
+        "ms365-status",
+        "We couldn't set up your Microsoft 365 account just now. Your Sahaba Club " +
+        "account is fine — carry on below and we'll sort the mailbox out separately.",
+        "err"
+      );
+      return;
+    }
+    showStatus("ms365-status", "Done — check your email for your Microsoft 365 sign-in link. Continuing…", "ok");
+    setTimeout(goToProfileStep, 900);
+  }
+
+  document.getElementById("skip-ms365").addEventListener("click", goToProfileStep);
+
+  document.getElementById("btn-reset-mailbox").addEventListener("click", function () {
+    var mailbox = document.getElementById("existing-mailbox").value.trim();
+    if (!mailbox) { showStatus("ms365-status", "Enter your existing mailbox address first.", "err"); return; }
+    callProvision("reset", mailbox);
+  });
+  document.getElementById("btn-create-mailbox").addEventListener("click", function () {
+    callProvision("create");
+  });
+
+  function goToProfileStep() {
+    stepMs365.classList.add("onb-hidden");
+    stepProfile.classList.remove("onb-hidden");
+    dot1.classList.add("is-done");
+    dot2.classList.add("is-active");
+  }
+
+  // ---- Step 2: profile ----
+  function splitTags(value) {
+    return value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  var intakeChoice = document.getElementById("intake-choice");
+  var uploadPanel = document.getElementById("upload-panel");
+  var reviewBanner = document.getElementById("review-banner");
+  var profileForm = document.getElementById("profile-form");
+
+  // Whichever route someone takes, they end up on the same form — the
+  // difference is only whether it starts blank or pre-filled. That's also
+  // what makes the form itself the review step: no separate confirm screen
+  // to keep in sync with the fields.
+  var profileSource = "manual";
+
+  function showForm() {
+    intakeChoice.classList.add("onb-hidden");
+    uploadPanel.classList.add("onb-hidden");
+    profileForm.classList.remove("onb-hidden");
+  }
+
+  document.getElementById("choice-manual").addEventListener("click", showForm);
+
+  document.getElementById("choice-upload").addEventListener("click", function () {
+    intakeChoice.classList.add("onb-hidden");
+    uploadPanel.classList.remove("onb-hidden");
+  });
+
+  document.getElementById("back-from-upload").addEventListener("click", function () {
+    uploadPanel.classList.add("onb-hidden");
+    intakeChoice.classList.remove("onb-hidden");
+  });
+
+  function fillForm(profile) {
+    document.getElementById("f-name").value = profile.full_name || "";
+    document.getElementById("f-bio").value = profile.bio || "";
+    document.getElementById("f-experience").value = profile.experience_level || "";
+    document.getElementById("f-industry").value = profile.industry || "";
+    document.getElementById("f-timezone").value = profile.timezone || "";
+    document.getElementById("f-language").value = profile.language || "";
+    document.getElementById("f-skills").value = (profile.skills || []).join(", ");
+    document.getElementById("f-interests").value = (profile.interests || []).join(", ");
+    document.getElementById("f-goals").value = (profile.goals || []).join(", ");
+  }
+
+  document.getElementById("btn-parse-document").addEventListener("click", function () {
+    var file = document.getElementById("f-document").files[0];
+    if (!file) { showStatus("upload-status", "Choose a file first.", "err"); return; }
+
+    showStatus("upload-status", "Reading your document…", "info");
+
+    var reader = new FileReader();
+    reader.onload = async function () {
+      var base64 = String(reader.result).split(",")[1];
+      var { data, error } = await supabase.functions.invoke("parse-profile-document", {
+        body: { fileBase64: base64, mediaType: file.type },
+      });
+
+      if (error || (data && data.error)) {
+        // data.error is our own wording; a bare `error` is usually the
+        // function not being reachable, which the member can't act on —
+        // point them at the manual form instead of showing the raw text.
+        showStatus(
+          "upload-status",
+          (data && data.error) || "We couldn't read that document. Go back and fill the form in directly instead.",
+          "err"
+        );
+        return;
+      }
+
+      fillForm(data.profile);
+      profileSource = file.name.toLowerCase().indexOf("linkedin") !== -1 ? "linkedin_pdf" : "cv";
+      reviewBanner.classList.remove("onb-hidden");
+      showForm();
+    };
+    reader.onerror = function () {
+      showStatus("upload-status", "Couldn't read that file — try another, or fill the form in directly.", "err");
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById("profile-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    showStatus("profile-status", "Saving…", "info");
+
+    var { error } = await supabase.from("profiles").update({
+      full_name: document.getElementById("f-name").value.trim(),
+      bio: document.getElementById("f-bio").value.trim(),
+      experience_level: document.getElementById("f-experience").value,
+      industry: document.getElementById("f-industry").value.trim(),
+      timezone: document.getElementById("f-timezone").value.trim(),
+      language: document.getElementById("f-language").value.trim(),
+      skills: splitTags(document.getElementById("f-skills").value),
+      interests: splitTags(document.getElementById("f-interests").value),
+      goals: splitTags(document.getElementById("f-goals").value),
+      newsletter_opt_in: document.getElementById("f-newsletter").checked,
+      profile_source: profileSource,
+      onboarding_completed_at: new Date().toISOString(),
+    }).eq("user_id", session.user.id);
+
+    if (error) {
+      showStatus("profile-status", "Couldn't save: " + error.message, "err");
+      return;
+    }
+    window.location.href = "dashboard.html";
+  });
+</script>
+<script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Sahaba Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+<style>
+  .dash-wrap { max-width: 780px; margin: 0 auto; padding: 40px 20px 100px; }
+  .dash-hero { margin-bottom: 24px; }
+  .dash-hero h1 { font-size: 26px; margin: 0 0 6px; }
+  .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 620px) { .dash-grid { grid-template-columns: 1fr; } }
+  .dash-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 20px; }
+  .dash-card h3 { margin: 0 0 10px; font-size: 15px; }
+  .dash-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
+  .dash-pill.tier-standard { background: rgba(34,211,238,0.14); color: #7dd3fc; border: 1px solid rgba(34,211,238,0.35); }
+  .dash-pill.tier-premium { background: rgba(224,168,62,0.16); color: #f0c674; border: 1px solid rgba(224,168,62,0.4); }
+  .dash-pill.status-active { background: rgba(34,197,94,0.14); color: #4ade80; border: 1px solid rgba(34,197,94,0.4); }
+  .dash-pill.status-pending { background: rgba(56,189,248,0.14); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.4); }
+  .dash-card p { font-size: 13.5px; color: var(--text-secondary); margin: 0 0 4px; }
+  .dash-soon-list { list-style: none; margin: 0; padding: 0; font-size: 13.5px; color: var(--text-muted); }
+  .dash-soon-list li { padding: 6px 0; border-bottom: 1px solid var(--glass-border); }
+  .dash-soon-list li:last-child { border-bottom: none; }
+  .dash-signout { margin-top: 26px; }
+  .dash-btn-secondary { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text); border-radius: 999px; cursor: pointer; padding: 9px 18px; font-size: 13.5px; font-family: inherit; }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="../assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="profile.html" class="nav-link">My profile</a>
+      <a href="newsletter.html" class="nav-link" id="nav-newsletter-link" hidden>Newsletter</a>
+      <a href="../events.html" class="nav-link">Events</a>
+      <a href="../podcast.html" class="nav-link">Podcast</a>
+    </div>
+  </div>
+</header>
+
+<main class="dash-wrap">
+  <div class="dash-hero">
+    <h1 class="glow-text" id="dash-greeting">Welcome</h1>
+    <p style="color:var(--text-secondary); font-size:14.5px;">Your Sahaba Club account, in one place.</p>
+  </div>
+
+  <div class="dash-grid">
+    <div class="dash-card">
+      <h3>Membership</h3>
+      <p><span class="dash-pill" id="tier-pill">—</span></p>
+      <p style="margin-top:10px;">Premium unlocks coaching and hackathon discounts, exclusive events, and the full Learning Library.</p>
+    </div>
+    <div class="dash-card">
+      <h3>Microsoft 365</h3>
+      <p><span class="dash-pill" id="ms365-pill">—</span></p>
+      <p id="ms365-mailbox" style="margin-top:10px;"></p>
+    </div>
+  </div>
+
+  <div class="dash-card" style="margin-top:16px;">
+    <h3>Coming soon</h3>
+    <ul class="dash-soon-list">
+      <li>Find a Coach — AI-matched, once coach profiles are live</li>
+      <li>Learning Library</li>
+      <li>My Sessions</li>
+    </ul>
+  </div>
+
+  <div class="dash-signout">
+    <button type="button" class="dash-btn-secondary" id="btn-sign-out">Sign out</button>
+  </div>
+</main>
+
+<script type="module">
+  import { supabase } from "../lib/supabase-client.js";
+  import { getSession, signOut, hasCompletedOnboarding } from "../lib/auth.js";
+
+  (async function init() {
+    var session = await getSession();
+    if (!session) {
+      window.location.href = "../login.html";
+      return;
+    }
+    var done = await hasCompletedOnboarding(session.user.id);
+    if (!done) {
+      window.location.href = "onboarding.html";
+      return;
+    }
+
+    var [{ data: profile }, { data: subscription }, { data: ms365 }] = await Promise.all([
+      supabase.from("profiles").select("full_name, role").eq("user_id", session.user.id).maybeSingle(),
+      supabase.from("subscriptions").select("tier").eq("user_id", session.user.id).maybeSingle(),
+      supabase.from("ms365_accounts").select("mailbox, status").eq("user_id", session.user.id).maybeSingle(),
+    ]);
+
+    var name = (profile && profile.full_name) || session.user.email || session.user.phone || "there";
+    document.getElementById("dash-greeting").textContent = "Welcome, " + name;
+
+    if (profile && profile.role === "admin") {
+      document.getElementById("nav-newsletter-link").hidden = false;
+    }
+
+    var tier = (subscription && subscription.tier) || "standard";
+    var tierPill = document.getElementById("tier-pill");
+    tierPill.textContent = tier === "premium" ? "Premium" : "Standard";
+    tierPill.classList.add(tier === "premium" ? "tier-premium" : "tier-standard");
+
+    var ms365Pill = document.getElementById("ms365-pill");
+    var ms365Mailbox = document.getElementById("ms365-mailbox");
+    if (ms365 && ms365.status) {
+      var statusLabels = {
+        provisioning: "Setting up…",
+        active: "Active",
+        grace_unlicensed: "Access paused — renew to restore",
+        deactivated: "Deactivated",
+        deleted: "Removed",
+      };
+      ms365Pill.textContent = statusLabels[ms365.status] || ms365.status;
+      ms365Pill.classList.add(ms365.status === "active" ? "status-active" : "status-pending");
+      ms365Mailbox.textContent = ms365.mailbox || "";
+    } else {
+      ms365Pill.textContent = "Not set up yet";
+      ms365Pill.classList.add("status-pending");
+    }
+  })();
+
+  document.getElementById("btn-sign-out").addEventListener("click", async function () {
+    await signOut();
+    window.location.href = "../login.html";
+  });
+</script>
+<script src="../script.js"></script>
+</body>
+</html>
