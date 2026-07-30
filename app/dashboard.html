@@ -39,6 +39,17 @@
   .dash-signout { margin-top: 26px; }
   .dash-btn-secondary { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text); border-radius: 999px; cursor: pointer; padding: 9px 18px; font-size: 13.5px; font-family: inherit; }
 
+  /* Licence countdown. The number carries the message, so it gets the size;
+     the bar is there for the at-a-glance "how much of it is gone". */
+  .dash-count { display: flex; align-items: baseline; gap: 7px; margin: 14px 0 8px; }
+  .dash-count-num { font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; color: var(--text); }
+  .dash-count-num.is-low { color: #fbbf24; }
+  .dash-count-lbl { font-size: 13px; color: var(--text-muted); }
+  .dash-meter { height: 5px; border-radius: 999px; background: var(--glass-border); overflow: hidden; }
+  .dash-meter-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--violet), var(--cyan)); transition: width 0.4s; }
+  .dash-meter-fill.is-low { background: #fbbf24; }
+  .dash-count-note { font-size: 12.5px !important; margin-top: 9px !important; }
+
   /* Saved events. A list, not cards — this is a reference you scan, and the
      dates want to line up down the left edge to be scannable at all. */
   .dash-saved-sub { margin-bottom: 12px !important; }
@@ -93,6 +104,19 @@
       <h3>Microsoft 365</h3>
       <p><span class="dash-pill" id="ms365-pill">—</span></p>
       <p id="ms365-mailbox" style="margin-top:10px;"></p>
+
+      <!-- Countdown. Only rendered for a trial that has an end date, because
+           a lifetime or Premium licence has nothing to count down to and a
+           "0 days left" on one of those would be alarming and wrong. -->
+      <div id="ms365-countdown" hidden>
+        <div class="dash-count">
+          <span class="dash-count-num" id="ms365-days">—</span>
+          <span class="dash-count-lbl" id="ms365-days-lbl">days left</span>
+        </div>
+        <div class="dash-meter"><span class="dash-meter-fill" id="ms365-meter"></span></div>
+        <p class="dash-count-note" id="ms365-note"></p>
+        <p style="margin-top:10px;"><a class="dash-link" href="../membership.html">Keep it beyond the trial &rarr;</a></p>
+      </div>
     </div>
   </div>
 
@@ -138,7 +162,9 @@
     var [{ data: profile }, { data: subscription }, { data: ms365 }] = await Promise.all([
       supabase.from("profiles").select("full_name, role").eq("user_id", session.user.id).maybeSingle(),
       supabase.from("subscriptions").select("tier").eq("user_id", session.user.id).maybeSingle(),
-      supabase.from("ms365_accounts").select("mailbox, status").eq("user_id", session.user.id).maybeSingle(),
+      supabase.from("ms365_accounts")
+        .select("mailbox, status, plan, license_expires_at, grace_ends_at")
+        .eq("user_id", session.user.id).maybeSingle(),
     ]);
 
     var name = (profile && profile.full_name) || session.user.email || session.user.phone || "there";
@@ -166,6 +192,7 @@
       ms365Pill.textContent = statusLabels[ms365.status] || ms365.status;
       ms365Pill.classList.add(ms365.status === "active" ? "status-active" : "status-pending");
       ms365Mailbox.textContent = ms365.mailbox || "";
+      renderMs365Countdown(ms365);
     } else {
       ms365Pill.textContent = "Not set up yet";
       ms365Pill.classList.add("status-pending");
@@ -174,6 +201,67 @@
     loadSaved(session.user.id);
     syncAvatar(session).catch(function () {});
   })();
+
+  // ---- Microsoft 365 countdown ------------------------------------------
+  // Only a trial counts down. Lifetime and Premium licences stay alive for as
+  // long as the membership does, so there is no date to show and showing one
+  // would invent a deadline that does not exist.
+  function renderMs365Countdown(ms365) {
+    var box = document.getElementById("ms365-countdown");
+    var note = document.getElementById("ms365-note");
+
+    if (ms365.plan && ms365.plan !== "trial") {
+      box.hidden = false;
+      document.querySelector(".dash-count").hidden = true;
+      document.querySelector(".dash-meter").hidden = true;
+      box.querySelector("a").hidden = true;
+      note.textContent = ms365.plan === "lifetime"
+        ? "Included for as long as your Sahaba Club membership is active — no expiry date."
+        : "Included with your Premium membership — it stays active while your membership does.";
+      return;
+    }
+
+    var end = ms365.license_expires_at;
+    if (!end) return;                       // nothing to count down to yet
+
+    var days = Math.ceil((new Date(end + "T00:00:00") - new Date()) / 86400000);
+    var TRIAL_DAYS = 90;                    // the 3-month trial, for the bar
+
+    box.hidden = false;
+    var numEl = document.getElementById("ms365-days");
+    var lblEl = document.getElementById("ms365-days-lbl");
+    var meter = document.getElementById("ms365-meter");
+
+    if (days > 0) {
+      numEl.textContent = days;
+      lblEl.textContent = days === 1 ? "day left" : "days left";
+      meter.style.width = Math.max(2, Math.min(100, (days / TRIAL_DAYS) * 100)) + "%";
+      // Amber for the last fortnight — enough warning to act, not so early
+      // that it nags for two months.
+      meter.classList.toggle("is-low", days <= 14);
+      numEl.classList.toggle("is-low", days <= 14);
+      note.textContent = "Your free Microsoft 365 runs until " + longDate(end) + ".";
+    } else {
+      // Expired. Say what actually happens next rather than just "expired",
+      // because the data is still there and that is the reassuring part.
+      numEl.textContent = "0";
+      lblEl.textContent = "days left";
+      meter.style.width = "2%";
+      meter.classList.add("is-low");
+      numEl.classList.add("is-low");
+      note.textContent = ms365.grace_ends_at
+        ? "Your free period ended. Your files are kept until " + longDate(ms365.grace_ends_at)
+          + ", but sign-in is paused until you upgrade."
+        : "Your free period has ended. Upgrade to restore access.";
+    }
+  }
+
+  function longDate(iso) {
+    var p = String(iso).split("-");
+    var months = ["January","February","March","April","May","June",
+                  "July","August","September","October","November","December"];
+    return parseInt(p[2], 10) + " " + months[parseInt(p[1], 10) - 1] + " " + p[0];
+  }
 
   // ---- Saved events -----------------------------------------------------
   // Favourites plus anything they have told us they registered for, in one
