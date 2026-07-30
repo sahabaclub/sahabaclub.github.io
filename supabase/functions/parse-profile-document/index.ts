@@ -47,7 +47,11 @@ const PROFILE_SCHEMA = {
     },
     industry: { type: "string", description: "Primary industry, e.g. Fintech. Empty string if unclear." },
     timezone: { type: "string", description: "IANA timezone inferred from stated location, e.g. Asia/Dubai. Empty string if no location is given." },
-    language: { type: "string", description: "Primary working language. Empty string if not stated." },
+    // "Primary working language" made the model return "" whenever a CV
+    // listed more than one — which is most of them here, and Arabic/English
+    // is exactly the pair that matters for coach matching. Asking for one of
+    // the listed languages rather than an adjudication fixes it.
+    language: { type: "string", description: "The person's main working language. If the document lists several, give the one they most likely work in, or else the first listed. Empty string only if no language is named anywhere." },
     skills: { type: "array", items: { type: "string" }, description: "Concrete skills, tools, and technologies." },
     interests: { type: "array", items: { type: "string" }, description: "Topics and areas the person is drawn to." },
     goals: { type: "array", items: { type: "string" }, description: "What they appear to be working toward. Empty array if the document says nothing about this." },
