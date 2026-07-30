@@ -9,20 +9,32 @@
 // LinkedIn" here means the member uses LinkedIn's own "Save to PDF" and
 // uploads that — same pipeline as a CV, no separate code path.
 //
+// Uses OpenAI's Responses API over plain fetch rather than the SDK: one HTTP
+// call, no npm/esm.sh version to drift out from under the deployment.
+//
 // Secrets this function needs (see SETUP.md):
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — to verify the caller
-//   ANTHROPIC_API_KEY
-import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.68.0";
+//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
+//   OPENAI_API_KEY
+//   OPENAI_MODEL                             — optional, see below
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 
-const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY") ?? "" });
+// Deliberately an environment variable with a default, not a constant. Model
+// names change faster than this function will, and a wrong one should be a
+// dashboard edit rather than a redeploy — the error handler below says so
+// explicitly when OpenAI rejects the name.
+const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 
 // Mirrors the `profiles` columns the onboarding form writes, so whichever
 // intake route a member picks, the shape that comes out is identical.
+//
+// Every property is listed in `required` and additionalProperties is false,
+// because OpenAI's strict mode demands both. Fields that may genuinely have
+// no answer return "" or [] rather than being omitted.
 const PROFILE_SCHEMA = {
   type: "object",
   properties: {
@@ -65,53 +77,100 @@ Deno.serve(async (req) => {
       return json({ error: "Not signed in" }, 401);
     }
 
+    if (!OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not set");
+      return json({ error: "Document import isn't configured yet. Please fill the form in directly." }, 503);
+    }
+
     const { fileBase64, mediaType } = await req.json();
     if (!fileBase64) {
       return json({ error: "fileBase64 is required" }, 400);
     }
 
-    // The API reads PDFs and plain text directly. Word documents have to be
-    // saved as PDF first — the onboarding page says so before upload rather
-    // than letting someone pick a .docx and hit this error.
-    const documentSource = mediaType === "text/plain"
-      ? { type: "text" as const, media_type: "text/plain" as const, data: atob(fileBase64) }
-      : { type: "base64" as const, media_type: "application/pdf" as const, data: fileBase64 };
+    // PDFs go in as a file part; plain text is decoded and sent as text.
+    // Word documents have to be saved as PDF first — the onboarding page says
+    // so before upload rather than letting someone pick a .docx and hit this.
+    const documentPart = mediaType === "text/plain"
+      ? { type: "input_text", text: atob(fileBase64) }
+      : {
+          type: "input_file",
+          filename: "profile.pdf",
+          file_data: "data:application/pdf;base64," + fileBase64,
+        };
 
-    const response = await anthropic.messages.create({
-      model: "claude-opus-5",
-      max_tokens: 8000,
-      system: SYSTEM_PROMPT,
-      output_config: {
-        // A form-filling task — low effort is the right trade here, and it
-        // keeps thinking tokens well inside max_tokens.
-        effort: "low",
-        format: { type: "json_schema", schema: PROFILE_SCHEMA },
+    const res = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + OPENAI_API_KEY,
+        "Content-Type": "application/json",
       },
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "document", source: documentSource },
-            { type: "text", text: "Extract this person's profile fields." },
-          ],
+      body: JSON.stringify({
+        model: MODEL,
+        instructions: SYSTEM_PROMPT,
+        max_output_tokens: 4000,
+        input: [
+          {
+            role: "user",
+            content: [
+              documentPart,
+              { type: "input_text", text: "Extract this person's profile fields." },
+            ],
+          },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "profile",
+            strict: true,
+            schema: PROFILE_SCHEMA,
+          },
         },
-      ],
+      }),
     });
 
-    // Safety classifiers can decline a request; when they do, `content` is
-    // empty and reading content[0] would throw.
-    if (response.stop_reason === "refusal") {
+    if (!res.ok) {
+      const detail = await res.text();
+      console.error("OpenAI " + res.status + ": " + detail);
+
+      // The model name is the one setting most likely to be wrong, and the
+      // generic message would send someone hunting in the wrong place.
+      if (/model_not_found|does not exist|unknown model/i.test(detail)) {
+        return json({
+          error: "The configured AI model name isn't valid. Set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.",
+        }, 502);
+      }
+      if (res.status === 401) {
+        return json({ error: "The AI service rejected our credentials. Check OPENAI_API_KEY." }, 502);
+      }
+      return json({ error: "Couldn't read that document just now. Try again, or fill the form in directly." }, 502);
+    }
+
+    const data = await res.json();
+
+    const message = (data.output ?? []).find((o: { type?: string }) => o.type === "message");
+    const parts = message?.content ?? [];
+
+    // A refusal comes back as its own content type with no JSON in it, so
+    // reaching for output_text first would read undefined.
+    if (parts.some((p: { type?: string }) => p.type === "refusal")) {
       return json({ error: "Couldn't read that document. Try filling the form in directly." }, 422);
     }
 
-    const textBlock = response.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
+    // Truncation gives back valid-looking but incomplete text; better to say
+    // so than to hand back half a profile.
+    if (data.status === "incomplete") {
+      console.error("incomplete: " + JSON.stringify(data.incomplete_details));
+      return json({ error: "That document was too long to read in one go. Try a shorter CV, or fill the form in directly." }, 422);
+    }
+
+    const textPart = parts.find((p: { type?: string }) => p.type === "output_text");
+    if (!textPart?.text) {
       return json({ error: "No profile fields came back — try filling the form in directly." }, 502);
     }
 
     // The member sees these in a review step and can correct anything before
     // it's saved, so the model is never the last word on their own profile.
-    return json({ ok: true, profile: JSON.parse(textBlock.text) });
+    return json({ ok: true, profile: JSON.parse(textPart.text) });
   } catch (err) {
     console.error(err);
     return json({ error: String(err) }, 500);
