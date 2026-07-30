@@ -232,3 +232,17 @@ a:focus-visible, button:focus-visible, input:focus-visible,
 select:focus-visible, textarea:focus-visible {
   outline: 2px solid var(--ad-violet); outline-offset: 2px;
 }
+
+/* Add-event source chooser. Two big targets rather than a dropdown, because
+   this is the fork in the road for the whole task and it should read as one. */
+.ad-source-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .ad-source-choice { grid-template-columns: 1fr; } }
+.ad-source-card {
+  display: flex; flex-direction: column; gap: 5px; text-align: left;
+  padding: 16px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--ad-line); background: var(--ad-panel-2);
+  color: var(--ad-text); font-family: inherit;
+}
+.ad-source-card:hover { border-color: var(--ad-violet); }
+.ad-source-card strong { font-size: 14.5px; }
+.ad-source-card span { font-size: 12.5px; color: var(--ad-text-3); line-height: 1.5; }
