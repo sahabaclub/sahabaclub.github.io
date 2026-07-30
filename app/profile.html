@@ -119,13 +119,19 @@
         <label for="f-goals">What you're hoping to get out of Sahaba Club (comma-separated)</label>
         <input type="text" id="f-goals">
       </div>
-      <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--text-secondary); margin-bottom:18px;">
+      <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--text-secondary); margin-bottom:12px;">
         <input type="checkbox" id="f-newsletter" style="width:auto;">
         Send me the Sahaba Club newsletter, tailored to my interests
       </label>
+      <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--text-secondary); margin-bottom:18px;">
+        <input type="checkbox" id="f-attendees" style="width:auto;">
+        Show my name and photo to other members on events I'm attending
+      </label>
       <button type="submit" class="prof-btn-primary" id="btn-save">Save changes</button>
       <div id="profile-status"></div>
-      <p class="prof-note">Your interests decide which newsletters reach you — untick the box above to stop all of them.</p>
+      <p class="prof-note">Your interests decide which newsletters reach you — untick the box above to stop all of them.
+      Attendee lists are members-only and never public; untick the second box and you disappear from them entirely,
+      including from events you've already said you're going to.</p>
     </form>
   </div>
 </main>
@@ -173,6 +179,10 @@
     document.getElementById("f-interests").value = (data.interests || []).join(", ");
     document.getElementById("f-goals").value = (data.goals || []).join(", ");
     document.getElementById("f-newsletter").checked = Boolean(data.newsletter_opt_in);
+    // Default to shown when the column isn't there yet (migration 0005), which
+    // matches the column's own default rather than silently implying opted-out.
+    document.getElementById("f-attendees").checked =
+      data.show_in_attendees === undefined ? true : Boolean(data.show_in_attendees);
   })();
 
   document.getElementById("profile-form").addEventListener("submit", async function (e) {
@@ -192,6 +202,7 @@
       interests: splitTags(document.getElementById("f-interests").value),
       goals: splitTags(document.getElementById("f-goals").value),
       newsletter_opt_in: document.getElementById("f-newsletter").checked,
+      show_in_attendees: document.getElementById("f-attendees").checked,
     }).eq("user_id", session.user.id);
 
     saveBtn.disabled = false;
