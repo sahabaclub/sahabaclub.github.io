@@ -342,85 +342,31 @@
 // featured-events.js still drives the carousel at the top of the page; only
 // the grid's copy of them moved.
 
-// Upcoming events grid — reads from the database (see loadEventsFromDatabase
-// below). Hides past events, sorts what's left by date, and loads results in
-// batches of 9 as the user scrolls.
+// ---- Upcoming events, as a date-grouped agenda -------------------------
+// Events arrive from the database, get grouped by day, and hang off a
+// timeline. Layered on top: each member's own favourites, whether they're
+// going, who else from the club is going, and a recommended strip.
+//
+// Everything personal is additive. Signed out, this is exactly the public
+// events list it always was — no errors, no empty widgets.
 (function () {
   var grid = document.getElementById("events-grid");
-  // No EVENTS check here any more. That global came from events-data.js,
-  // which no longer exists — leaving the guard in place meant this function
-  // returned before it ever reached the database, and the grid stayed empty.
   if (!grid) return;
+
   var emptyMsg = document.getElementById("events-empty");
+  var noMatchMsg = document.getElementById("events-no-match");
 
-  // Premium-only events render locked until we know better. "guest" is
-  // the safe default — it's what an unauthenticated visitor actually is,
-  // and it means nobody sees a Premium event unlocked for a flash before
-  // we've confirmed their tier. refreshAccessThenRerender() (bottom of
-  // this file) swaps in the real tier once lib/tier-gate.js resolves.
-  var ACCESS = { tier: "guest", canSignIn: false };
+  var EVENTS_ALL = [];
+  var social = null;
+  var favourites = new Set();
+  var myRegistrations = {};
+  var attendees = {};
+  var viewCounts = {};
+  var signedIn = false;
 
-  function refreshAccessThenRerender() {
-    import("./lib/supabase-client.js").then(function (client) {
-      // Before the Supabase project exists there is no sign-in page worth
-      // sending anyone to, so locked events point at membership.html
-      // instead. Same reasoning as the nav links in script.js.
-      if (!client.isConfigured) return null;
-      ACCESS.canSignIn = true;
-      return import("./lib/tier-gate.js").then(function (mod) {
-        return mod.getAccessLevel();
-      });
-    }).then(function (level) {
-      if (!level) return;
-      ACCESS.tier = level.tier;
-      applyFilters();
-    }).catch(function () {
-      // Offline or CDN unreachable — stay on the safe "guest" default.
-    });
-  }
-
-  var pinIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>';
-  var calIcon = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>';
-
-  var KNOWN_TAG_CLASSES = ["ai", "agentic", "cloud", "media", "coding", "security", "business", "startups", "investors", "hackathon"];
-
-  function tagSlug(tag) {
-    return String(tag).toLowerCase().replace(/[^a-z0-9]+/g, "");
-  }
-
-  // Deterministic fallback color for any tag not in the fixed palette above,
-  // so new tags added later still get a consistent (if arbitrary) color.
-  function hashHue(str) {
-    var hash = 0;
-    for (var i = 0; i < str.length; i++) {
-      hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
-    }
-    return hash % 360;
-  }
-
-  function formatDate(iso) {
-    var parts = iso.split("-");
-    var d = new Date(Date.UTC(+parts[0], +parts[1] - 1, +parts[2]));
-    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return months[d.getUTCMonth()] + " " + d.getUTCDate() + ", " + d.getUTCFullYear();
-  }
-
-  var today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  // Events come from the database now, not events-data.js. Staff add and edit
-  // them in the admin dashboard and the change is live immediately — no code
-  // commit, and no GitHub token handed to whoever manages the calendar.
-  //
-  // Filled in by loadEventsFromDatabase() before anything renders. Declared
-  // here because every function below closes over it.
-  var upcoming = [];
-
-  // The database uses clearer column names than the old file did; the render
-  // code below still speaks the original shape, so translate once here rather
-  // than touching a dozen call sites.
   function fromRow(row) {
     return {
+      id: row.id,
       title: row.title,
       country: row.country,
       location: row.location,
@@ -434,7 +380,7 @@
       image: row.image_url,
       brand: row.brand,
       description: row.description,
-      tierRequired: row.tier_required,
+      tierRequired: row.tier_required
     };
   }
 
@@ -449,28 +395,54 @@
         .order("event_date", { ascending: true });
     }).then(function (res) {
       if (res.error) throw res.error;
-      upcoming = (res.data || []).map(fromRow);
+      EVENTS_ALL = (res.data || []).map(fromRow);
     });
   }
 
-  // ---- search + filter state -------------------------------------------
-  var noMatchMsg = document.getElementById("events-no-match");
-  var qInput = document.getElementById("filter-q");
-  var clearQBtn = document.getElementById("filter-clear-q");
-  var tagsWrap = document.getElementById("filter-tags");
-  var countEl = document.getElementById("filter-count");
-  var resetBtn = document.getElementById("filter-reset");
-  var resetSheetBtn = document.getElementById("filter-reset-sheet");
-  var openBtn = document.getElementById("filter-open");
-  var closeBtn = document.getElementById("filter-close");
-  var applyBtn = document.getElementById("filter-apply");
-  var applyCount = document.getElementById("filter-apply-count");
-  var panel = document.getElementById("filter-panel");
-  var backdrop = document.getElementById("filter-backdrop");
-  var badge = document.getElementById("filter-badge");
+  // Personal layer. Any failure here leaves the public list intact rather
+  // than taking the page down with it.
+  function loadSocial() {
+    return import("./lib/event-social.js").then(function (mod) {
+      social = mod;
+      return mod.currentUserId();
+    }).then(function (uid) {
+      signedIn = !!uid;
+      if (!signedIn) return null;
+      return Promise.all([
+        social.loadFavourites(),
+        social.loadMyRegistrations(),
+        social.loadViewCounts(),
+        social.loadAttendees(EVENTS_ALL.map(function (e) { return e.id; }))
+      ]).then(function (r) {
+        favourites = r[0];
+        myRegistrations = r[1];
+        viewCounts = r[2];
+        attendees = r[3];
+      });
+    }).catch(function () {
+      signedIn = false;
+    });
+  }
 
-  var state = { q: "", when: "all", mode: "all", price: "all", tags: [] };
-  var filtered = upcoming.slice();
+  var ACCESS = { tier: "guest", canSignIn: false };
+
+  function refreshAccess() {
+    return import("./lib/supabase-client.js").then(function (client) {
+      if (!client.isConfigured) return null;
+      ACCESS.canSignIn = true;
+      return import("./lib/tier-gate.js").then(function (m) { return m.getAccessLevel(); });
+    }).then(function (level) {
+      if (level) ACCESS.tier = level.tier;
+    }).catch(function () {});
+  }
+
+  var pinIcon = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>';
+  var heartIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 22l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>';
+  var heartFilled = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 22l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>';
+  var sparkIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 6.1L20 10l-5.8 1.9L12 18l-2.2-6.1L4 10l5.8-1.9z"/></svg>';
+
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
   function escapeHtml(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -478,357 +450,415 @@
     });
   }
 
-  // Wraps the current search term where it appears, so people can see why
-  // a card matched. Escaping happens first so event copy can't inject HTML.
-  function highlight(text) {
-    var safe = escapeHtml(text);
-    if (!state.q) return safe;
-    var re = new RegExp("(" + state.q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "ig");
-    return safe.replace(re, '<span class="hl">$1</span>');
+  function dayParts(iso) {
+    var p = iso.split("-");
+    var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+    var today = new Date();
+    var todayIso = today.toISOString().slice(0, 10);
+    var tomorrowIso = new Date(today.getTime() + 86400000).toISOString().slice(0, 10);
+    var label = d.getUTCDate() + " " + MONTHS[d.getUTCMonth()];
+    if (iso === todayIso) label = "Today";
+    else if (iso === tomorrowIso) label = "Tomorrow";
+    return { label: label, weekday: WEEKDAYS[d.getUTCDay()], isToday: iso === todayIso };
   }
 
-  function haystack(e) {
-    return [e.title, e.description, e.location, e.country, e.mode, e.price, (e.tags || []).join(" ")]
-      .join(" ").toLowerCase();
+  function facesHtml(list) {
+    if (!list || !list.length) return "";
+    var shown = list.slice(0, 4);
+    var rest = list.length - shown.length;
+    var html = '<span class="ev-faces">';
+    shown.forEach(function (p) {
+      if (p.avatar) {
+        html += '<img class="ev-face" src="' + escapeHtml(p.avatar) + '" alt="' + escapeHtml(p.name) + '" loading="lazy">';
+      } else {
+        html += '<span class="ev-face ev-face-initial" title="' + escapeHtml(p.name) + '">' +
+          escapeHtml(String(p.name || "?").trim().charAt(0).toUpperCase()) + '</span>';
+      }
+    });
+    html += '</span><span class="ev-face-more">' +
+      (rest > 0 ? "+" + rest + " going" : (list.length === 1 ? "1 going" : list.length + " going")) +
+      '</span>';
+    return html;
   }
 
-  function daysFromToday(dateStr) {
-    var d = new Date(dateStr + "T00:00:00");
-    return Math.round((d - today) / 86400000);
+  function buildCard(e, reason) {
+    var locked = e.tierRequired === "premium" && ACCESS.tier !== "premium";
+    var status = myRegistrations[e.id];
+    var isFav = favourites.has(e.id);
+
+    var card = document.createElement("article");
+    card.className = "ev-card" + (locked ? " is-locked" : "");
+    card.setAttribute("data-event", e.id);
+
+    var thumbHtml = e.image
+      ? '<img class="ev-thumb" src="' + escapeHtml(e.image) + '" alt="" loading="lazy">'
+      : '<div class="ev-thumb-fallback">&#128197;</div>';
+
+    var where = e.mode === "Online" ? "Online" : (e.location || e.country || "");
+
+    var foot = [];
+    if (e.tierRequired === "premium") foot.push('<span class="ev-status is-premium">Premium</span>');
+    if (status === "registered") foot.push('<span class="ev-status is-going">Going</span>');
+    else if (status === "interested") foot.push('<span class="ev-status is-interested">Interested</span>');
+
+    if (locked) {
+      var lockHref = (ACCESS.tier === "guest" && ACCESS.canSignIn) ? "login.html" : "membership.html";
+      var lockText = (ACCESS.tier === "guest" && ACCESS.canSignIn) ? "Sign in" : "Premium only";
+      foot.push('<a class="ev-register" href="' + lockHref + '">' + lockText + '</a>');
+    } else if (e.registerLink && status !== "registered") {
+      foot.push('<button type="button" class="ev-register" data-register="' + e.id + '">Register</button>');
+    }
+
+    var att = attendees[e.id];
+    if (att && att.length) foot.push(facesHtml(att));
+
+    var favBtn = signedIn
+      ? '<button type="button" class="ev-fav' + (isFav ? " is-on" : "") + '" data-fav="' + e.id +
+        '" aria-pressed="' + (isFav ? "true" : "false") +
+        '" aria-label="' + (isFav ? "Remove from favourites" : "Save to favourites") + '">' +
+        (isFav ? heartFilled : heartIcon) + '</button>'
+      : "";
+
+    card.innerHTML =
+      '<div>' +
+        (e.time ? '<div class="ev-time">' + escapeHtml(e.time) + '</div>' : "") +
+        '<h3 class="ev-title">' + escapeHtml(e.title) + '</h3>' +
+        (where ? '<div class="ev-meta">' + pinIcon + '<span>' + escapeHtml(where) + '</span></div>' : "") +
+        (reason ? '<div class="ev-rec-reason">' + sparkIcon + '<span>Because you like ' + escapeHtml(reason) + '</span></div>' : "") +
+        '<div class="ev-foot">' + foot.join("") + '</div>' +
+      '</div>' +
+      '<div>' + thumbHtml + '</div>' +
+      favBtn;
+
+    // A broken image URL should leave a placeholder, not a torn card.
+    var img = card.querySelector(".ev-thumb");
+    if (img) {
+      img.addEventListener("error", function () {
+        var ph = document.createElement("div");
+        ph.className = "ev-thumb-fallback";
+        ph.innerHTML = "&#128197;";
+        img.replaceWith(ph);
+      });
+    }
+
+    return card;
   }
+
+  var state = { q: "", when: "all", mode: "all", price: "all", tags: [] };
+  var filtered = [];
 
   function matches(e) {
-    if (state.q && haystack(e).indexOf(state.q.toLowerCase()) === -1) return false;
     if (state.mode !== "all" && e.mode !== state.mode) return false;
-    if (state.price !== "all") {
-      var paid = /paid/i.test(e.price || "");
-      if (state.price === "paid" && !paid) return false;
-      if (state.price === "free" && paid) return false;
-    }
+    if (state.price === "free" && /paid/i.test(e.price)) return false;
+    if (state.price === "paid" && !/paid/i.test(e.price)) return false;
+
     if (state.when !== "all") {
-      var diff = daysFromToday(e.date);
-      if (state.when === "today" && diff !== 0) return false;
-      if (state.when === "7" && (diff < 0 || diff > 7)) return false;
-      if (state.when === "30" && (diff < 0 || diff > 30)) return false;
+      var d = new Date(e.date + "T00:00:00");
+      var now = new Date();
+      now.setHours(0, 0, 0, 0);
+      if (state.when === "today") {
+        if (d.getTime() !== now.getTime()) return false;
+      } else {
+        var limit = new Date(now.getTime() + parseInt(state.when, 10) * 86400000);
+        if (d > limit) return false;
+      }
     }
-    // Tags are OR'd — picking AI and Cloud shows events tagged either.
+
     if (state.tags.length) {
-      var evTags = (e.tags || []).map(function (t) { return t.toLowerCase(); });
-      var hit = state.tags.some(function (t) { return evTags.indexOf(t) !== -1; });
-      if (!hit) return false;
+      var slugs = (e.tags || []).map(function (t) { return String(t).toLowerCase(); });
+      if (!state.tags.some(function (t) { return slugs.indexOf(t) !== -1; })) return false;
+    }
+
+    if (state.q) {
+      var hay = [e.title, e.location, e.country, e.description, (e.tags || []).join(" ")]
+        .filter(Boolean).join(" ").toLowerCase();
+      if (hay.indexOf(state.q.toLowerCase()) === -1) return false;
     }
     return true;
   }
 
-  function buildCard(evt) {
-    var isPaid = /paid/i.test(evt.price);
-    var isPremiumLocked = evt.tierRequired === "premium" && ACCESS.tier !== "premium";
-    var card = document.createElement("div");
-    card.className = "event-card" + (isPremiumLocked ? " event-card-locked" : "");
+  function renderList() {
+    grid.innerHTML = "";
+    filtered = EVENTS_ALL.filter(matches);
 
-    if (evt.image) {
-      var img = document.createElement("img");
-      img.className = "event-card-image";
-      img.src = evt.image;
-      img.alt = evt.title;
-      img.loading = "lazy";
-      card.appendChild(img);
-    } else if (evt.brand === "microsoft") {
-      var placeholder = document.createElement("div");
-      placeholder.className = "event-card-image event-ms-placeholder";
+    // How many filters are actually narrowing things down. Drives the badge
+    // on the Filters button and whether "Reset filters" is worth offering.
+    var activeCount =
+      (state.when !== "all" ? 1 : 0) +
+      (state.mode !== "all" ? 1 : 0) +
+      (state.price !== "all" ? 1 : 0) +
+      state.tags.length +
+      (state.q ? 1 : 0);
 
-      var msLogo = document.createElement("span");
-      msLogo.className = "ms-logo";
-      ["ms-logo-sq1", "ms-logo-sq2", "ms-logo-sq3", "ms-logo-sq4"].forEach(function (cls) {
-        var sq = document.createElement("span");
-        sq.className = "ms-logo-sq " + cls;
-        msLogo.appendChild(sq);
-      });
-      placeholder.appendChild(msLogo);
-
-      var msTitle = document.createElement("span");
-      msTitle.className = "ms-placeholder-title";
-      msTitle.textContent = evt.title;
-      placeholder.appendChild(msTitle);
-
-      var msCaption = document.createElement("span");
-      msCaption.className = "ms-placeholder-caption";
-      msCaption.textContent = "Official Microsoft Training";
-      placeholder.appendChild(msCaption);
-
-      card.appendChild(placeholder);
-    }
-
-    var badges = document.createElement("div");
-    badges.className = "event-badges";
-
-    var badge = document.createElement("span");
-    badge.className = "event-price-badge " + (isPaid ? "is-paid" : "is-free");
-    badge.textContent = evt.price;
-    badges.appendChild(badge);
-
-    if (evt.mode) {
-      var modeBadge = document.createElement("span");
-      var modeSlug = evt.mode === "Online" ? "is-online" : "is-in-person";
-      modeBadge.className = "event-mode-badge " + modeSlug;
-      modeBadge.textContent = evt.mode;
-      badges.appendChild(modeBadge);
-    }
-
-    if (evt.tierRequired === "premium") {
-      var tierBadge = document.createElement("span");
-      tierBadge.className = "event-tier-badge";
-      tierBadge.textContent = "Premium";
-      badges.appendChild(tierBadge);
-    }
-
-    if (evt.tags && evt.tags.length) {
-      evt.tags.slice(0, 2).forEach(function (tag) {
-        var tagBadge = document.createElement("span");
-        var slug = tagSlug(tag);
-        tagBadge.className = "event-tag-badge" + (KNOWN_TAG_CLASSES.indexOf(slug) !== -1 ? " tag-" + slug : "");
-        if (KNOWN_TAG_CLASSES.indexOf(slug) === -1) {
-          var hue = hashHue(slug);
-          tagBadge.style.setProperty("--tag-color", "hsl(" + hue + ", 85%, 78%)");
-          tagBadge.style.setProperty("--tag-bg", "hsla(" + hue + ", 85%, 55%, 0.14)");
-          tagBadge.style.setProperty("--tag-border", "hsla(" + hue + ", 85%, 55%, 0.4)");
-        }
-        tagBadge.textContent = tag;
-        badges.appendChild(tagBadge);
-      });
-    }
-
-    card.appendChild(badges);
-
-    var title = document.createElement("h3");
-    title.className = "event-title";
-    title.innerHTML = highlight(evt.title);
-    card.appendChild(title);
-
-    var loc = document.createElement("p");
-    loc.className = "event-meta";
-    loc.innerHTML = pinIcon + " <span></span>";
-    loc.querySelector("span").textContent = evt.location + ", " + evt.country;
-    card.appendChild(loc);
-
-    var when = document.createElement("p");
-    when.className = "event-meta";
-    when.innerHTML = calIcon + " <span></span>";
-    when.querySelector("span").textContent = formatDate(evt.date) + " · " + evt.time;
-    card.appendChild(when);
-
-    if (evt.description) {
-      var wrap = document.createElement("div");
-      wrap.className = "event-desc-wrap";
-
-      var desc = document.createElement("p");
-      desc.className = "event-desc";
-      desc.innerHTML = highlight(evt.description);
-      wrap.appendChild(desc);
-
-      // The toggle lives OUTSIDE the clamped <p> on purpose: text clipped by
-      // -webkit-line-clamp can't be clicked, so a toggle appended inside the
-      // clamped paragraph would sometimes get hidden by the ellipsis itself.
-      var toggle = document.createElement("span");
-      toggle.className = "event-desc-toggle";
-      toggle.textContent = "more details";
-      toggle.setAttribute("role", "button");
-      toggle.setAttribute("tabindex", "0");
-      wrap.appendChild(toggle);
-
-      var expandCard = function () {
-        var wasExpanded = card.classList.contains("is-expanded");
-        Array.prototype.forEach.call(grid.querySelectorAll(".event-card.is-expanded"), function (openCard) {
-          openCard.classList.remove("is-expanded");
-          var t = openCard.querySelector(".event-desc-toggle");
-          if (t) t.textContent = "more details";
-        });
-        if (!wasExpanded) {
-          card.classList.add("is-expanded");
-          toggle.textContent = "show less";
-        }
-      };
-
-      toggle.addEventListener("click", expandCard);
-      toggle.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          expandCard();
-        }
-      });
-
-      card.appendChild(wrap);
-    }
-
-    var actions = document.createElement("div");
-    actions.className = "event-actions";
-
-    if (isPremiumLocked) {
-      var lockBtn = document.createElement("a");
-      lockBtn.className = "btn btn-outline";
-      if (ACCESS.tier === "guest" && ACCESS.canSignIn) {
-        lockBtn.href = "login.html";
-        lockBtn.textContent = "Sign in to see if you can attend";
-      } else {
-        lockBtn.href = "membership.html";
-        lockBtn.textContent = "Premium members only";
-      }
-      actions.appendChild(lockBtn);
-    } else if (evt.registerLink) {
-      var registerBtn = document.createElement("a");
-      registerBtn.className = "btn btn-glow";
-      registerBtn.href = evt.registerLink;
-      registerBtn.target = "_blank";
-      registerBtn.rel = "noopener";
-      registerBtn.textContent = "Register";
-      actions.appendChild(registerBtn);
-    }
-
-    if (evt.mapsLink && evt.mode !== "Online") {
-      var mapsBtn = document.createElement("a");
-      mapsBtn.className = "btn btn-outline";
-      mapsBtn.href = evt.mapsLink;
-      mapsBtn.target = "_blank";
-      mapsBtn.rel = "noopener";
-      mapsBtn.textContent = "Find Location";
-      actions.appendChild(mapsBtn);
-    }
-
-    card.appendChild(actions);
-    return card;
-  }
-
-  // Paginate: show 9 (three rows of three on desktop) at a time, loading
-  // the next batch automatically once the user scrolls near the bottom.
-  var PAGE_SIZE = 9;
-  var renderedCount = 0;
-
-  var sentinel = document.createElement("div");
-  sentinel.className = "events-sentinel";
-
-  var statusEl = document.createElement("p");
-  statusEl.className = "events-load-more-status";
-  statusEl.textContent = "Loading more events…";
-  statusEl.style.display = "none";
-
-  function renderNextBatch() {
-    var next = filtered.slice(renderedCount, renderedCount + PAGE_SIZE);
-    next.forEach(function (evt) {
-      grid.insertBefore(buildCard(evt), sentinel);
-    });
-    renderedCount += next.length;
-
-    if (renderedCount >= filtered.length) {
-      statusEl.style.display = "none";
-      if (observer) observer.disconnect();
-      if (sentinel.parentNode) sentinel.parentNode.removeChild(sentinel);
-    }
-  }
-
-  grid.appendChild(sentinel);
-  grid.insertAdjacentElement("afterend", statusEl);
-
-  var observer = null;
-  if ("IntersectionObserver" in window) {
-    observer = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting && renderedCount < filtered.length) {
-          statusEl.style.display = "block";
-          renderNextBatch();
-          window.setTimeout(function () {
-            statusEl.style.display = "none";
-          }, 200);
-        }
-      });
-    }, { rootMargin: "300px" });
-  }
-
-  // Rebuild the grid from scratch whenever the filters change, restarting
-  // the 9-at-a-time pagination against the new result set.
-  function rerender() {
-    Array.prototype.forEach.call(grid.querySelectorAll(".event-card"), function (c) {
-      c.parentNode.removeChild(c);
-    });
-    renderedCount = 0;
-    if (observer) observer.disconnect();
-    if (!sentinel.parentNode) grid.appendChild(sentinel);
-
-    renderNextBatch();
-    if (observer && renderedCount < filtered.length) observer.observe(sentinel);
-
-    if (noMatchMsg) noMatchMsg.classList.toggle("hidden", filtered.length !== 0);
-  }
-
-  function isFiltering() {
-    return state.q || state.when !== "all" || state.mode !== "all" ||
-           state.price !== "all" || state.tags.length > 0;
-  }
-
-  // Counts only the panel controls, not the search box — the search term is
-  // already visible in its own field, so counting it would look like a bug.
-  function activeFilterCount() {
-    var n = state.tags.length;
-    if (state.when !== "all") n++;
-    if (state.mode !== "all") n++;
-    if (state.price !== "all") n++;
-    return n;
-  }
-
-  function updateSummary() {
+    var countEl = document.getElementById("filter-count");
     if (countEl) {
-      countEl.textContent = filtered.length === upcoming.length
-        ? "Showing all " + upcoming.length + " events"
-        : "Showing " + filtered.length + " of " + upcoming.length + " events";
+      countEl.textContent = filtered.length === EVENTS_ALL.length
+        ? filtered.length + " upcoming events"
+        : filtered.length + " of " + EVENTS_ALL.length + " events";
     }
-    if (resetBtn) resetBtn.classList.toggle("hidden", !isFiltering());
-    if (clearQBtn) clearQBtn.classList.toggle("hidden", !state.q);
-
-    var n = activeFilterCount();
+    var badge = document.getElementById("filter-badge");
     if (badge) {
-      badge.textContent = n;
-      badge.classList.toggle("hidden", n === 0);
+      badge.textContent = activeCount;
+      badge.classList.toggle("hidden", activeCount === 0);
     }
-    if (openBtn) openBtn.classList.toggle("has-filters", n > 0);
+    var applyCount = document.getElementById("filter-apply-count");
     if (applyCount) {
-      applyCount.textContent = filtered.length === 1
-        ? "1 event" : filtered.length + " events";
+      applyCount.textContent = filtered.length === 1 ? "1 event" : filtered.length + " events";
     }
+    var resetBtn = document.getElementById("filter-reset");
+    if (resetBtn) resetBtn.classList.toggle("hidden", activeCount === 0);
+
+    if (noMatchMsg) noMatchMsg.classList.toggle("hidden", filtered.length > 0);
+
+    var byDay = [];
+    var index = {};
+    filtered.forEach(function (e) {
+      if (!(e.date in index)) {
+        index[e.date] = byDay.length;
+        byDay.push({ date: e.date, items: [] });
+      }
+      byDay[index[e.date]].items.push(e);
+    });
+
+    byDay.forEach(function (day) {
+      var parts = dayParts(day.date);
+      var section = document.createElement("section");
+      section.className = "ev-day" + (parts.isToday ? " is-today" : "");
+      section.innerHTML =
+        '<span class="ev-day-dot"></span>' +
+        '<div class="ev-day-head">' +
+          '<span class="ev-day-date">' + escapeHtml(parts.label) + '</span>' +
+          '<span class="ev-day-weekday">' + escapeHtml(parts.weekday) + '</span>' +
+        '</div>' +
+        '<div class="ev-cards"></div>';
+      var holder = section.querySelector(".ev-cards");
+      day.items.forEach(function (e) { holder.appendChild(buildCard(e)); });
+      grid.appendChild(section);
+    });
   }
 
-  function applyFilters() {
-    filtered = upcoming.filter(matches);
-    rerender();
-    updateSummary();
+  function renderRecommended() {
+    var host = document.getElementById("events-recommended");
+    if (!host) return;
+    if (!signedIn || !social) { host.innerHTML = ""; return; }
+
+    var rec = social.recommendEvents(EVENTS_ALL, favourites, myRegistrations, viewCounts, 4);
+
+    if (rec.needsSignal) {
+      host.innerHTML =
+        '<div class="ev-recommend">' +
+          '<div class="ev-recommend-head"><h2 class="glow-text">Recommended for you</h2></div>' +
+          '<p class="section-sub" style="text-align:left;margin:0;">Save a few events you like and ' +
+          'we&rsquo;ll start suggesting others that fit &mdash; based on the topics, cities and formats you go for.</p>' +
+        '</div>';
+      return;
+    }
+    if (!rec.items.length) { host.innerHTML = ""; return; }
+
+    host.innerHTML =
+      '<div class="ev-recommend">' +
+        '<div class="ev-recommend-head">' +
+          '<h2 class="glow-text">Recommended for you</h2>' +
+          '<span class="ev-recommend-why">from what you save and attend</span>' +
+        '</div>' +
+        '<div class="ev-rec-grid" id="ev-rec-grid"></div>' +
+      '</div>';
+
+    var recGrid = document.getElementById("ev-rec-grid");
+    rec.items.forEach(function (item) {
+      recGrid.appendChild(buildCard(item.event, item.why));
+    });
   }
 
-  // ---- wire up the controls --------------------------------------------
-  function wireChipGroup(containerId, attr, key) {
-    var box = document.getElementById(containerId);
+  function renderAll() {
+    renderList();
+    renderRecommended();
+  }
+
+  // ---- favourites ----
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target.closest ? ev.target.closest("[data-fav]") : null;
+    if (!btn || !social) return;
+    var id = btn.getAttribute("data-fav");
+    var wasOn = favourites.has(id);
+
+    // Flip straight away and put it back if the write fails — waiting on a
+    // round trip for a heart makes the whole page feel slow.
+    if (wasOn) favourites.delete(id); else favourites.add(id);
+    renderAll();
+
+    var p = wasOn ? social.removeFavourite(id) : social.addFavourite(id);
+    p.then(function (res) {
+      if (res && res.error) {
+        if (wasOn) favourites.add(id); else favourites.delete(id);
+        renderAll();
+      }
+    });
+  });
+
+  // ---- register, then ask on the way back ----
+  var PENDING_KEY = "sc_pending_registration";
+
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target.closest ? ev.target.closest("[data-register]") : null;
+    if (!btn) return;
+    var id = btn.getAttribute("data-register");
+    var e = EVENTS_ALL.find(function (x) { return x.id === id; });
+    if (!e || !e.registerLink) return;
+
+    // Nothing is claimed yet. The ticketing site belongs to someone else, so
+    // the only honest way to know whether they signed up is to ask them.
+    if (signedIn) {
+      try {
+        sessionStorage.setItem(PENDING_KEY, JSON.stringify({ id: id, title: e.title, at: Date.now() }));
+      } catch (err) {}
+      if (social) social.recordView(id);
+    }
+    window.open(e.registerLink, "_blank", "noopener");
+  });
+
+  function pendingRegistration() {
+    try {
+      var raw = sessionStorage.getItem(PENDING_KEY);
+      if (!raw) return null;
+      var p = JSON.parse(raw);
+      // Older than a couple of hours isn't a return from the registration
+      // page any more, it's a new visit.
+      if (Date.now() - p.at > 2 * 60 * 60 * 1000) {
+        sessionStorage.removeItem(PENDING_KEY);
+        return null;
+      }
+      return p;
+    } catch (err) { return null; }
+  }
+
+  function clearPending() {
+    try { sessionStorage.removeItem(PENDING_KEY); } catch (err) {}
+  }
+
+  function askDialog(html) {
+    var back = document.createElement("div");
+    back.className = "ev-ask-back";
+    back.innerHTML = '<div class="ev-ask" role="dialog" aria-modal="true">' + html + '</div>';
+    document.body.appendChild(back);
+    return back;
+  }
+
+  function askDidYouRegister(p) {
+    var back = askDialog(
+      "<h3>Did you register?</h3>" +
+      '<p>You opened the registration page for <span class="ev-ask-event">' +
+      escapeHtml(p.title) + '</span>.</p>' +
+      '<div class="ev-ask-actions">' +
+        '<button type="button" class="btn btn-glow" data-yes>Yes, I registered</button>' +
+        '<button type="button" class="btn btn-outline" data-no>Not yet</button>' +
+      '</div>'
+    );
+
+    back.querySelector("[data-yes]").addEventListener("click", function () {
+      back.remove();
+      clearPending();
+      myRegistrations[p.id] = "registered";
+      renderAll();
+      if (!social) return;
+      social.setMyRegistration(p.id, "registered").then(function () {
+        // Refresh the attendee list so they see themselves appear.
+        return social.loadAttendees(EVENTS_ALL.map(function (x) { return x.id; }));
+      }).then(function (a) {
+        if (a) { attendees = a; renderAll(); }
+      });
+    });
+
+    back.querySelector("[data-no]").addEventListener("click", function () {
+      back.remove();
+      clearPending();
+      askAddToFavourites(p);
+    });
+  }
+
+  function askAddToFavourites(p) {
+    if (favourites.has(p.id)) return;
+    var back = askDialog(
+      "<h3>Save it for later?</h3>" +
+      '<p>We can keep <span class="ev-ask-event">' + escapeHtml(p.title) +
+      '</span> in your favourites, and use it to suggest events like it.</p>' +
+      '<div class="ev-ask-actions">' +
+        '<button type="button" class="btn btn-glow" data-yes>Add to favourites</button>' +
+        '<button type="button" class="btn btn-outline" data-no>No thanks</button>' +
+      '</div>'
+    );
+
+    back.querySelector("[data-yes]").addEventListener("click", function () {
+      back.remove();
+      favourites.add(p.id);
+      renderAll();
+      if (social) social.addFavourite(p.id);
+    });
+
+    back.querySelector("[data-no]").addEventListener("click", function () {
+      back.remove();
+      // They looked but passed. Still worth knowing — a weaker signal than a
+      // favourite, and the recommender weights it accordingly.
+      myRegistrations[p.id] = "interested";
+      renderAll();
+      if (social) social.setMyRegistration(p.id, "interested");
+    });
+  }
+
+  function checkPendingOnReturn() {
+    if (document.visibilityState !== "visible") return;
+    if (document.querySelector(".ev-ask-back")) return;
+    var p = pendingRegistration();
+    if (p) askDidYouRegister(p);
+  }
+
+  document.addEventListener("visibilitychange", checkPendingOnReturn);
+  window.addEventListener("focus", checkPendingOnReturn);
+
+  // ---- filters ----
+  function wireChipGroup(id, attr, key) {
+    var box = document.getElementById(id);
     if (!box) return;
     box.addEventListener("click", function (e) {
       var btn = e.target.closest ? e.target.closest(".filter-chip") : null;
-      if (!btn || !box.contains(btn)) return;
+      if (!btn) return;
       state[key] = btn.getAttribute(attr);
       Array.prototype.forEach.call(box.querySelectorAll(".filter-chip"), function (b) {
         b.classList.toggle("is-active", b === btn);
       });
-      applyFilters();
+      renderList();
     });
   }
   wireChipGroup("filter-when", "data-when", "when");
   wireChipGroup("filter-mode", "data-mode", "mode");
   wireChipGroup("filter-price", "data-price", "price");
 
-  // Topic chips are generated from the data, with a count of how many
-  // upcoming events carry each tag. Now that events arrive from the database
-  // this has to run *after* they load, so it's a function rather than inline.
+  var qInput = document.getElementById("filter-q");
+  var clearQBtn = document.getElementById("filter-clear-q");
+  if (qInput) {
+    qInput.addEventListener("input", function () {
+      state.q = qInput.value.trim();
+      if (clearQBtn) clearQBtn.classList.toggle("hidden", !state.q);
+      renderList();
+    });
+  }
+  if (clearQBtn) {
+    clearQBtn.addEventListener("click", function () {
+      state.q = "";
+      if (qInput) qInput.value = "";
+      clearQBtn.classList.add("hidden");
+      renderList();
+    });
+  }
+
+  var tagsWrap = document.getElementById("filter-tags");
   function buildTagChips() {
     if (!tagsWrap) return;
     tagsWrap.innerHTML = "";
     var counts = {};
-    upcoming.forEach(function (e) {
+    EVENTS_ALL.forEach(function (e) {
       (e.tags || []).forEach(function (t) {
-        var k = t.toLowerCase();
+        var k = String(t).toLowerCase();
         counts[k] = counts[k] || { label: t, n: 0 };
         counts[k].n++;
       });
@@ -841,12 +871,10 @@
         b.className = "filter-chip";
         b.setAttribute("data-tag", k);
         b.setAttribute("aria-pressed", "false");
-        b.innerHTML = escapeHtml(counts[k].label) + '<span class="chip-count">' + counts[k].n + "</span>";
+        b.innerHTML = escapeHtml(counts[k].label) + '<span class="chip-count">' + counts[k].n + '</span>';
         tagsWrap.appendChild(b);
       });
   }
-
-  // The click handler doesn't depend on the data, so it can be wired once.
   if (tagsWrap) {
     tagsWrap.addEventListener("click", function (e) {
       var btn = e.target.closest ? e.target.closest(".filter-chip") : null;
@@ -856,28 +884,10 @@
       if (i === -1) state.tags.push(tag); else state.tags.splice(i, 1);
       btn.classList.toggle("is-active", i === -1);
       btn.setAttribute("aria-pressed", i === -1 ? "true" : "false");
-      applyFilters();
+      renderList();
     });
   }
 
-  if (qInput) {
-    var debounce;
-    qInput.addEventListener("input", function () {
-      window.clearTimeout(debounce);
-      debounce = window.setTimeout(function () {
-        state.q = qInput.value.trim();
-        applyFilters();
-      }, 160);
-    });
-  }
-  if (clearQBtn) {
-    clearQBtn.addEventListener("click", function () {
-      qInput.value = "";
-      state.q = "";
-      applyFilters();
-      qInput.focus();
-    });
-  }
   function resetAll() {
     state = { q: "", when: "all", mode: "all", price: "all", tags: [] };
     if (qInput) qInput.value = "";
@@ -894,35 +904,34 @@
         b.setAttribute("aria-pressed", "false");
       });
     }
-    applyFilters();
+    renderList();
   }
-  if (resetBtn) resetBtn.addEventListener("click", resetAll);
-  if (resetSheetBtn) resetSheetBtn.addEventListener("click", resetAll);
+  ["filter-reset", "filter-reset-sheet"].forEach(function (id) {
+    var b = document.getElementById(id);
+    if (b) b.addEventListener("click", resetAll);
+  });
 
-  // ---- mobile filter sheet ---------------------------------------------
-  // Above 820px the panel is just part of the page, so these handlers sit
-  // idle; the sheet chrome is hidden by CSS at that width.
-  var lastFocus = null;
+  // ---- mobile filter sheet ----
+  var panel = document.getElementById("filter-panel");
+  var backdrop = document.getElementById("filter-backdrop");
+  var openBtn = document.getElementById("filter-open");
+  var closeBtn = document.getElementById("filter-close");
+  var applyBtn = document.getElementById("filter-apply");
 
   function openSheet() {
     if (!panel) return;
-    lastFocus = document.activeElement;
     panel.classList.add("is-open");
     if (backdrop) backdrop.hidden = false;
     document.body.classList.add("filters-open");
     if (openBtn) openBtn.setAttribute("aria-expanded", "true");
-    if (closeBtn) closeBtn.focus();
   }
-
   function closeSheet() {
     if (!panel) return;
     panel.classList.remove("is-open");
     if (backdrop) backdrop.hidden = true;
     document.body.classList.remove("filters-open");
     if (openBtn) openBtn.setAttribute("aria-expanded", "false");
-    if (lastFocus && lastFocus.focus) lastFocus.focus();
   }
-
   if (openBtn) openBtn.addEventListener("click", openSheet);
   if (closeBtn) closeBtn.addEventListener("click", closeSheet);
   if (applyBtn) applyBtn.addEventListener("click", closeSheet);
@@ -930,27 +939,28 @@
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && panel && panel.classList.contains("is-open")) closeSheet();
   });
-  // Leaving phone width with the sheet open would strand body scroll-lock on.
   window.addEventListener("resize", function () {
     if (window.innerWidth > 820 && panel && panel.classList.contains("is-open")) closeSheet();
   });
 
-  // Nothing can render until the events arrive, so this is the one entry
-  // point. On failure the page says so rather than sitting on a spinner or
-  // pretending there are simply no events on.
+  // ---- go ----
   loadEventsFromDatabase().then(function () {
-    if (upcoming.length === 0) {
+    if (EVENTS_ALL.length === 0) {
       if (emptyMsg) emptyMsg.classList.remove("hidden");
-      return;
+      return null;
     }
     buildTagChips();
-    applyFilters();
-    refreshAccessThenRerender();
+    // Draw the public list immediately; the personal layer arrives after and
+    // re-renders, so events appear without waiting on a signed-in check.
+    renderList();
+    return Promise.all([loadSocial(), refreshAccess()]).then(function () {
+      renderAll();
+      checkPendingOnReturn();
+    });
   }).catch(function (err) {
     console.error("Could not load events:", err);
     if (emptyMsg) {
-      emptyMsg.textContent =
-        "We couldn't load the events just now. Please refresh, or try again shortly.";
+      emptyMsg.textContent = "We couldn't load the events just now. Please refresh, or try again shortly.";
       emptyMsg.classList.remove("hidden");
     }
   });
