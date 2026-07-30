@@ -94,6 +94,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="2.5" width="8.5" height="8.5" fill="#F25022"/><rect x="12.5" y="2.5" width="8.5" height="8.5" fill="#7FBA00"/><rect x="2.5" y="12.5" width="8.5" height="8.5" fill="#00A4EF"/><rect x="12.5" y="12.5" width="8.5" height="8.5" fill="#FFB900"/></svg>
         Continue with Microsoft
       </button>
+      <button type="button" class="auth-btn" id="btn-linkedin">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#0A66C2" d="M20.45 20.45h-3.56v-5.57c0-1.33-.03-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.07 2.07 0 1 1 0-4.13 2.07 2.07 0 0 1 0 4.13zM7.12 20.45H3.55V9h3.57v11.45z"/></svg>
+        Continue with LinkedIn
+      </button>
       <button type="button" class="auth-btn" id="btn-phone-toggle">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18h2"/></svg>
         Continue with phone number
@@ -119,12 +123,34 @@
 </main>
 
 <script type="module">
-  import { signInWithGoogle, signInWithMicrosoft, sendPhoneCode, verifyPhoneCode, getSession, hasCompletedOnboarding } from "./lib/auth.js";
+  import { signInWithGoogle, signInWithMicrosoft, signInWithLinkedIn, sendPhoneCode, verifyPhoneCode, getSession, hasCompletedOnboarding } from "./lib/auth.js";
 
   var statusEl = document.getElementById("auth-status");
   function showStatus(msg, kind) {
     statusEl.innerHTML = '<div class="auth-status ' + kind + '">' + msg + "</div>";
   }
+
+  // A provider that fails — not switched on, consent declined, misconfigured
+  // redirect — sends people back here with the reason in the URL rather than
+  // erroring at the click. Nothing reads it by default, so the page would sit
+  // there looking fine while the person wonders what happened.
+  (function showRedirectError() {
+    var hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    var query = new URLSearchParams(window.location.search);
+    var code = hash.get("error") || query.get("error");
+    if (!code) return;
+
+    var detail = hash.get("error_description") || query.get("error_description") || "";
+    var friendly = /provider is not enabled|Unsupported provider/i.test(detail)
+      ? "That sign-in option isn't switched on yet. Please use Google, Microsoft or your phone number."
+      : /access_denied/i.test(code)
+        ? "Sign-in was cancelled. You can try again, or use another option."
+        : "Sign-in didn't complete: " + (detail.replace(/\+/g, " ") || code);
+
+    showStatus(friendly, "err");
+    // Clear it so a refresh doesn't replay a stale error.
+    history.replaceState(null, "", window.location.pathname);
+  })();
 
   // Already signed in (or just came back from an OAuth redirect)? Skip
   // straight to onboarding or the dashboard rather than showing the
@@ -144,6 +170,11 @@
   document.getElementById("btn-microsoft").addEventListener("click", function () {
     showStatus("Redirecting to Microsoft…", "info");
     signInWithMicrosoft();
+  });
+
+  document.getElementById("btn-linkedin").addEventListener("click", function () {
+    showStatus("Redirecting to LinkedIn…", "info");
+    signInWithLinkedIn();
   });
 
   var phonePanel = document.getElementById("phone-panel");
