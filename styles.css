@@ -2747,3 +2747,174 @@ html.reduce-motion .pod-stage::after,
 html.reduce-motion .pod-play-ring { animation: none; }
 
 /* build: 2026-07-28T21:53:42Z */
+
+/* ============================================================
+   Events timeline — the agenda view
+   ------------------------------------------------------------
+   Events group under a sticky date header, threaded on a vertical
+   rail. On phones this is the whole layout (the reference being a
+   calendar app, where scanning by day is the point). From 820px the
+   cards inside each day spread into a grid, so the date grouping
+   survives on desktop instead of being a mobile-only idea.
+   ============================================================ */
+
+/* Deliberately a plain block, not the 3-column .event-card-grid this
+   replaced — the day sections stack, and the grid lives inside each one. */
+.ev-timeline { display: block; }
+
+.ev-day { position: relative; padding-left: 26px; margin-bottom: 6px; }
+
+/* The thread. Sits behind the dots and stops short of the last card
+   so the timeline doesn't dangle past the final event. */
+.ev-day::before {
+  content: "";
+  position: absolute;
+  left: 5px; top: 30px; bottom: -6px;
+  width: 1px;
+  background: repeating-linear-gradient(
+    to bottom, var(--glass-border) 0 4px, transparent 4px 9px
+  );
+}
+.ev-day:last-child::before { bottom: 24px; }
+
+.ev-day-head {
+  position: sticky; top: var(--nav-h, 64px); z-index: 5;
+  display: flex; align-items: baseline; gap: 9px;
+  padding: 10px 0 12px;
+  margin-left: -26px; padding-left: 26px;
+  background: linear-gradient(to bottom, var(--bg) 62%, transparent);
+}
+.ev-day-dot {
+  position: absolute; left: 0; top: 17px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--glass-border);
+}
+.ev-day.is-today .ev-day-dot { border-color: var(--cyan); background: var(--cyan); }
+.ev-day-date { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+.ev-day-weekday { font-size: 14.5px; color: var(--text-muted); }
+.ev-day.is-today .ev-day-date { color: var(--cyan); }
+
+.ev-cards { display: flex; flex-direction: column; gap: 12px; padding-bottom: 20px; }
+@media (min-width: 820px) {
+  .ev-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 14px; }
+}
+
+.ev-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 76px;
+  gap: 13px;
+  padding: 15px 16px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  border-radius: 14px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.ev-card:hover { border-color: rgba(139, 92, 246, 0.4); }
+.ev-card.is-locked { opacity: 0.72; }
+.ev-card.is-locked:hover { opacity: 1; }
+
+.ev-time { font-size: 13px; color: var(--text-muted); margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+.ev-title {
+  font-size: 16.5px; font-weight: 700; line-height: 1.3; margin: 0 0 7px;
+  text-wrap: balance;
+}
+.ev-meta { display: flex; align-items: flex-start; gap: 6px; font-size: 13.5px; color: var(--text-secondary); margin-bottom: 5px; }
+.ev-meta svg { flex-shrink: 0; margin-top: 2px; opacity: 0.7; }
+
+.ev-thumb {
+  width: 76px; height: 76px; border-radius: 10px; object-fit: cover;
+  background: var(--glass); display: block;
+}
+.ev-thumb-fallback {
+  width: 76px; height: 76px; border-radius: 10px;
+  background: linear-gradient(140deg, rgba(139,92,246,0.22), rgba(34,211,238,0.14));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 21px; color: var(--text-muted);
+}
+
+.ev-foot { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 10px; }
+
+/* Status reads as shape + word, not colour alone. */
+.ev-status {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.02em;
+  padding: 5px 11px; border-radius: 8px; border: 1px solid currentColor;
+}
+.ev-status.is-going { color: #4ade80; background: rgba(34,197,94,0.15); }
+.ev-status.is-interested { color: #fbbf24; background: rgba(251,191,36,0.13); }
+.ev-status.is-premium { color: #f0c674; background: rgba(224,168,62,0.14); }
+
+.ev-register {
+  font-size: 12.5px; font-weight: 700;
+  padding: 6px 13px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  color: #05070d; text-decoration: none; border: none;
+}
+
+/* Faces of members who confirmed. Overlapped, newest at the front. */
+.ev-faces { display: flex; align-items: center; }
+.ev-face {
+  width: 25px; height: 25px; border-radius: 50%;
+  border: 2px solid var(--bg); margin-left: -8px;
+  object-fit: cover; background: var(--glass);
+}
+.ev-face:first-child { margin-left: 0; }
+.ev-face-initial {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10.5px; font-weight: 700; color: var(--text);
+  background: linear-gradient(140deg, var(--violet), var(--cyan));
+}
+.ev-face-more {
+  font-size: 11.5px; color: var(--text-muted); margin-left: 7px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Favourite. A button, not a decoration — needs a real hit area. */
+.ev-fav {
+  position: absolute; top: 11px; right: 11px;
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.35); border: 1px solid var(--glass-border);
+  cursor: pointer; color: var(--text-muted); padding: 0;
+}
+html.light-mode .ev-fav { background: rgba(255,255,255,0.75); }
+.ev-fav:hover { color: var(--text); border-color: var(--text-muted); }
+.ev-fav.is-on { color: #fb7185; border-color: rgba(251,113,133,0.5); background: rgba(251,113,133,0.14); }
+.ev-fav svg { width: 16px; height: 16px; }
+
+/* Card has a thumbnail top-right on mobile, so the heart moves under it. */
+@media (max-width: 819px) {
+  .ev-fav { top: auto; bottom: 13px; right: 13px; }
+}
+
+/* ---- Recommended strip ---- */
+.ev-recommend { margin: 6px 0 30px; }
+.ev-recommend-head { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; flex-wrap: wrap; }
+.ev-recommend-head h2 { margin: 0; font-size: 19px; }
+.ev-recommend-why {
+  font-size: 12.5px; color: var(--text-muted);
+  border: 1px dashed var(--glass-border); border-radius: 999px; padding: 3px 11px;
+}
+.ev-rec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.ev-rec-reason {
+  font-size: 12px; color: var(--cyan);
+  margin-top: 8px; display: flex; align-items: center; gap: 5px;
+}
+html.light-mode .ev-rec-reason { color: var(--cyan); }
+
+/* ---- Post-registration prompt ---- */
+.ev-ask-back {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(0,0,0,0.62);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.ev-ask {
+  background: var(--bg); border: 1px solid var(--glass-border);
+  border-radius: 16px; padding: 24px; max-width: 400px; width: 100%;
+}
+.ev-ask h3 { margin: 0 0 6px; font-size: 18px; }
+.ev-ask p { margin: 0 0 18px; color: var(--text-secondary); font-size: 14.5px; line-height: 1.55; }
+.ev-ask-event { font-weight: 700; color: var(--text); }
+.ev-ask-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.ev-ask-actions .btn { flex: 1; min-width: 120px; text-align: center; }
