@@ -38,6 +38,22 @@
   .dash-soon-list li:last-child { border-bottom: none; }
   .dash-signout { margin-top: 26px; }
   .dash-btn-secondary { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text); border-radius: 999px; cursor: pointer; padding: 9px 18px; font-size: 13.5px; font-family: inherit; }
+
+  /* Saved events. A list, not cards — this is a reference you scan, and the
+     dates want to line up down the left edge to be scannable at all. */
+  .dash-saved-sub { margin-bottom: 12px !important; }
+  .dash-saved-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--glass-border); }
+  .dash-saved-row:last-child { border-bottom: none; }
+  .dash-saved-date { font-size: 12.5px; font-weight: 700; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .dash-saved-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .dash-saved-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .dash-saved-meta { font-size: 12.5px; color: var(--text-muted); }
+  .dash-link { color: var(--cyan); text-decoration: none; font-size: 13.5px; font-weight: 600; }
+  .dash-link:hover { text-decoration: underline; }
+  @media (max-width: 480px) {
+    .dash-saved-row { grid-template-columns: 44px 1fr; }
+    .dash-saved-pills { grid-column: 2; }
+  }
 </style>
 </head>
 <body>
@@ -80,6 +96,15 @@
     </div>
   </div>
 
+  <!-- Saved events. Hidden until we know there is something to show, so a new
+       member does not meet an empty box on their first visit. -->
+  <div class="dash-card" style="margin-top:16px;" id="saved-card" hidden>
+    <h3>Saved events</h3>
+    <p class="dash-saved-sub" id="saved-sub"></p>
+    <div class="dash-saved" id="saved-list"></div>
+    <p style="margin-top:14px;"><a class="dash-link" href="../events.html">Browse all events &rarr;</a></p>
+  </div>
+
   <div class="dash-card" style="margin-top:16px;">
     <h3>Coming soon</h3>
     <ul class="dash-soon-list">
@@ -96,7 +121,7 @@
 
 <script type="module">
   import { supabase } from "../lib/supabase-client.js";
-  import { getSession, signOut, hasCompletedOnboarding } from "../lib/auth.js";
+  import { getSession, signOut, hasCompletedOnboarding, syncAvatar } from "../lib/auth.js";
 
   (async function init() {
     var session = await getSession();
@@ -145,7 +170,83 @@
       ms365Pill.textContent = "Not set up yet";
       ms365Pill.classList.add("status-pending");
     }
+
+    loadSaved(session.user.id);
+    syncAvatar(session).catch(function () {});
   })();
+
+  // ---- Saved events -----------------------------------------------------
+  // Favourites plus anything they have told us they registered for, in one
+  // list, because from a member's point of view both are "events I care
+  // about". Past events are dropped — a dashboard is about what is ahead.
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function shortDate(iso) {
+    var p = String(iso).split("-");
+    return parseInt(p[2], 10) + " " + MONTHS[parseInt(p[1], 10) - 1];
+  }
+
+  async function loadSaved(userId) {
+    var todayIso = new Date().toISOString().slice(0, 10);
+
+    var [favRes, regRes] = await Promise.all([
+      supabase.from("event_favourites").select("event_id").eq("user_id", userId),
+      supabase.from("event_registrations").select("event_id, status")
+        .eq("user_id", userId).eq("status", "registered"),
+    ]);
+
+    // Migration 0005 may not have run yet on a fresh project. That is a setup
+    // state, not a member-facing error — leave the card hidden.
+    if (favRes.error) return;
+
+    var favIds = (favRes.data || []).map(function (r) { return r.event_id; });
+    var goingIds = ((regRes && regRes.data) || []).map(function (r) { return r.event_id; });
+    var allIds = [];
+    favIds.concat(goingIds).forEach(function (id) {
+      if (allIds.indexOf(id) === -1) allIds.push(id);
+    });
+    if (!allIds.length) return;
+
+    var { data: events } = await supabase
+      .from("events")
+      .select("id, title, event_date, time_label, location, country, mode, register_link")
+      .in("id", allIds)
+      .gte("event_date", todayIso)
+      .order("event_date", { ascending: true });
+
+    if (!events || !events.length) return;
+
+    var favSet = new Set(favIds);
+    var goingSet = new Set(goingIds);
+
+    document.getElementById("saved-sub").textContent =
+      events.length === 1 ? "1 upcoming event you've saved."
+                          : events.length + " upcoming events you've saved.";
+
+    document.getElementById("saved-list").innerHTML = events.map(function (e) {
+      var where = e.mode === "Online" ? "Online" : (e.location || e.country || "");
+      var pills = "";
+      if (goingSet.has(e.id)) pills += '<span class="dash-pill status-active">Going</span>';
+      else if (favSet.has(e.id)) pills += '<span class="dash-pill status-pending">Saved</span>';
+      return '<div class="dash-saved-row">' +
+        '<span class="dash-saved-date">' + esc(shortDate(e.event_date)) + '</span>' +
+        '<span class="dash-saved-main">' +
+          '<span class="dash-saved-title">' + esc(e.title) + '</span>' +
+          '<span class="dash-saved-meta">' +
+            esc([e.time_label, where].filter(Boolean).join(" · ")) +
+          '</span>' +
+        '</span>' +
+        '<span class="dash-saved-pills">' + pills + '</span>' +
+      '</div>';
+    }).join("");
+
+    document.getElementById("saved-card").hidden = false;
+  }
 
   document.getElementById("btn-sign-out").addEventListener("click", async function () {
     await signOut();
