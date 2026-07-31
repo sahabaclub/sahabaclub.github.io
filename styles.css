@@ -3030,3 +3030,140 @@ html.light-mode .tagpick-menu { background: #fff; box-shadow: 0 10px 30px rgba(1
 .optin-chip input { width: auto; margin: 0; flex-shrink: 0; }
 .optin-chip:hover { border-color: var(--cyan); color: var(--text); }
 .optin-chip.is-on { border-color: rgba(34, 211, 238, 0.5); background: rgba(34, 211, 238, 0.12); color: var(--text); }
+
+/* ---------------------------------------------------------------------------
+   Avatar control — shared by app/profile.html and the dashboard's Profile form
+   ---------------------------------------------------------------------------
+   Here for the same reason the tag picker is: it has to appear in both profile
+   forms, and a widget kept in two copies is a widget that drifts.
+
+   Mobile first. The entry buttons are a wrapping row that becomes a stack
+   under ~420px, because "Use my Microsoft photo" is a wide label and the
+   alternative is a button whose text is clipped. */
+.av { display: block; }
+
+.av-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.av-shot {
+  width: 64px; height: 64px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  display: flex; align-items: center; justify-content: center;
+  color: #05070d; font-size: 22px; font-weight: 700; letter-spacing: 0.02em;
+}
+/* --violet and --cyan are far darker in the light theme (#6d28d9 / #0e7490
+   against #8b5cf6 / #22d3ee), so the near-black initials that measure 4.76:1
+   on the dark gradient fall to 2.83:1 on the light one. White is 7.1:1 at the
+   violet end and 5.36:1 at the cyan end. Measured, not guessed. */
+html.light-mode .av-shot { color: #ffffff; }
+.av-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.av-head-copy { min-width: 0; }
+.av-title { margin: 0 0 3px; font-size: 14px; font-weight: 700; color: var(--text); }
+.av-why { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text-muted); }
+
+.av-ways { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Not var(--glass-border). That is the app's card edge, and at 1.26:1 dark /
+   1.30:1 light it is fine for a panel whose contents identify it but too faint
+   for a control whose outline IS the affordance — 1.4.11 wants 3:1. These two
+   measure 3.5:1 dark and 3.32:1 light on the card surface. */
+.av-btn {
+  border: 1px solid rgba(255, 255, 255, 0.38); background: var(--glass); color: var(--text);
+  border-radius: 999px; padding: 9px 16px; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; font-family: inherit;
+  /* 40px keeps every one of these a comfortable tap target on a phone. */
+  min-height: 40px;
+}
+html.light-mode .av-btn { border-color: rgba(16, 22, 39, 0.5); }
+.av-btn:hover:not(:disabled) { border-color: var(--cyan); }
+.av-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.av-btn-go { border-color: rgba(34, 211, 238, 0.5); background: rgba(34, 211, 238, 0.12); }
+/* rgba(34,211,238,0.5) is 3.39:1 on the dark card but only 1.30:1 on the light
+   one — light-mode --cyan is #0e7490, which is 4.65:1. */
+html.light-mode .av-btn-go { border-color: var(--cyan); }
+.av-btn-quiet { color: var(--text-secondary); font-weight: 600; }
+@media (max-width: 420px) {
+  .av-ways { flex-direction: column; align-items: stretch; }
+  .av-btn { width: 100%; }
+}
+
+.av-privacy {
+  margin: 11px 0 0; font-size: 12px; line-height: 1.55; color: var(--text-muted);
+}
+
+.av-state {
+  margin-top: 12px; padding: 10px 12px; border-radius: 9px;
+  font-size: 12.5px; line-height: 1.55;
+}
+/* Same four status hues the profile and dashboard cards already use, with the
+   same light-mode counterparts — the dark-theme ink measured as low as 1.36:1
+   on a light card before the audit, so none of these may go without one. */
+.av-state.info, .av-state.busy {
+  background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.32); color: #7dd3fc;
+}
+.av-state.ok {
+  background: rgba(34, 197, 94, 0.12); border: 1px solid rgba(34, 197, 94, 0.35); color: #4ade80;
+}
+.av-state.err {
+  background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.38); color: #fca5a5;
+}
+html.light-mode .av-state.info, html.light-mode .av-state.busy { color: #155e75; }
+html.light-mode .av-state.ok { color: #166534; }
+html.light-mode .av-state.err { color: #b91c1c; }
+
+/* The wait is long enough that a static line reads as a hung page. */
+.av-state.busy { position: relative; padding-left: 32px; }
+.av-state.busy::before {
+  content: ""; position: absolute; left: 12px; top: 50%; margin-top: -7px;
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid currentColor; border-top-color: transparent;
+  animation: av-spin 0.75s linear infinite;
+}
+@keyframes av-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .av-state.busy::before { animation-duration: 3s; }
+}
+
+.av-result {
+  display: flex; gap: 14px; align-items: flex-start; margin-top: 14px;
+  padding: 13px; border-radius: 12px;
+  border: 1px solid var(--glass-border); background: var(--glass);
+}
+.av-result-img {
+  width: 96px; height: 96px; border-radius: 12px; object-fit: cover;
+  flex-shrink: 0; background: var(--glass-border); display: block;
+}
+.av-result-side { min-width: 0; flex: 1; }
+.av-result-note { margin: 0 0 10px; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary); }
+.av-result-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.av-result-actions .av-btn { padding: 7px 13px; font-size: 12.5px; min-height: 36px; }
+@media (max-width: 420px) {
+  .av-result { flex-direction: column; }
+  .av-result-img { width: 84px; height: 84px; }
+  .av-result-actions .av-btn { width: auto; flex: 1 1 auto; }
+}
+
+/* Where the "a photo" button in the Connect line lands. A ring rather than a
+   colour change, so it reads the same in both themes.
+
+   outline-color is set as a longhand and there is no transition on it, both
+   deliberately. `outline: 2px solid var(--cyan)` makes the shorthand a
+   pending-substitution value, and transitioning outline-color off its
+   currentColor base then leaves it stuck on currentColor — measured as
+   rgb(243,244,248) instead of the cyan, i.e. an invisible ring on this card.
+   Splitting the longhand out and dropping the (purely decorative) fade fixes
+   it. */
+.av.is-called {
+  outline: 2px solid;
+  outline-color: var(--cyan);
+  outline-offset: 8px;
+  border-radius: 8px;
+}
+
+/* The requirement in the Connect line, made reachable. It is a button because
+   it does something on this page; it is styled as a link because that is what
+   it looks like it should be inside a sentence. Inherits the line's colour so
+   it stays legible in whichever status hue the line is currently wearing. */
+.connect-jump {
+  background: none; border: none; padding: 0; font: inherit; color: inherit;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+  font-weight: 700;
+}
+.connect-jump:hover { text-decoration-thickness: 2px; }
