@@ -171,6 +171,11 @@
     }
     html.light-mode .dash-side { background: rgba(244, 247, 252, 0.94); }
     .dash-side .dash-navlabel { display: none; }
+    /* The bar holds five slots and no more. "Membership" is a single 60px word
+       that cannot wrap, and five is the largest number of equal slots that
+       still fits it on a 360px phone — at six it spills into its neighbour.
+       That is why Connect and Inbox live in the More sheet below rather than
+       here. */
     .dash-nav { flex: 1; min-width: 0; flex-direction: column; gap: 3px; padding: 7px 2px; font-size: 10.5px; text-align: center; border-radius: 9px; }
     .dash-nav-label { font-size: 10.5px; line-height: 1.25; }
     .dash-nav-main { display: contents; }
@@ -239,6 +244,21 @@
     </div>
 
     <div class="dash-side-foot" id="dash-side-foot">
+      <!-- Connect and Inbox are separate pages, not hash-routed sections, so
+           they are links rather than [data-section] buttons and never take the
+           is-active state. They sit here rather than in the bar above because
+           the bar is full at five slots on a phone (see the media query); on a
+           desktop sidebar this renders as a normal labelled group. -->
+      <p class="dash-navlabel">Community</p>
+      <a class="dash-nav" href="connect.html">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9.2" cy="8.2" r="3.4"/><path d="M2.8 19.4a6.4 6.4 0 0 1 12.8 0"/><path d="M16.4 5.3a3.4 3.4 0 0 1 0 5.8"/><path d="M18.2 19.4a6.5 6.5 0 0 0-2-4.7"/></svg>
+        <span class="dash-nav-label">Connect</span>
+      </a>
+      <a class="dash-nav" href="inbox.html">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.2" y="5.4" width="17.6" height="13.2" rx="2.2"/><path d="M3.8 7.2l8.2 5.6 8.2-5.6"/></svg>
+        <span class="dash-nav-label">Inbox</span>
+      </a>
+
       <p class="dash-navlabel">Coming soon</p>
       <span class="dash-nav is-soon" aria-disabled="true"><span class="dash-nav-label">AI Matching</span></span>
       <span class="dash-nav is-soon" aria-disabled="true"><span class="dash-nav-label">Coaching</span></span>
@@ -260,6 +280,22 @@
 
     <!-- ---- Profile ---- -->
     <section class="dash-section" id="section-profile" aria-labelledby="dash-greeting">
+      <!-- Shown only while the member is not discoverable. Appearing in Connect
+           is opt-in and needs a profile worth showing, so this says which of the
+           two is still missing rather than a generic nudge. The requirement list
+           mirrors public.profile_is_complete (0018) — if that rule changes, this
+           changes with it. -->
+      <div class="dash-card hidden" id="connect-invite">
+        <h2>Connect</h2>
+        <p id="connect-invite-line"></p>
+        <p class="dash-note" id="connect-invite-need"></p>
+        <p style="margin-top:14px;">
+          <a class="dash-link" href="connect.html">Browse Connect &rarr;</a>
+          &nbsp;&middot;&nbsp;
+          <a class="dash-link" href="profile.html">Open my full profile &rarr;</a>
+        </p>
+      </div>
+
       <div class="dash-card" id="profile-choice">
         <h2>Your profile</h2>
         <p>This is what we use to match you with coaches, events and content. Two ways to fill it in — the fields are the same either way.</p>
@@ -582,10 +618,46 @@
     }
 
     fillForm(profile || {});
+    showConnectInvite(profile || {});
     loaded.profile = true;
     showSection(currentSection());
     syncAvatar(session).catch(function () {});
   })();
+
+  // ---- Connect invite ---------------------------------------------------
+  // Mirrors public.profile_is_complete: a name, an avatar, a bio OR a headline,
+  // and at least one interest. The database is the authority — this only tells
+  // the member what they still need so the gate isn't a surprise when they flip
+  // the switch on profile.html.
+  function missingForConnect(p) {
+    var need = [];
+    if (!String(p.full_name || "").trim()) need.push("your name");
+    if (!String(p.avatar_url || "").trim()) need.push("a photo");
+    if (!String(p.bio || "").trim() && !String(p.headline || "").trim()) {
+      need.push("a short bio or headline");
+    }
+    if (!(Array.isArray(p.interests) && p.interests.length)) need.push("at least one interest");
+    return need;
+  }
+
+  function showConnectInvite(p) {
+    // Already listed: nothing to nudge about.
+    if (p.is_discoverable) return;
+
+    var need = missingForConnect(p);
+    document.getElementById("connect-invite-line").textContent =
+      "Connect is the member directory — other members can find you, follow you " +
+      "and send you a message. You're not in it yet; it's off until you switch it on.";
+    document.getElementById("connect-invite-need").textContent = need.length
+      ? "Before you can join you still need " + joinList(need) + "."
+      : "Your profile is ready. Switch on “Show me in Connect” on your full profile to join.";
+    document.getElementById("connect-invite").classList.remove("hidden");
+  }
+
+  function joinList(items) {
+    if (items.length === 1) return items[0];
+    return items.slice(0, -1).join(", ") + " and " + items[items.length - 1];
+  }
 
   // ---- Profile ----------------------------------------------------------
   var choiceCard = document.getElementById("profile-choice");
