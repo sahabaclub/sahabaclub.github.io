@@ -16,7 +16,7 @@
   } catch (e) {}
 </script>
 </head>
-<body>
+<body class="admin">
 
 <div class="ad-shell">
   <aside class="ad-side" id="ad-side"></aside>
@@ -69,6 +69,7 @@
     <div id="ad-msg"></div>
   </main>
 </div>
+
 <!-- Editor -->
 <div class="ad-modal-back ad-hidden" id="ad-modal-back">
   <div class="ad-modal">
@@ -132,6 +133,7 @@
     </form>
   </div>
 </div>
+
 <script type="module">
   import { supabase } from "../../lib/supabase-client.js";
   import { requireStaff, renderShell, escapeHtml, showMessage, clearMessage }
@@ -185,6 +187,7 @@
     rows = (licRes.data || []).map(r => ({ ...r, full_name: nameBy[r.user_id] || "—" }));
     render();
   }
+
   function render() {
     const q = document.getElementById("ad-q").value.trim().toLowerCase();
     const plan = document.getElementById("ad-plan").value;
@@ -236,15 +239,15 @@
                      : r.plan === "premium" ? "role-coach" : "role-member";
       const statusPill = r.status === "active" ? "ok"
                        : r.status === "deleted" || r.status === "deactivated" ? "danger" : "warn";
-      return "<tr>" +
-        "<td>" + escapeHtml(r.full_name) + "</td>" +
-        "<td>" + escapeHtml(r.mailbox || "—") + "</td>" +
-        '<td><span class="ad-pill ' + planPill + '">' + PLAN_LABEL[r.plan] + "</span></td>" +
-        '<td><span class="ad-pill ' + statusPill + '">' + (STATUS_LABEL[r.status] || r.status) + "</span></td>" +
-        "<td>" + (r.license_expires_at || "—") + "</td>" +
-        '<td style="' + leftStyle + '">' + left + "</td>" +
+      return '<tr>' +
+        '<td>' + escapeHtml(r.full_name) + '</td>' +
+        '<td>' + escapeHtml(r.mailbox || "—") + '</td>' +
+        '<td><span class="ad-pill ' + planPill + '">' + PLAN_LABEL[r.plan] + '</span></td>' +
+        '<td><span class="ad-pill ' + statusPill + '">' + (STATUS_LABEL[r.status] || r.status) + '</span></td>' +
+        '<td>' + (r.license_expires_at || "—") + '</td>' +
+        '<td style="' + leftStyle + '">' + left + '</td>' +
         '<td><button class="ad-btn ad-btn-sm" data-edit="' + escapeHtml(r.user_id) + '">Manage</button></td>' +
-      "</tr>";
+      '</tr>';
     }).join("");
 
     document.getElementById("ad-empty").classList.toggle("ad-hidden", shown.length > 0);
@@ -269,13 +272,14 @@
       { n: gone, l: "expired", bad: gone > 0 },
     ].map(s =>
       '<div class="ad-stat">' +
-        '<div class="ad-stat-label">' + s.l + "</div>" +
+        '<div class="ad-stat-label">' + s.l + '</div>' +
         '<div class="ad-stat-value" style="' +
           (s.bad ? "color:var(--ad-danger);" : s.warn ? "color:var(--ad-warn);" : "") +
-        '">' + s.n + "</div>" +
-      "</div>"
+        '">' + s.n + '</div>' +
+      '</div>'
     ).join("");
   }
+
   function openEditor(userId) {
     clearMessage("ad-form-msg");
     const r = rows.find(x => x.user_id === userId);
