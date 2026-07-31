@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Campaigns — Sahaba Club Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+<style>
+  .cp-steps { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+  .cp-step { flex: 1; min-width: 140px; padding: 10px 13px; border-radius: 9px;
+             border: 1px solid var(--ad-line); background: var(--ad-panel); }
+  .cp-step-n { font-size: 11px; color: var(--ad-text-3); text-transform: uppercase; letter-spacing: 0.04em; }
+  .cp-step-t { font-size: 13.5px; font-weight: 600; margin-top: 3px; }
+  .cp-step.is-on { border-color: var(--ad-violet); background: var(--ad-panel-2); }
+
+  .cp-draft { border: 1px solid var(--ad-line); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .cp-draft-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .cp-draft-to { font-size: 13.5px; font-weight: 600; }
+  .cp-draft-addr { font-size: 12px; color: var(--ad-text-3); }
+  .cp-subject { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+  .cp-body { font-size: 13.5px; line-height: 1.7; white-space: pre-wrap; color: var(--ad-text-2);
+             max-height: 190px; overflow: hidden; position: relative; }
+  .cp-body.is-open { max-height: none; }
+  .cp-why { font-size: 12px; color: var(--ad-text-3); margin-top: 10px; font-style: italic; }
+  .cp-draft-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .cp-edit { width: 100%; min-height: 210px; font-family: inherit; font-size: 13.5px; line-height: 1.7; }
+  .cp-progress { height: 6px; border-radius: 999px; background: var(--ad-line); overflow: hidden; margin: 10px 0 4px; }
+  .cp-progress span { display: block; height: 100%; width: 0; transition: width 0.3s;
+                      background: linear-gradient(135deg, var(--ad-violet), var(--ad-cyan)); }
+</style>
+</head>
+<body>
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>Campaigns</h1>
+      <p>Write the brief once. Every person gets their own letter, built from their own history with the club — then you read each one before it goes.</p>
+    </div>
+
+    <!-- ============ list ============ -->
+    <section id="cp-list-view">
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <strong>All campaigns</strong>
+          <button class="ad-btn ad-btn-primary ad-btn-sm" id="cp-new">New campaign</button>
+        </div>
+        <table class="ad-table" id="cp-table">
+          <thead>
+            <tr>
+              <th>Name</th><th>Status</th><th>People</th><th>Written</th>
+              <th>Approved</th><th>Sent</th><th>Created</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p class="ad-empty ad-hidden" id="cp-empty">No campaigns yet. The first one is a good way to reach the people who came to an event and never heard from us again.</p>
+      </div>
+    </section>
+
+    <!-- ============ one campaign ============ -->
+    <section id="cp-detail-view" class="ad-hidden">
+      <div class="ad-panel-head" style="padding-left:0;">
+        <button class="ad-btn ad-btn-sm" id="cp-back">&larr; All campaigns</button>
+        <strong id="cp-title"></strong>
+        <span class="ad-pill" id="cp-status"></span>
+      </div>
+
+      <div class="cp-steps">
+        <div class="cp-step" id="cp-s1"><div class="cp-step-n">Step 1</div><div class="cp-step-t">Brief &amp; audience</div></div>
+        <div class="cp-step" id="cp-s2"><div class="cp-step-n">Step 2</div><div class="cp-step-t">Write the drafts</div></div>
+        <div class="cp-step" id="cp-s3"><div class="cp-step-n">Step 3</div><div class="cp-step-t">Read &amp; approve</div></div>
+        <div class="cp-step" id="cp-s4"><div class="cp-step-n">Step 4</div><div class="cp-step-t">Send</div></div>
+      </div>
+
+      <div class="ad-stats" id="cp-stats"></div>
+
+      <!-- brief -->
+      <div class="ad-panel">
+        <div class="ad-panel-head"><strong>What do you want to say?</strong></div>
+
+        <div class="ad-field">
+          <label for="cp-name">Campaign name <span class="ad-hint">for you, never shown to anyone</span></label>
+          <input type="text" id="cp-name" placeholder="September bootcamp — past attendees">
+        </div>
+
+        <div class="ad-field">
+          <label for="cp-brief">The brief</label>
+          <textarea id="cp-brief" rows="5" placeholder="Invite them to the AI Agents bootcamp on 20 September in Dubai. Mention that Sahaba Club members get Microsoft 365 Cloud Licenses. Ask them to reply if they'd like to bring a colleague."></textarea>
+          <span class="ad-hint">Say it as you'd say it to a colleague. Each email gets written from this plus what we know about that person.</span>
+        </div>
+
+        <div class="ad-field">
+          <label for="cp-must">Must appear word for word <span class="ad-hint">optional</span></label>
+          <textarea id="cp-must" rows="2" placeholder="Saturday 20 September, 10:00–16:00, Dubai Internet City. Register: https://sahabaclub.ai/events"></textarea>
+          <span class="ad-hint">Dates, prices and links go here — these are reproduced exactly and never reworded.</span>
+        </div>
+
+        <div class="ad-row-2">
+          <div class="ad-field">
+            <label for="cp-tone">Tone</label>
+            <select id="cp-tone">
+              <option value="warm">Warm</option>
+              <option value="formal">Formal</option>
+              <option value="brief">Brief</option>
+              <option value="enthusiastic">Enthusiastic</option>
+            </select>
+          </div>
+          <div class="ad-field">
+            <label for="cp-lang">Language</label>
+            <select id="cp-lang">
+              <option value="en">English</option>
+              <option value="ar">Arabic</option>
+              <option value="match">Match the person</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="ad-row-2">
+          <div class="ad-field">
+            <label for="cp-from-name">From name</label>
+            <input type="text" id="cp-from-name" value="Sahaba Club">
+          </div>
+          <div class="ad-field">
+            <label for="cp-from-email">From address</label>
+            <input type="email" id="cp-from-email" value="membership@sahabaclub.com">
+          </div>
+        </div>
+
+        <div class="ad-field">
+          <label for="cp-reply">Reply-to <span class="ad-hint">optional — where replies should land</span></label>
+          <input type="email" id="cp-reply" placeholder="ahmed@sahabaclub.com">
+        </div>
+
+        <div class="ad-modal-actions">
+          <button class="ad-btn ad-btn-primary" id="cp-save">Save</button>
+        </div>
+        <div id="cp-save-msg"></div>
+      </div>
+
+      <!-- audience -->
+      <div class="ad-panel">
+        <div class="ad-panel-head"><strong>Who is it going to?</strong></div>
+
+        <div class="ad-row-2">
+          <div class="ad-field">
+            <label for="cp-seg">Segment</label>
+            <select id="cp-seg">
+              <option value="warm">Warm — 2 or more engagements</option>
+              <option value="all">Everyone mailable</option>
+              <option value="event">Everyone from one event</option>
+              <option value="country">Everyone in one country</option>
+              <option value="unlinked_mailbox">Has a mailbox but never joined the site</option>
+              <option value="never_emailed">Never emailed before</option>
+            </select>
+          </div>
+          <div class="ad-field" id="cp-seg-value-wrap" style="display:none;">
+            <label for="cp-seg-value">Which one</label>
+            <select id="cp-seg-value"></select>
+          </div>
+        </div>
+
+        <p class="ad-hint" id="cp-seg-count">—</p>
+
+        <div class="ad-modal-actions">
+          <button class="ad-btn" id="cp-preview-seg">Count them</button>
+          <button class="ad-btn ad-btn-primary" id="cp-resolve">Add these people to the campaign</button>
+        </div>
+        <div id="cp-seg-msg"></div>
+      </div>
+
+      <!-- generate -->
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <strong>Write the drafts</strong>
+          <span class="ad-cell-dim" id="cp-gen-state"></span>
+        </div>
+        <div class="cp-progress"><span id="cp-gen-bar"></span></div>
+        <p class="ad-hint">Written in small batches so you can stop and look at the first few before spending on the rest. Nothing is sent at this stage.</p>
+        <div class="ad-modal-actions">
+          <button class="ad-btn ad-btn-primary" id="cp-gen">Write the next batch</button>
+          <button class="ad-btn" id="cp-gen-all">Keep going until done</button>
+          <button class="ad-btn" id="cp-gen-stop" disabled>Stop</button>
+        </div>
+        <div id="cp-gen-msg"></div>
+      </div>
+
+      <!-- review -->
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <strong>Read and approve</strong>
+          <select class="ad-search" id="cp-filter" style="min-width:auto;">
+            <option value="generated">Waiting for you</option>
+            <option value="approved">Approved</option>
+            <option value="sent">Sent</option>
+            <option value="failed">Failed</option>
+            <option value="skipped">Skipped</option>
+            <option value="pending">Not written yet</option>
+            <option value="">Everyone</option>
+          </select>
+          <button class="ad-btn ad-btn-sm" id="cp-approve-page">Approve all shown</button>
+        </div>
+        <div id="cp-drafts"></div>
+        <p class="ad-empty ad-hidden" id="cp-drafts-empty">Nothing here.</p>
+        <div class="ad-panel-head" id="cp-more-wrap" style="justify-content:center;">
+          <button class="ad-btn" id="cp-more">Show more</button>
+        </div>
+      </div>
+
+      <!-- send -->
+      <div class="ad-panel">
+        <div class="ad-panel-head"><strong>Send</strong></div>
+        <p class="ad-hint" id="cp-send-summary">—</p>
+        <div class="cp-progress"><span id="cp-send-bar"></span></div>
+        <div class="ad-modal-actions">
+          <button class="ad-btn" id="cp-test">Send one to me first</button>
+          <button class="ad-btn ad-btn-primary" id="cp-send">Send the approved ones</button>
+          <button class="ad-btn" id="cp-send-stop" disabled>Stop</button>
+        </div>
+        <div id="cp-send-msg"></div>
+      </div>
+    </section>
+
+    <div id="ad-msg"></div>
+  </main>
+</div>
+
+<!-- confirm before anything leaves the building -->
+<div class="ad-modal-back ad-hidden" id="cp-confirm-back">
+  <div class="ad-modal">
+    <h2>Send for real?</h2>
+    <p class="ad-modal-sub" id="cp-confirm-sub"></p>
+    <p class="ad-hint">These go out from membership@sahabaclub.com to people's personal addresses. There is no recall.</p>
+    <div class="ad-field">
+      <label for="cp-confirm-word">Type <strong>SEND</strong> to confirm</label>
+      <input type="text" id="cp-confirm-word" autocomplete="off" placeholder="SEND">
+    </div>
+    <div class="ad-modal-actions">
+      <button class="ad-btn ad-btn-primary" id="cp-confirm-go" disabled>Send</button>
+      <button class="ad-btn" id="cp-confirm-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase } from "../../lib/supabase-client.js";
+  import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
+    from "../../lib/admin-guard.js";
+
+  const user = await requireStaff();
+  renderShell(user, "campaigns.html");
+
+  let campaigns = [];
+  let campaign = null;
+  let drafts = [];
+  let limit = 25;
+  let stopFlag = false;
+
+  const el = (id) => document.getElementById(id);
+
+  // ---------------------------------------------------------- list
+
+  async function loadCampaigns() {
+    const { data, error } = await supabase
+      .from("campaigns")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      showMessage("ad-msg", "Couldn't load campaigns: " + error.message
+        + " — has migration 0011 been run?", "err");
+      return;
+    }
+    campaigns = data || [];
+
+    const STATUS_PILL = {
+      draft: "", generating: "warn", review: "warn",
+      sending: "warn", sent: "ok", cancelled: "danger",
+    };
+
+    el("cp-table").querySelector("tbody").innerHTML = campaigns.map(c =>
+      '<tr>' +
+        '<td>' + escapeHtml(c.name) + '</td>' +
+        '<td><span class="ad-pill ' + (STATUS_PILL[c.status] || "") + '">' + c.status + '</span></td>' +
+        '<td>' + c.recipient_count + '</td>' +
+        '<td>' + c.generated_count + '</td>' +
+        '<td>' + c.approved_count + '</td>' +
+        '<td>' + c.sent_count + (c.failed_count ? ' <span class="ad-pill danger">' + c.failed_count + ' failed</span>' : '') + '</td>' +
+        '<td>' + formatDate(c.created_at) + '</td>' +
+        '<td><button class="ad-btn ad-btn-sm" data-open="' + escapeHtml(c.id) + '">Open</button></td>' +
+      '</tr>'
+    ).join("");
+
+    el("cp-empty").classList.toggle("ad-hidden", campaigns.length > 0);
+    document.querySelectorAll("[data-open]").forEach(b =>
+      b.addEventListener("click", () => openCampaign(b.getAttribute("data-open"))));
+  }
+
+  el("cp-new").addEventListener("click", async () => {
+    const { data, error } = await supabase.from("campaigns")
+      .insert({ name: "Untitled campaign", created_by: user.userId })
+      .select().single();
+    if (error) { showMessage("ad-msg", error.message, "err"); return; }
+    campaigns.unshift(data);
+    openCampaign(data.id);
+  });
+
+  el("cp-back").addEventListener("click", async () => {
+    stopFlag = true;
+    campaign = null;
+    el("cp-detail-view").classList.add("ad-hidden");
+    el("cp-list-view").classList.remove("ad-hidden");
+    await loadCampaigns();
+  });
+
+  // ---------------------------------------------------------- one campaign
+
+  async function openCampaign(id) {
+    const { data, error } = await supabase.from("campaigns").select("*").eq("id", id).maybeSingle();
+    if (error || !data) { showMessage("ad-msg", "Couldn't open that campaign.", "err"); return; }
+    campaign = data;
+
+    el("cp-list-view").classList.add("ad-hidden");
+    el("cp-detail-view").classList.remove("ad-hidden");
+
+    el("cp-title").textContent = data.name;
+    el("cp-name").value = data.name;
+    el("cp-brief").value = data.brief || "";
+    el("cp-must").value = data.must_include || "";
+    el("cp-tone").value = data.tone;
+    el("cp-lang").value = data.language;
+    el("cp-from-name").value = data.from_name;
+    el("cp-from-email").value = data.from_email;
+    el("cp-reply").value = data.reply_to || "";
+    if (data.segment?.kind) {
+      el("cp-seg").value = data.segment.kind;
+      onSegChange();
+      if (data.segment.value) el("cp-seg-value").value = data.segment.value;
+    }
+
+    await loadSegmentOptions();
+    await refresh();
+  }
+
+  async function refresh() {
+    if (!campaign) return;
+    const { data } = await supabase.from("campaigns").select("*").eq("id", campaign.id).maybeSingle();
+    if (data) campaign = data;
+
+    const STATUS_PILL = {
+      draft: "", generating: "warn", review: "warn",
+      sending: "warn", sent: "ok", cancelled: "danger",
+    };
+    el("cp-status").className = "ad-pill " + (STATUS_PILL[campaign.status] || "");
+    el("cp-status").textContent = campaign.status;
+
+    el("cp-stats").innerHTML = [
+      { l: "people", v: campaign.recipient_count },
+      { l: "written", v: campaign.generated_count },
+      { l: "approved", v: campaign.approved_count },
+      { l: "sent", v: campaign.sent_count },
+      { l: "failed", v: campaign.failed_count, warn: campaign.failed_count > 0 },
+    ].map(s =>
+      '<div class="ad-stat"><div class="ad-stat-label">' + s.l + '</div>' +
+      '<div class="ad-stat-value"' + (s.warn ? ' style="color:var(--ad-danger);"' : '') + '>' + s.v + '</div></div>'
+    ).join("");
+
+    const total = campaign.recipient_count || 0;
+    el("cp-gen-bar").style.width = total ? Math.round(campaign.generated_count / total * 100) + "%" : "0";
+    el("cp-send-bar").style.width = campaign.approved_count
+      ? Math.round(campaign.sent_count / (campaign.approved_count + campaign.sent_count || 1) * 100) + "%" : "0";
+
+    const notWritten = total - campaign.generated_count;
+    el("cp-gen-state").textContent = total === 0
+      ? "no one added yet"
+      : notWritten > 0 ? notWritten + " still to write" : "all written";
+
+    el("cp-send-summary").textContent = campaign.approved_count > 0
+      ? campaign.approved_count + " approved and ready to send."
+      : "Nothing approved yet — approve some drafts above first.";
+
+    el("cp-s1").classList.toggle("is-on", !campaign.brief || total === 0);
+    el("cp-s2").classList.toggle("is-on", total > 0 && notWritten > 0);
+    el("cp-s3").classList.toggle("is-on", notWritten === 0 && total > 0 && campaign.approved_count < campaign.generated_count);
+    el("cp-s4").classList.toggle("is-on", campaign.approved_count > 0);
+
+    await loadDrafts();
+  }
+
+  el("cp-save").addEventListener("click", async () => {
+    clearMessage("cp-save-msg");
+    const payload = {
+      name: el("cp-name").value.trim() || "Untitled campaign",
+      brief: el("cp-brief").value.trim(),
+      must_include: el("cp-must").value.trim() || null,
+      tone: el("cp-tone").value,
+      language: el("cp-lang").value,
+      from_name: el("cp-from-name").value.trim() || "Sahaba Club",
+      from_email: el("cp-from-email").value.trim() || "membership@sahabaclub.com",
+      reply_to: el("cp-reply").value.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from("campaigns").update(payload).eq("id", campaign.id);
+    if (error) { showMessage("cp-save-msg", error.message, "err"); return; }
+    el("cp-title").textContent = payload.name;
+    showMessage("cp-save-msg", "Saved.", "ok");
+    await refresh();
+  });
+
+  // ---------------------------------------------------------- audience
+
+  function onSegChange() {
+    const kind = el("cp-seg").value;
+    el("cp-seg-value-wrap").style.display = (kind === "event" || kind === "country") ? "" : "none";
+  }
+  el("cp-seg").addEventListener("change", () => { onSegChange(); loadSegmentOptions(); });
+
+  async function loadSegmentOptions() {
+    const kind = el("cp-seg").value;
+    const sel = el("cp-seg-value");
+    if (kind === "event") {
+      const { data } = await supabase.from("contact_engagements").select("event_name").limit(5000);
+      const names = [...new Set((data || []).map(d => d.event_name).filter(Boolean))].sort();
+      sel.innerHTML = names.map(n => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join("");
+    } else if (kind === "country") {
+      const { data } = await supabase.from("marketing_contacts").select("country").limit(2000);
+      const names = [...new Set((data || []).map(d => d.country).filter(Boolean))].sort();
+      sel.innerHTML = names.map(n => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join("");
+    }
+  }
+
+  // The mailable rule lives in one place. Every path that builds an audience
+  // goes through this, so there is no route by which someone who unsubscribed
+  // ends up on a list.
+  function mailableQuery() {
+    return supabase.from("marketing_contacts")
+      .select("id, email, full_name, engagement_count, last_emailed_at, country")
+      .eq("email_valid", true)
+      .eq("is_test", false)
+      .is("unsubscribed_at", null)
+      .is("bounced_at", null);
+  }
+
+  async function resolveSegment() {
+    const kind = el("cp-seg").value;
+    const value = el("cp-seg-value").value;
+
+    if (kind === "event") {
+      const { data: engs, error } = await supabase.from("contact_engagements")
+        .select("contact_id").eq("event_name", value).limit(5000);
+      if (error) throw error;
+      const ids = [...new Set((engs || []).map(e => e.contact_id))];
+      if (!ids.length) return [];
+      const { data, error: e2 } = await mailableQuery().in("id", ids);
+      if (e2) throw e2;
+      return data || [];
+    }
+
+    let q = mailableQuery();
+    if (kind === "warm") q = q.gte("engagement_count", 2);
+    else if (kind === "country") q = q.eq("country", value);
+    else if (kind === "unlinked_mailbox") q = q.not("sahaba_mailbox", "is", null).is("linked_user_id", null);
+    else if (kind === "never_emailed") q = q.is("last_emailed_at", null);
+
+    const { data, error } = await q.limit(2000);
+    if (error) throw error;
+    return data || [];
+  }
+
+  el("cp-preview-seg").addEventListener("click", async () => {
+    clearMessage("cp-seg-msg");
+    try {
+      const people = await resolveSegment();
+      el("cp-seg-count").textContent = people.length +
+        " mailable " + (people.length === 1 ? "person" : "people") +
+        " match. Unsubscribed, bounced, invalid and test records are already excluded.";
+    } catch (err) {
+      showMessage("cp-seg-msg", String(err.message || err), "err");
+    }
+  });
+
+  el("cp-resolve").addEventListener("click", async () => {
+    clearMessage("cp-seg-msg");
+    const btn = el("cp-resolve");
+    btn.disabled = true;
+    try {
+      const people = await resolveSegment();
+      if (!people.length) {
+        showMessage("cp-seg-msg", "Nobody matches that segment.", "warn");
+        return;
+      }
+
+      // upsert, not insert: the unique index means re-adding an overlapping
+      // segment tops the list up rather than erroring or duplicating.
+      const rows = people.map(p => ({
+        campaign_id: campaign.id,
+        contact_id: p.id,
+        email: p.email,
+        full_name: p.full_name,
+      }));
+
+      for (let i = 0; i < rows.length; i += 500) {
+        const { error } = await supabase.from("campaign_recipients")
+          .upsert(rows.slice(i, i + 500), { onConflict: "campaign_id,contact_id", ignoreDuplicates: true });
+        if (error) throw error;
+      }
+
+      await supabase.from("campaigns").update({
+        segment: { kind: el("cp-seg").value, value: el("cp-seg-value").value || null },
+        updated_at: new Date().toISOString(),
+      }).eq("id", campaign.id);
+
+      showMessage("cp-seg-msg", "Added " + rows.length + " people.", "ok");
+      await refresh();
+    } catch (err) {
+      showMessage("cp-seg-msg", String(err.message || err), "err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ---------------------------------------------------------- generate
+
+  async function generateBatch() {
+    const { data, error } = await supabase.functions.invoke("write-contact-email", {
+      body: { campaignId: campaign.id, limit: 8 },
+    });
+    if (error) throw new Error(await readFnError(error));
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+
+  el("cp-gen").addEventListener("click", async () => {
+    clearMessage("cp-gen-msg");
+    const btn = el("cp-gen");
+    btn.disabled = true;
+    showMessage("cp-gen-msg", "Writing…", "info");
+    try {
+      const r = await generateBatch();
+      showMessage("cp-gen-msg",
+        r.written + " written" + (r.failed ? ", " + r.failed + " failed" : "") +
+        (r.skipped ? ", " + r.skipped + " skipped" : "") +
+        ". " + r.remaining + " to go.", r.failed ? "warn" : "ok");
+      await refresh();
+    } catch (err) {
+      showMessage("cp-gen-msg", String(err.message || err), "err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  el("cp-gen-all").addEventListener("click", async () => {
+    clearMessage("cp-gen-msg");
+    stopFlag = false;
+    el("cp-gen").disabled = true;
+    el("cp-gen-all").disabled = true;
+    el("cp-gen-stop").disabled = false;
+    let total = 0;
+    try {
+      for (;;) {
+        if (stopFlag) { showMessage("cp-gen-msg", "Stopped after " + total + ".", "warn"); break; }
+        const r = await generateBatch();
+        total += r.written;
+        showMessage("cp-gen-msg", total + " written so far, " + r.remaining + " to go…", "info");
+        await refresh();
+        if (r.done) { showMessage("cp-gen-msg", "All written — " + total + " drafts.", "ok"); break; }
+      }
+    } catch (err) {
+      showMessage("cp-gen-msg", "Stopped: " + String(err.message || err), "err");
+    } finally {
+      el("cp-gen").disabled = false;
+      el("cp-gen-all").disabled = false;
+      el("cp-gen-stop").disabled = true;
+    }
+  });
+
+  el("cp-gen-stop").addEventListener("click", () => { stopFlag = true; });
+
+  // ---------------------------------------------------------- review
+
+  async function loadDrafts() {
+    const status = el("cp-filter").value;
+    let q = supabase.from("campaign_recipients")
+      .select("*")
+      .eq("campaign_id", campaign.id)
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+    if (status) q = q.eq("status", status);
+
+    const { data, error } = await q;
+    if (error) { showMessage("ad-msg", error.message, "err"); return; }
+    drafts = data || [];
+    renderDrafts();
+  }
+
+  function renderDrafts() {
+    const STATUS_PILL = {
+      pending: "", generated: "warn", approved: "ok",
+      sending: "warn", sent: "ok", failed: "danger", skipped: "",
+    };
+
+    el("cp-drafts").innerHTML = drafts.map(d => {
+      const why = d.context_used?.personalisation_note;
+      return '<div class="cp-draft" data-id="' + escapeHtml(d.id) + '">' +
+        '<div class="cp-draft-head">' +
+          '<span class="cp-draft-to">' + escapeHtml(d.full_name || "(no name)") + '</span>' +
+          '<span class="cp-draft-addr">' + escapeHtml(d.email) + '</span>' +
+          '<span class="ad-pill ' + (STATUS_PILL[d.status] || "") + '">' + d.status + '</span>' +
+          (d.edited ? '<span class="ad-pill">edited</span>' : '') +
+        '</div>' +
+        (d.error ? '<p class="ad-hint" style="color:var(--ad-danger);">' + escapeHtml(d.error) + '</p>' : '') +
+        (d.subject
+          ? '<div class="cp-subject">' + escapeHtml(d.subject) + '</div>' +
+            '<div class="cp-body" data-body>' + escapeHtml(d.body_text || "") + '</div>' +
+            (why ? '<div class="cp-why">Used: ' + escapeHtml(why) + '</div>' : '')
+          : '<p class="ad-cell-dim">Not written yet.</p>') +
+        '<div class="cp-draft-actions">' +
+          (d.subject ? '<button class="ad-btn ad-btn-sm" data-act="expand">Show all</button>' : '') +
+          (d.status === "generated" || d.status === "approved"
+            ? '<button class="ad-btn ad-btn-sm" data-act="edit">Edit</button>' : '') +
+          (d.status === "generated"
+            ? '<button class="ad-btn ad-btn-sm ad-btn-primary" data-act="approve">Approve</button>' : '') +
+          (d.status === "approved"
+            ? '<button class="ad-btn ad-btn-sm" data-act="unapprove">Un-approve</button>' : '') +
+          (d.status !== "sent"
+            ? '<button class="ad-btn ad-btn-sm" data-act="rewrite">Rewrite</button>' +
+              '<button class="ad-btn ad-btn-sm" data-act="skip">Skip this person</button>' : '') +
+        '</div>' +
+      '</div>';
+    }).join("");
+
+    el("cp-drafts-empty").classList.toggle("ad-hidden", drafts.length > 0);
+    el("cp-more-wrap").style.display = drafts.length >= limit ? "" : "none";
+
+    document.querySelectorAll(".cp-draft [data-act]").forEach(b => {
+      b.addEventListener("click", () => draftAction(
+        b.closest(".cp-draft").getAttribute("data-id"), b.getAttribute("data-act"), b));
+    });
+  }
+
+  async function draftAction(id, act, btn) {
+    const card = document.querySelector('.cp-draft[data-id="' + id + '"]');
+    const d = drafts.find(x => x.id === id);
+    if (!d) return;
+
+    if (act === "expand") {
+      const body = card.querySelector("[data-body]");
+      const open = body.classList.toggle("is-open");
+      btn.textContent = open ? "Show less" : "Show all";
+      return;
+    }
+
+    if (act === "edit") {
+      // Swap the rendered draft for a textarea in place. Saving marks the row
+      // edited, which is what stops a later bulk regeneration overwriting it.
+      const body = card.querySelector("[data-body]");
+      const subject = card.querySelector(".cp-subject");
+      if (card.querySelector("[data-editing]")) return;
+
+      const wrap = document.createElement("div");
+      wrap.setAttribute("data-editing", "1");
+      wrap.innerHTML =
+        '<div class="ad-field"><label>Subject</label><input type="text" data-ed-subject></div>' +
+        '<div class="ad-field"><label>Message</label><textarea class="cp-edit" data-ed-body></textarea></div>' +
+        '<div class="cp-draft-actions">' +
+          '<button class="ad-btn ad-btn-sm ad-btn-primary" data-ed-save>Save</button>' +
+          '<button class="ad-btn ad-btn-sm" data-ed-cancel>Cancel</button>' +
+        '</div>';
+      wrap.querySelector("[data-ed-subject]").value = d.subject || "";
+      wrap.querySelector("[data-ed-body]").value = d.body_text || "";
+      subject.style.display = "none";
+      body.style.display = "none";
+      body.after(wrap);
+
+      wrap.querySelector("[data-ed-cancel]").addEventListener("click", () => {
+        wrap.remove(); subject.style.display = ""; body.style.display = "";
+      });
+      wrap.querySelector("[data-ed-save]").addEventListener("click", async () => {
+        const { error } = await supabase.from("campaign_recipients").update({
+          subject: wrap.querySelector("[data-ed-subject]").value,
+          body_text: wrap.querySelector("[data-ed-body]").value,
+          edited: true,
+          updated_at: new Date().toISOString(),
+        }).eq("id", id);
+        if (error) { showMessage("ad-msg", error.message, "err"); return; }
+        await loadDrafts();
+      });
+      return;
+    }
+
+    btn.disabled = true;
+    let patch = null;
+
+    if (act === "approve") {
+      patch = { status: "approved", approved_by: user.userId, approved_at: new Date().toISOString() };
+    } else if (act === "unapprove") {
+      patch = { status: "generated", approved_by: null, approved_at: null };
+    } else if (act === "skip") {
+      patch = { status: "skipped", error: "Skipped by " + (user.fullName || user.email) };
+    } else if (act === "rewrite") {
+      showMessage("ad-msg", "Rewriting…", "info");
+      const { data, error } = await supabase.functions.invoke("write-contact-email", {
+        body: { campaignId: campaign.id, recipientIds: [id] },
+      });
+      btn.disabled = false;
+      if (error || data?.error) {
+        showMessage("ad-msg", data?.error || await readFnError(error), "err");
+        return;
+      }
+      clearMessage("ad-msg");
+      await refresh();
+      return;
+    }
+
+    if (patch) {
+      patch.updated_at = new Date().toISOString();
+      const { error } = await supabase.from("campaign_recipients").update(patch).eq("id", id);
+      btn.disabled = false;
+      if (error) { showMessage("ad-msg", error.message, "err"); return; }
+      await refresh();
+    }
+  }
+
+  el("cp-filter").addEventListener("change", () => { limit = 25; loadDrafts(); });
+  el("cp-more").addEventListener("click", () => { limit += 25; loadDrafts(); });
+
+  el("cp-approve-page").addEventListener("click", async () => {
+    const ids = drafts.filter(d => d.status === "generated").map(d => d.id);
+    if (!ids.length) { showMessage("ad-msg", "Nothing shown is waiting for approval.", "warn"); return; }
+    if (!confirm("Approve " + ids.length + " drafts? You can still un-approve them before sending.")) return;
+    const { error } = await supabase.from("campaign_recipients").update({
+      status: "approved", approved_by: user.userId,
+      approved_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+    }).in("id", ids);
+    if (error) { showMessage("ad-msg", error.message, "err"); return; }
+    await refresh();
+  });
+
+  // ---------------------------------------------------------- send
+
+  el("cp-test").addEventListener("click", async () => {
+    clearMessage("cp-send-msg");
+    const btn = el("cp-test");
+    btn.disabled = true;
+    const { data, error } = await supabase.functions.invoke("send-campaign", {
+      body: { campaignId: campaign.id, test: true },
+    });
+    btn.disabled = false;
+    if (error || data?.error) {
+      showMessage("cp-send-msg", data?.error || await readFnError(error), "err");
+      return;
+    }
+    showMessage("cp-send-msg", "Test sent to " + data.to + ".", "ok");
+  });
+
+  // Typing SEND is the last gate. Everything up to here is reversible; this
+  // is the step that is not.
+  const confirmBack = el("cp-confirm-back");
+  el("cp-send").addEventListener("click", () => {
+    if (!campaign.approved_count) {
+      showMessage("cp-send-msg", "Nothing is approved yet.", "warn");
+      return;
+    }
+    el("cp-confirm-sub").textContent =
+      campaign.approved_count + " approved " +
+      (campaign.approved_count === 1 ? "email" : "emails") + " will be sent now.";
+    el("cp-confirm-word").value = "";
+    el("cp-confirm-go").disabled = true;
+    confirmBack.classList.remove("ad-hidden");
+    el("cp-confirm-word").focus();
+  });
+
+  el("cp-confirm-word").addEventListener("input", (e) => {
+    el("cp-confirm-go").disabled = e.target.value.trim().toUpperCase() !== "SEND";
+  });
+  el("cp-confirm-cancel").addEventListener("click", () => confirmBack.classList.add("ad-hidden"));
+  confirmBack.addEventListener("click", e => { if (e.target === confirmBack) confirmBack.classList.add("ad-hidden"); });
+
+  el("cp-confirm-go").addEventListener("click", async () => {
+    confirmBack.classList.add("ad-hidden");
+    stopFlag = false;
+    el("cp-send").disabled = true;
+    el("cp-send-stop").disabled = false;
+    let total = 0;
+    try {
+      for (;;) {
+        if (stopFlag) { showMessage("cp-send-msg", "Stopped after " + total + " sent.", "warn"); break; }
+        const { data, error } = await supabase.functions.invoke("send-campaign", {
+          body: { campaignId: campaign.id, limit: 25 },
+        });
+        if (error) throw new Error(await readFnError(error));
+        if (data?.error) throw new Error(data.error);
+        total += data.sent;
+        showMessage("cp-send-msg", total + " sent, " + data.remaining + " to go…", "info");
+        await refresh();
+        if (data.done) { showMessage("cp-send-msg", "Done — " + total + " sent.", "ok"); break; }
+      }
+    } catch (err) {
+      showMessage("cp-send-msg", "Stopped: " + String(err.message || err), "err");
+    } finally {
+      el("cp-send").disabled = false;
+      el("cp-send-stop").disabled = true;
+    }
+  });
+
+  el("cp-send-stop").addEventListener("click", () => { stopFlag = true; });
+
+  // supabase-js wraps a non-2xx Edge Function reply in a FunctionsHttpError
+  // whose message is just "non-2xx status" — the useful text is in the body.
+  async function readFnError(error) {
+    try {
+      const body = await error?.context?.json();
+      if (body?.error) return body.error;
+    } catch (e) {}
+    return error?.message || "Something went wrong.";
+  }
+
+  await loadCampaigns();
+</script>
+</body>
+</html>

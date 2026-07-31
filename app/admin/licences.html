@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Microsoft 365 — Sahaba Club Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>Microsoft 365 licences</h1>
+      <p>Every mailbox the club pays for, what keeps it alive, and when it ends.</p>
+    </div>
+
+    <!-- Counts first: the question this page gets opened for is usually
+         "how many are about to lapse", not "show me everyone". -->
+    <div class="ad-stats" id="ad-stats"></div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <input type="search" class="ad-search" id="ad-q" placeholder="Search name or mailbox…">
+        <select class="ad-search" id="ad-plan" style="min-width:auto;">
+          <option value="all">All plans</option>
+          <option value="trial">Trial</option>
+          <option value="lifetime">Lifetime</option>
+          <option value="premium">Premium</option>
+        </select>
+        <select class="ad-search" id="ad-when" style="min-width:auto;">
+          <option value="all">Any expiry</option>
+          <option value="14">Expiring in 14 days</option>
+          <option value="30">Expiring in 30 days</option>
+          <option value="expired">Already expired</option>
+        </select>
+        <span class="ad-cell-dim" id="ad-count"></span>
+      </div>
+
+      <table class="ad-table" id="ad-list">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Mailbox</th>
+            <th>Plan</th>
+            <th>Status</th>
+            <th>Ends</th>
+            <th>Left</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p class="ad-empty ad-hidden" id="ad-empty">No mailboxes match.</p>
+    </div>
+
+    <div id="ad-msg"></div>
+  </main>
+</div>
+<!-- Editor -->
+<div class="ad-modal-back ad-hidden" id="ad-modal-back">
+  <div class="ad-modal">
+    <h2 id="ad-modal-title">Licence</h2>
+    <p class="ad-modal-sub" id="ad-modal-sub"></p>
+
+    <form id="ad-form">
+      <input type="hidden" id="f-user">
+
+      <div class="ad-field">
+        <label for="f-plan">Plan</label>
+        <select id="f-plan">
+          <option value="trial">Trial — 3 months, then grace, then deleted</option>
+          <option value="lifetime">Lifetime — active while their membership is</option>
+          <option value="premium">Premium — active while they pay</option>
+        </select>
+        <span class="ad-hint" id="f-plan-hint"></span>
+      </div>
+
+      <div class="ad-row-2">
+        <div class="ad-field">
+          <label for="f-expires">Licence ends</label>
+          <input type="date" id="f-expires">
+          <span class="ad-hint">Trial only. Cleared automatically for lifetime and premium.</span>
+        </div>
+        <div class="ad-field">
+          <label for="f-grace">Grace ends</label>
+          <input type="date" id="f-grace">
+          <span class="ad-hint">Data kept, no sign-in. Deleted after this.</span>
+        </div>
+      </div>
+
+      <div class="ad-field">
+        <label for="f-status">Status</label>
+        <select id="f-status">
+          <option value="provisioning">Setting up</option>
+          <option value="active">Active</option>
+          <option value="grace_unlicensed">Grace — no licence</option>
+          <option value="deactivated">Deactivated</option>
+          <option value="deleted">Deleted</option>
+        </select>
+      </div>
+
+      <div class="ad-field">
+        <label for="f-note">Why (kept on the record)</label>
+        <input type="text" id="f-note" placeholder="e.g. Coach — AI track, or Speaker at GITEX 2026">
+        <span class="ad-hint">Worth filling in for comped accounts. In six months nobody remembers who approved what.</span>
+      </div>
+
+      <div class="ad-modal-actions">
+        <button type="submit" class="ad-btn ad-btn-primary" id="f-save">Save</button>
+        <button type="button" class="ad-btn" id="f-cancel">Cancel</button>
+      </div>
+      <div id="ad-form-msg"></div>
+
+      <p class="ad-hint" style="margin-top:14px;">
+        This changes what Sahaba Club records. Adding or removing the licence inside
+        Microsoft 365 is a separate step until the Graph automation is connected —
+        so if you grant lifetime here, check the licence in the M365 admin centre too.
+      </p>
+    </form>
+  </div>
+</div>
+<script type="module">
+  import { supabase } from "../../lib/supabase-client.js";
+  import { requireStaff, renderShell, escapeHtml, showMessage, clearMessage }
+    from "../../lib/admin-guard.js";
+
+  const user = await requireStaff();
+  renderShell(user, "licences.html");
+
+  const modal = document.getElementById("ad-modal-back");
+  const F = {
+    userId: document.getElementById("f-user"),
+    plan: document.getElementById("f-plan"),
+    expires: document.getElementById("f-expires"),
+    grace: document.getElementById("f-grace"),
+    status: document.getElementById("f-status"),
+    note: document.getElementById("f-note"),
+  };
+
+  let rows = [];
+
+  const PLAN_LABEL = { trial: "Trial", lifetime: "Lifetime", premium: "Premium" };
+  const STATUS_LABEL = {
+    provisioning: "Setting up",
+    active: "Active",
+    grace_unlicensed: "Grace",
+    deactivated: "Deactivated",
+    deleted: "Deleted",
+  };
+
+  function daysLeft(r) {
+    if (r.plan !== "trial" || !r.license_expires_at) return null;
+    return Math.ceil((new Date(r.license_expires_at + "T00:00:00") - new Date()) / 86400000);
+  }
+
+  async function load() {
+    // Two queries rather than a join: profiles is column-restricted, and a
+    // join here would either over-fetch or fight the policies.
+    const [licRes, profRes] = await Promise.all([
+      supabase.from("ms365_accounts")
+        .select("user_id, mailbox, status, plan, license_expires_at, grace_ends_at, pre_existing, granted_note, granted_at"),
+      supabase.from("profiles").select("user_id, full_name"),
+    ]);
+
+    if (licRes.error) {
+      showMessage("ad-msg", "Couldn't load licences: " + licRes.error.message, "err");
+      return;
+    }
+
+    const nameBy = {};
+    (profRes.data || []).forEach(p => { nameBy[p.user_id] = p.full_name; });
+    rows = (licRes.data || []).map(r => ({ ...r, full_name: nameBy[r.user_id] || "—" }));
+    render();
+  }
+  function render() {
+    const q = document.getElementById("ad-q").value.trim().toLowerCase();
+    const plan = document.getElementById("ad-plan").value;
+    const when = document.getElementById("ad-when").value;
+
+    const shown = rows.filter(r => {
+      if (plan !== "all" && r.plan !== plan) return false;
+
+      const d = daysLeft(r);
+      if (when === "expired" && !(d !== null && d <= 0)) return false;
+      if (when === "14" && !(d !== null && d > 0 && d <= 14)) return false;
+      if (when === "30" && !(d !== null && d > 0 && d <= 30)) return false;
+
+      if (q) {
+        const hay = [r.full_name, r.mailbox].filter(Boolean).join(" ").toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+
+    // Soonest to expire first — that is the working order for this page.
+    shown.sort((a, b) => {
+      const da = daysLeft(a), db = daysLeft(b);
+      if (da === null && db === null) return 0;
+      if (da === null) return 1;
+      if (db === null) return -1;
+      return da - db;
+    });
+
+    document.getElementById("ad-count").textContent =
+      shown.length === rows.length ? rows.length + " mailboxes"
+                                   : shown.length + " of " + rows.length;
+
+    const body = document.querySelector("#ad-list tbody");
+    body.innerHTML = shown.map(r => {
+      const d = daysLeft(r);
+      let left = "—";
+      let leftStyle = "";
+      if (d !== null) {
+        if (d <= 0) { left = "expired"; leftStyle = "color:var(--ad-danger);"; }
+        else { left = d + "d"; leftStyle = d <= 14 ? "color:var(--ad-warn);" : ""; }
+      } else if (r.plan !== "trial") {
+        left = "no expiry";
+      }
+      // Reuse the pill variants admin.css already defines rather than adding
+      // a parallel set: lifetime reads like premium (gold), premium like a
+      // paid tier, trial as neutral.
+      const planPill = r.plan === "lifetime" ? "tier-premium"
+                     : r.plan === "premium" ? "role-coach" : "role-member";
+      const statusPill = r.status === "active" ? "ok"
+                       : r.status === "deleted" || r.status === "deactivated" ? "danger" : "warn";
+      return "<tr>" +
+        "<td>" + escapeHtml(r.full_name) + "</td>" +
+        "<td>" + escapeHtml(r.mailbox || "—") + "</td>" +
+        '<td><span class="ad-pill ' + planPill + '">' + PLAN_LABEL[r.plan] + "</span></td>" +
+        '<td><span class="ad-pill ' + statusPill + '">' + (STATUS_LABEL[r.status] || r.status) + "</span></td>" +
+        "<td>" + (r.license_expires_at || "—") + "</td>" +
+        '<td style="' + leftStyle + '">' + left + "</td>" +
+        '<td><button class="ad-btn ad-btn-sm" data-edit="' + escapeHtml(r.user_id) + '">Manage</button></td>' +
+      "</tr>";
+    }).join("");
+
+    document.getElementById("ad-empty").classList.toggle("ad-hidden", shown.length > 0);
+
+    body.querySelectorAll("[data-edit]").forEach(b => {
+      b.addEventListener("click", () => openEditor(b.getAttribute("data-edit")));
+    });
+
+    renderStats();
+  }
+
+  function renderStats() {
+    const total = rows.length;
+    const lifetime = rows.filter(r => r.plan === "lifetime").length;
+    const soon = rows.filter(r => { const d = daysLeft(r); return d !== null && d > 0 && d <= 30; }).length;
+    const gone = rows.filter(r => { const d = daysLeft(r); return d !== null && d <= 0; }).length;
+
+    document.getElementById("ad-stats").innerHTML = [
+      { n: total, l: "mailboxes" },
+      { n: lifetime, l: "lifetime" },
+      { n: soon, l: "expiring in 30 days", warn: soon > 0 },
+      { n: gone, l: "expired", bad: gone > 0 },
+    ].map(s =>
+      '<div class="ad-stat">' +
+        '<div class="ad-stat-label">' + s.l + "</div>" +
+        '<div class="ad-stat-value" style="' +
+          (s.bad ? "color:var(--ad-danger);" : s.warn ? "color:var(--ad-warn);" : "") +
+        '">' + s.n + "</div>" +
+      "</div>"
+    ).join("");
+  }
+  function openEditor(userId) {
+    clearMessage("ad-form-msg");
+    const r = rows.find(x => x.user_id === userId);
+    if (!r) return;
+
+    F.userId.value = r.user_id;
+    F.plan.value = r.plan;
+    F.expires.value = r.license_expires_at || "";
+    F.grace.value = r.grace_ends_at || "";
+    F.status.value = r.status;
+    F.note.value = r.granted_note || "";
+
+    document.getElementById("ad-modal-title").textContent = r.full_name;
+    document.getElementById("ad-modal-sub").textContent = r.mailbox || "No mailbox recorded";
+    updatePlanHint();
+    modal.classList.remove("ad-hidden");
+  }
+
+  function updatePlanHint() {
+    const hint = document.getElementById("f-plan-hint");
+    const dates = F.plan.value === "trial";
+    hint.textContent = dates
+      ? "Expires on the date below, then sits in grace, then is deleted."
+      : "No expiry date — it stays active while their membership does.";
+    F.expires.disabled = !dates;
+    F.grace.disabled = !dates;
+  }
+  F.plan.addEventListener("change", updatePlanHint);
+
+  function closeEditor() { modal.classList.add("ad-hidden"); }
+  document.getElementById("f-cancel").addEventListener("click", closeEditor);
+  modal.addEventListener("click", e => { if (e.target === modal) closeEditor(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !modal.classList.contains("ad-hidden")) closeEditor();
+  });
+
+  ["ad-q", "ad-plan", "ad-when"].forEach(id => {
+    document.getElementById(id).addEventListener("input", render);
+    document.getElementById(id).addEventListener("change", render);
+  });
+
+  document.getElementById("ad-form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const btn = document.getElementById("f-save");
+    btn.disabled = true;
+    showMessage("ad-form-msg", "Saving…", "info");
+
+    const isTrial = F.plan.value === "trial";
+    const payload = {
+      plan: F.plan.value,
+      status: F.status.value,
+      // A lifetime licence with a leftover expiry date would quietly get
+      // caught by the reminder job and then the expiry job. Clear them.
+      license_expires_at: isTrial ? (F.expires.value || null) : null,
+      grace_ends_at: isTrial ? (F.grace.value || null) : null,
+      granted_note: F.note.value.trim() || null,
+      granted_by: user.id,
+      granted_at: new Date().toISOString(),
+      // Changing the plan restarts the reminder sequence, otherwise an
+      // extended trial stays silent because stage 7 was already sent.
+      reminder_stage: null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from("ms365_accounts")
+      .update(payload)
+      .eq("user_id", F.userId.value);
+
+    btn.disabled = false;
+    if (error) {
+      showMessage("ad-form-msg", "Couldn't save: " + error.message, "err");
+      return;
+    }
+    closeEditor();
+    showMessage("ad-msg", "Saved.", "ok");
+    await load();
+  });
+
+  await load();
+</script>
+</body>
+</html>

@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My profile — Sahaba Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+<style>
+  .prof-wrap { max-width: 640px; margin: 0 auto; padding: 40px 20px 100px; }
+  .prof-hero { margin-bottom: 24px; }
+  .prof-hero h1 { font-size: 26px; margin: 0 0 6px; }
+  .prof-hero p { color: var(--text-secondary); font-size: 14.5px; margin: 0; line-height: 1.6; }
+  .prof-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 24px; }
+
+  /* Field groups. The form is long enough that unbroken runs of inputs stop
+     reading as anything — the rules split it into what it is actually made
+     of: who you are, where, work, what you know, where to find you. */
+  .prof-group { border-top: 1px solid var(--glass-border); margin-top: 24px; padding-top: 20px; }
+  .prof-group:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+  .prof-group-title {
+    font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 700; margin: 0 0 14px;
+  }
+
+  .prof-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .prof-field label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .prof-field input, .prof-field select, .prof-field textarea {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: 8px;
+    padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit; width: 100%;
+  }
+  html.light-mode .prof-field input, html.light-mode .prof-field select,
+  html.light-mode .prof-field textarea { background: rgba(16,22,39,0.03); }
+  .prof-field textarea { min-height: 70px; resize: vertical; }
+  .prof-hint { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .prof-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 560px) { .prof-row { grid-template-columns: 1fr; } }
+
+  .prof-status { font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-top: 14px; }
+  .prof-status.ok { background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.4); color: #4ade80; }
+  .prof-status.err { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
+  .prof-status.info { background: rgba(56,189,248,0.14); border: 1px solid rgba(56,189,248,0.4); color: #7dd3fc; }
+
+  .prof-btn-primary {
+    background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
+    font-weight: 700; border-radius: 999px; cursor: pointer; padding: 11px 22px; font-size: 14.5px; font-family: inherit;
+  }
+  .prof-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .prof-note { font-size: 12.5px; color: var(--text-muted); margin-top: 12px; line-height: 1.6; }
+
+  /* The Connect block. These decide whether other members can see and contact
+     you, so they get a bordered block of their own with the consequence of
+     each switch spelled out under it. */
+  .prof-privacy {
+    border: 1px solid var(--glass-border); border-radius: 12px;
+    padding: 14px 16px; margin: 4px 0 4px; background: var(--glass);
+  }
+  .prof-toggle { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+  .prof-toggle input { width: auto; margin-top: 3px; flex: 0 0 auto; }
+  .prof-toggle-text { font-size: 14px; font-weight: 600; color: var(--text); }
+  .prof-toggle-why { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; margin: 0 0 14px 26px; }
+  .prof-toggle-why:last-child { margin-bottom: 0; }
+
+  /* Live "what's still missing" line. Never an error: since migration 0019
+     dropped the gate trigger there is nothing to fail, so this reports state
+     rather than refusing anything. */
+  .prof-connect-state {
+    display: flex; gap: 9px; align-items: flex-start;
+    font-size: 13px; line-height: 1.55; padding: 11px 13px;
+    border-radius: 10px; margin-top: 14px;
+  }
+  .prof-connect-state.info { background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.3); color: #7dd3fc; }
+  .prof-connect-state.ok { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: #4ade80; }
+  .prof-connect-state svg { flex-shrink: 0; margin-top: 1px; }
+  .prof-privacy-link { font-size: 12.5px; margin: 12px 0 0; }
+  .prof-privacy-link a { color: var(--cyan); text-decoration: underline; }
+
+  .prof-actions { margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="../assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="connect.html" class="nav-link">Connect</a>
+      <a href="inbox.html" class="nav-link">Inbox</a>
+      <a href="../events.html" class="nav-link">Events</a>
+    </div>
+  </div>
+</header>
+
+<main class="prof-wrap">
+  <div class="prof-hero">
+    <h1 class="glow-text">My profile</h1>
+    <p>This is what we use to match you with coaches, events and other members — keep it current and the matches get better.</p>
+  </div>
+
+  <div class="prof-card">
+    <form id="profile-form">
+
+      <div class="prof-group">
+        <p class="prof-group-title">Who you are</p>
+        <div class="prof-field">
+          <label for="f-name">Full name</label>
+          <input type="text" id="f-name" required>
+        </div>
+        <div class="prof-field">
+          <label for="f-headline">Headline</label>
+          <input type="text" id="f-headline" maxlength="120" placeholder="e.g. Power Platform developer, learning agents">
+          <span class="prof-hint">One line, shown under your name in Connect.</span>
+        </div>
+        <div class="prof-field">
+          <label for="f-bio">Short bio</label>
+          <textarea id="f-bio" placeholder="A couple of sentences about your background."></textarea>
+        </div>
+      </div>
+
+      <div class="prof-group">
+        <p class="prof-group-title">Where you are</p>
+        <div class="prof-row">
+          <div class="prof-field">
+            <label for="f-city">City</label>
+            <input type="text" id="f-city" placeholder="e.g. Dubai">
+          </div>
+          <div class="prof-field">
+            <label for="f-country">Country</label>
+            <select id="f-country">
+              <option value="">Select one</option>
+            </select>
+          </div>
+        </div>
+        <div class="prof-row">
+          <div class="prof-field">
+            <label for="f-timezone">Timezone</label>
+            <input type="text" id="f-timezone" placeholder="e.g. Asia/Dubai">
+          </div>
+          <div class="prof-field">
+            <label for="f-language">Preferred language</label>
+            <input type="text" id="f-language" placeholder="e.g. English">
+          </div>
+        </div>
+      </div>
+
+      <div class="prof-group">
+        <p class="prof-group-title">Work</p>
+        <div class="prof-row">
+          <div class="prof-field">
+            <label for="f-company">Company</label>
+            <input type="text" id="f-company" placeholder="e.g. Emirates NBD">
+          </div>
+          <div class="prof-field">
+            <label for="f-position">Position</label>
+            <input type="text" id="f-position" placeholder="e.g. Solutions Architect">
+          </div>
+        </div>
+        <div class="prof-row">
+          <div class="prof-field">
+            <label for="f-experience">Experience level</label>
+            <select id="f-experience">
+              <option value="">Select one</option>
+              <option value="student">Student</option>
+              <option value="early-career">Early career</option>
+              <option value="mid-career">Mid career</option>
+              <option value="senior">Senior / leadership</option>
+            </select>
+          </div>
+          <div class="prof-field">
+            <label for="f-years">Years of experience</label>
+            <input type="number" id="f-years" min="0" max="60" inputmode="numeric" placeholder="e.g. 7">
+          </div>
+        </div>
+        <div class="prof-field">
+          <label for="f-industry">Industry</label>
+          <input type="text" id="f-industry" placeholder="e.g. Fintech">
+        </div>
+        <div class="prof-field">
+          <label id="lbl-open-to">Open to</label>
+          <div class="optin-row" id="f-open-to" role="group" aria-labelledby="lbl-open-to"></div>
+          <span class="prof-hint">Shown on your profile so members know what to approach you about.</span>
+        </div>
+      </div>
+
+      <div class="prof-group">
+        <p class="prof-group-title">Skills and interests</p>
+        <div class="prof-field">
+          <label for="f-skills-input">Skills</label>
+          <div id="f-skills"></div>
+          <span class="prof-hint">Things you can do. Pick from the list or type your own and press Enter.</span>
+        </div>
+        <div class="prof-field">
+          <label for="f-interests-input">Interests</label>
+          <div id="f-interests"></div>
+          <span class="prof-hint">Things you want to hear about. These decide which events and newsletters reach you.</span>
+        </div>
+        <div class="prof-field">
+          <label for="f-goals-input">What you're hoping to get out of Sahaba Club</label>
+          <div id="f-goals"></div>
+        </div>
+      </div>
+
+      <div class="prof-group">
+        <p class="prof-group-title">Links</p>
+        <div class="prof-row">
+          <div class="prof-field">
+            <label for="f-linkedin">LinkedIn</label>
+            <input type="url" id="f-linkedin" inputmode="url" placeholder="linkedin.com/in/you">
+          </div>
+          <div class="prof-field">
+            <label for="f-github">GitHub</label>
+            <input type="url" id="f-github" inputmode="url" placeholder="github.com/you">
+          </div>
+        </div>
+        <div class="prof-field">
+          <label for="f-site">Website</label>
+          <input type="url" id="f-site" inputmode="url" placeholder="yoursite.com">
+        </div>
+      </div>
+
+      <div class="prof-group">
+        <p class="prof-group-title">Connect</p>
+
+        <div class="prof-privacy">
+          <label class="prof-toggle">
+            <input type="checkbox" id="f-discoverable">
+            <span class="prof-toggle-text">Show me in Connect</span>
+          </label>
+          <p class="prof-toggle-why">On by default. Other members can see your name, photo, headline,
+            location, work, skills, interests, links and the events you've attended. Your email address
+            and phone number are never shown, whichever way this is set. Turn it off and no other member
+            can find you, open your profile or message you.</p>
+
+          <label class="prof-toggle">
+            <input type="checkbox" id="f-accepts-messages">
+            <span class="prof-toggle-text">Let members message me</span>
+          </label>
+          <p class="prof-toggle-why">On by default, and only does anything while the switch above is on.
+            Turn it off and members can still see and follow you, but the Message button disappears from
+            your profile. Conversations you already have stay in your inbox.</p>
+        </div>
+
+        <!-- Live, and never a blocker: it says what is still missing, not that
+             anything failed. Updates as the form is typed into. -->
+        <div class="prof-connect-state info" id="connect-state" role="status">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6v.4"/></svg>
+          <span id="connect-state-text"></span>
+        </div>
+        <p class="prof-privacy-link" id="connect-links" hidden>
+          <a href="connect.html">Browse Connect</a> &middot;
+          <a href="member.html" id="link-my-public">See my profile as others see it</a>
+        </p>
+      </div>
+
+      <div class="prof-group">
+        <p class="prof-group-title">Email</p>
+        <label class="prof-toggle">
+          <input type="checkbox" id="f-newsletter">
+          <span class="prof-toggle-text">Send me the Sahaba Club newsletter</span>
+        </label>
+        <p class="prof-toggle-why">Tailored to the interests above — untick this to stop all of them.</p>
+        <label class="prof-toggle">
+          <input type="checkbox" id="f-attendees">
+          <span class="prof-toggle-text">Show me on attendee lists</span>
+        </label>
+        <p class="prof-toggle-why">Your name and photo appear to other members on events you're attending.
+          Attendee lists are members-only and never public; untick this and you disappear from them
+          entirely, including from events you've already said you're going to.</p>
+      </div>
+
+      <div class="prof-actions">
+        <button type="submit" class="prof-btn-primary" id="btn-save">Save changes</button>
+        <div id="profile-status"></div>
+      </div>
+    </form>
+  </div>
+</main>
+
+<script type="module">
+  import { supabase } from "../lib/supabase-client.js";
+  import { getSession } from "../lib/auth.js";
+  import { safeUrl } from "../lib/connect.js";
+  import {
+    loadCountries, loadTagSuggestions, suggestionsFor, fillCountrySelect,
+    createTagPicker, connectHint, OPEN_TO, nullIfBlank, intOrNull, escapeHtml,
+    isMissingSchema,
+  } from "../lib/profile-form.js";
+
+  var session;
+  var loaded = {};        // the row as it came back, so we only send columns that exist
+  var pickers = {};
+
+  function el(id) { return document.getElementById(id); }
+
+  function showStatus(msg, kind) {
+    el("profile-status").innerHTML =
+      '<div class="prof-status ' + kind + '">' + msg + "</div>";
+  }
+
+  // ---- "Open to" --------------------------------------------------------
+  el("f-open-to").innerHTML = OPEN_TO.map(function (o) {
+    return '<label class="optin-chip" data-v="' + escapeHtml(o.value) + '">' +
+      '<input type="checkbox" value="' + escapeHtml(o.value) + '">' +
+      escapeHtml(o.label) + "</label>";
+  }).join("");
+
+  function paintOpenTo() {
+    Array.prototype.forEach.call(el("f-open-to").querySelectorAll(".optin-chip"), function (chip) {
+      chip.classList.toggle("is-on", chip.querySelector("input").checked);
+    });
+  }
+  el("f-open-to").addEventListener("change", paintOpenTo);
+
+  function readOpenTo() {
+    return Array.prototype.slice
+      .call(el("f-open-to").querySelectorAll("input:checked"))
+      .map(function (i) { return i.value; });
+  }
+  function setOpenTo(values) {
+    var want = Array.isArray(values) ? values : [];
+    Array.prototype.forEach.call(el("f-open-to").querySelectorAll("input"), function (i) {
+      i.checked = want.indexOf(i.value) !== -1;
+    });
+    paintOpenTo();
+  }
+
+  // ---- The live Connect line -------------------------------------------
+  // Reads the form, not the saved row, so it answers "am I there yet" while
+  // they are still typing rather than after a round trip.
+  function refreshConnectState() {
+    var view = {
+      full_name: el("f-name").value,
+      headline: el("f-headline").value,
+      bio: el("f-bio").value,
+      avatar_url: loaded.avatar_url || "",
+      interests: pickers.interests ? pickers.interests.get() : [],
+      is_discoverable: el("f-discoverable").checked,
+    };
+    var hint = connectHint(view);
+    var box = el("connect-state");
+    box.classList.remove("info", "ok");
+    box.classList.add(hint.kind);
+    el("connect-state-text").textContent = hint.text;
+
+    var listed = view.is_discoverable && hint.kind === "ok";
+    el("connect-links").hidden = !listed;
+    if (listed) {
+      el("link-my-public").href = "member.html?u=" + encodeURIComponent(session.user.id);
+    }
+  }
+
+  ["f-name", "f-headline", "f-bio"].forEach(function (id) {
+    el(id).addEventListener("input", refreshConnectState);
+  });
+  el("f-discoverable").addEventListener("change", refreshConnectState);
+
+  // ---- Boot -------------------------------------------------------------
+  (async function init() {
+    session = await getSession();
+    if (!session) {
+      window.location.href = "../login.html";
+      return;
+    }
+
+    var profileRes = await supabase
+      .from("profiles").select("*").eq("user_id", session.user.id).maybeSingle();
+
+    if (profileRes.error || !profileRes.data) {
+      showStatus("Couldn't load your profile. Refresh to try again.", "err");
+      return;
+    }
+    var data = profileRes.data;
+    loaded = data;
+
+    // Lookups are advisory — an empty or missing table must not stop anyone
+    // finishing the form, so both of these fall back to [].
+    var countries = await loadCountries();
+    var tags = await loadTagSuggestions();
+
+    fillCountrySelect(el("f-country"), countries, data.country);
+
+    pickers.skills = createTagPicker({
+      root: el("f-skills"), inputId: "f-skills-input",
+      suggestions: suggestionsFor(tags, "skill"),
+      placeholder: "Search skills, or type your own",
+    });
+    pickers.interests = createTagPicker({
+      root: el("f-interests"), inputId: "f-interests-input",
+      suggestions: suggestionsFor(tags, "interest"),
+      placeholder: "Search interests, or type your own",
+      onChange: refreshConnectState,
+    });
+    pickers.goals = createTagPicker({
+      root: el("f-goals"), inputId: "f-goals-input",
+      suggestions: [],
+      placeholder: "e.g. Break into AI, find a coach",
+    });
+
+    pickers.skills.set(data.skills || []);
+    pickers.interests.set(data.interests || []);
+    pickers.goals.set(data.goals || []);
+
+    el("f-name").value = data.full_name || "";
+    el("f-headline").value = data.headline || "";
+    el("f-bio").value = data.bio || "";
+    el("f-city").value = data.city || "";
+    el("f-timezone").value = data.timezone || "";
+    el("f-language").value = data.language || "";
+    el("f-experience").value = data.experience_level || "";
+    el("f-industry").value = data.industry || "";
+    el("f-company").value = data.company || "";
+    el("f-position").value = data.position || "";
+    el("f-years").value = data.years_experience == null ? "" : data.years_experience;
+    setOpenTo(data.open_to || []);
+
+    var links = (data.links && typeof data.links === "object") ? data.links : {};
+    el("f-linkedin").value = links.linkedin || "";
+    el("f-github").value = links.github || "";
+    el("f-site").value = links.site || "";
+
+    // Since 0019 the column default is true, so an unset value means "on".
+    el("f-discoverable").checked =
+      data.is_discoverable === undefined || data.is_discoverable === null
+        ? true : Boolean(data.is_discoverable);
+    el("f-accepts-messages").checked =
+      data.accepts_messages === undefined || data.accepts_messages === null
+        ? true : Boolean(data.accepts_messages);
+    el("f-newsletter").checked = Boolean(data.newsletter_opt_in);
+    el("f-attendees").checked =
+      data.show_in_attendees === undefined || data.show_in_attendees === null
+        ? true : Boolean(data.show_in_attendees);
+
+    refreshConnectState();
+  })();
+
+  // ---- Save -------------------------------------------------------------
+  el("profile-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var saveBtn = el("btn-save");
+    saveBtn.disabled = true;
+    showStatus("Saving…", "info");
+
+    // A tag still sitting in a picker's box was meant to be added.
+    Object.keys(pickers).forEach(function (k) { pickers[k].flush(); });
+
+    var links = {};
+    [["linkedin", "f-linkedin"], ["github", "f-github"], ["site", "f-site"]]
+      .forEach(function (pair) {
+        var url = safeUrl(el(pair[1]).value);
+        if (url) links[pair[0]] = url;
+      });
+
+    var payload = {
+      full_name: nullIfBlank(el("f-name").value),
+      headline: nullIfBlank(el("f-headline").value),
+      bio: nullIfBlank(el("f-bio").value),
+      city: nullIfBlank(el("f-city").value),
+      country: nullIfBlank(el("f-country").value),
+      timezone: nullIfBlank(el("f-timezone").value),
+      language: nullIfBlank(el("f-language").value),
+      experience_level: nullIfBlank(el("f-experience").value),
+      industry: nullIfBlank(el("f-industry").value),
+      company: nullIfBlank(el("f-company").value),
+      position: nullIfBlank(el("f-position").value),
+      years_experience: intOrNull(el("f-years").value),
+      open_to: readOpenTo(),
+      skills: pickers.skills.get(),
+      interests: pickers.interests.get(),
+      goals: pickers.goals.get(),
+      links: links,
+      is_discoverable: el("f-discoverable").checked,
+      accepts_messages: el("f-accepts-messages").checked,
+      newsletter_opt_in: el("f-newsletter").checked,
+      show_in_attendees: el("f-attendees").checked,
+    };
+
+    // Only send columns the loaded row actually had. An UPDATE naming a column
+    // that does not exist fails the whole statement, taking the unrelated
+    // fields down with it.
+    var patch = {};
+    Object.keys(payload).forEach(function (k) {
+      if (Object.prototype.hasOwnProperty.call(loaded, k)) patch[k] = payload[k];
+    });
+
+    var res = await supabase.from("profiles").update(patch).eq("user_id", session.user.id);
+
+    saveBtn.disabled = false;
+    if (res.error) {
+      showStatus(
+        isMissingSchema(res.error)
+          ? "Some of these fields aren't switched on yet, so they couldn't be saved. Nothing else was changed."
+          : "Couldn't save: " + escapeHtml(res.error.message),
+        "err"
+      );
+      return;
+    }
+
+    Object.keys(patch).forEach(function (k) { loaded[k] = patch[k]; });
+    refreshConnectState();
+    showStatus("Saved.", "ok");
+  });
+</script>
+<script src="../script.js"></script>
+</body>
+</html>

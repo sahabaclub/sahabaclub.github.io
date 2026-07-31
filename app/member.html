@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Member — Sahaba Club</title>
+<!-- Members are not search results. Even though the page needs a session to
+     show anything, say so explicitly. -->
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="connect.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="../assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="connect.html" class="nav-link">Connect</a>
+      <a href="inbox.html" class="nav-link">Inbox</a>
+      <a href="../events.html" class="nav-link">Events</a>
+    </div>
+  </div>
+</header>
+
+<main class="cx-wrap">
+  <a class="cx-back" href="connect.html">&larr; Back to Connect</a>
+  <div id="member-root">
+    <div class="cx-state">
+      <p class="cx-state-text">Loading…</p>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+  import {
+    requireUser, getMember, getActivity, myFollowing, follow, unfollow,
+    summarise, escapeHtml, initialOf, linkList, placeOf, experienceLabel,
+    monthYear, joinWords, CONNECT_OFF_MESSAGE,
+  } from "../lib/connect.js";
+
+  var root = document.getElementById("member-root");
+  var me = null;
+  var targetId = new URLSearchParams(window.location.search).get("u");
+  var following = false;
+
+  function state(title, text, actionsHtml) {
+    root.innerHTML =
+      '<div class="cx-state">' +
+        '<p class="cx-state-title">' + title + "</p>" +
+        '<p class="cx-state-text">' + text + "</p>" +
+        (actionsHtml ? '<div class="cx-state-actions">' + actionsHtml + "</div>" : "") +
+      "</div>";
+  }
+
+  // One state for "no such id", "never existed" and "opted out". That is not
+  // laziness — telling them apart would confirm to a stranger that an account
+  // exists, which is exactly what opting out is meant to prevent.
+  function notDiscoverable() {
+    if (targetId && me && targetId === me.id) {
+      state(
+        "You're not in Connect yet",
+        "Other members can't find you until you switch on <strong>Show me in Connect</strong> on your profile. " +
+        "Nothing you've filled in is visible to anyone until then.",
+        '<a class="cx-btn cx-btn-primary" href="profile.html">Open my profile</a>'
+      );
+      return;
+    }
+    state(
+      "This member isn't discoverable",
+      "They haven't switched on their Connect profile, so there's nothing to show here. " +
+      "Everyone chooses for themselves whether to appear.",
+      '<a class="cx-btn" href="connect.html">Browse Connect</a>'
+    );
+  }
+
+  function tagsHtml(list, extraClass) {
+    var items = (list || []).filter(Boolean);
+    if (!items.length) return "";
+    return '<div class="cx-tags">' + items.map(function (t) {
+      return '<span class="cx-tag' + (extraClass ? " " + extraClass : "") + '">' + escapeHtml(t) + "</span>";
+    }).join("") + "</div>";
+  }
+
+  function avatarHtml(member) {
+    if (member.avatar_url) {
+      return '<img class="cx-avatar" src="' + escapeHtml(member.avatar_url) +
+             '" alt="" loading="lazy">';
+    }
+    return '<span class="cx-avatar cx-avatar-initial" aria-hidden="true">' +
+           escapeHtml(initialOf(member.full_name)) + "</span>";
+  }
+
+  function render(member, activity) {
+    var name = member.full_name || "Member";
+    var place = placeOf(member);
+    var experience = experienceLabel(member.experience_level);
+    var links = linkList(member.links);
+    var topics = (activity && activity.top_topics) || [];
+    var attended = Number((activity && activity.events_attended) || 0);
+    var upcoming = Number((activity && activity.events_upcoming) || 0);
+    var isMe = me && member.user_id === me.id;
+
+    var meta = [];
+    if (place) meta.push("<span>" + escapeHtml(place) + "</span>");
+    if (experience) meta.push("<span>" + escapeHtml(experience) + "</span>");
+    if (member.industry) meta.push("<span>" + escapeHtml(member.industry) + "</span>");
+    if (member.member_since) meta.push("<span>Member since " + escapeHtml(monthYear(member.member_since)) + "</span>");
+
+    var html =
+      '<div class="cx-card">' +
+        '<div class="cx-head">' +
+          avatarHtml(member) +
+          '<div class="cx-head-text">' +
+            '<h1 class="cx-name glow-text">' + escapeHtml(name) + "</h1>" +
+            (member.headline ? '<p class="cx-headline">' + escapeHtml(member.headline) + "</p>" : "") +
+            (meta.length ? '<div class="cx-meta">' + meta.join("") + "</div>" : "") +
+          "</div>" +
+        "</div>" +
+        '<p class="cx-summary">' + escapeHtml(summarise(member, activity)) + "</p>";
+
+    // Actions. Following yourself is blocked by the database anyway; showing
+    // the button would just be a trap.
+    if (isMe) {
+      html += '<div class="cx-actions">' +
+        '<a class="cx-btn" href="profile.html">Edit my profile</a></div>' +
+        '<p class="cx-note">This is your profile exactly as other members see it.</p>';
+    } else {
+      html += '<div class="cx-actions">' +
+        '<button type="button" class="cx-btn" id="btn-follow">Follow</button>' +
+        (member.accepts_messages
+          ? '<a class="cx-btn cx-btn-primary" href="inbox.html?to=' +
+            encodeURIComponent(member.user_id) + '">Message</a>'
+          : "") +
+        "</div>" +
+        (member.accepts_messages ? "" :
+          '<p class="cx-note">This member has messages switched off. You can still follow them.</p>');
+    }
+    html += "</div>";
+
+    // The numbers. Follower counts come from the directory view; event counts
+    // from member_activity, which only counts published events the member
+    // chose to appear in.
+    html +=
+      '<div class="cx-stats">' +
+        '<div class="cx-stat"><span class="cx-stat-num">' + attended +
+          '</span><span class="cx-stat-label">events attended</span></div>' +
+        '<div class="cx-stat"><span class="cx-stat-num">' + upcoming +
+          '</span><span class="cx-stat-label">coming up</span></div>' +
+        '<div class="cx-stat"><span class="cx-stat-num">' + Number(member.followers || 0) +
+          '</span><span class="cx-stat-label">followers</span></div>' +
+        '<div class="cx-stat"><span class="cx-stat-num">' + Number(member.following || 0) +
+          '</span><span class="cx-stat-label">following</span></div>' +
+      "</div>";
+
+    // The live half. This is the part that stays true after someone stops
+    // editing their profile, so it goes above the typed-in fields.
+    if (topics.length || attended > 0 || upcoming > 0) {
+      html += '<div class="cx-section"><p class="cx-section-title">From the events they turn up to</p>' +
+        '<div class="cx-card">';
+      if (topics.length) {
+        html += '<p class="cx-topic-line">Keeps showing up for: <strong>' +
+          escapeHtml(joinWords(topics.slice(0, 3))) + "</strong></p>" +
+          tagsHtml(topics, "cx-tag-topic");
+      } else {
+        html += '<p class="cx-topic-line">No topic pattern yet — that needs a few events.</p>';
+      }
+      if (activity && activity.latest_event) {
+        html += '<p class="cx-note">Last seen at an event on ' +
+          escapeHtml(new Date(activity.latest_event).toLocaleDateString(undefined,
+            { day: "numeric", month: "short", year: "numeric" })) + ".</p>";
+      }
+      html += "</div></div>";
+    } else {
+      html += '<div class="cx-section"><p class="cx-section-title">From the events they turn up to</p>' +
+        '<div class="cx-card"><p class="cx-topic-line">Nothing yet. Once they attend an event, ' +
+        "what they keep coming back for shows up here on its own.</p></div></div>";
+    }
+
+    if ((member.skills || []).length) {
+      html += '<div class="cx-section"><p class="cx-section-title">Skills</p>' +
+        '<div class="cx-card">' + tagsHtml(member.skills) + "</div></div>";
+    }
+    if ((member.interests || []).length) {
+      html += '<div class="cx-section"><p class="cx-section-title">Interests</p>' +
+        '<div class="cx-card">' + tagsHtml(member.interests) + "</div></div>";
+    }
+    if (links.length) {
+      html += '<div class="cx-section"><p class="cx-section-title">Links</p>' +
+        '<div class="cx-card"><div class="cx-links">' +
+        links.map(function (l) {
+          return '<a class="cx-link" href="' + escapeHtml(l.url) +
+            '" target="_blank" rel="noopener noreferrer nofollow">' + escapeHtml(l.label) + "</a>";
+        }).join("") +
+        "</div></div></div>";
+    }
+
+    html += '<div id="member-status"></div>';
+    root.innerHTML = html;
+
+    var btn = document.getElementById("btn-follow");
+    if (btn) wireFollow(btn, member.user_id);
+  }
+
+  function paintFollow(btn) {
+    btn.textContent = following ? "Following" : "Follow";
+    btn.className = "cx-btn" + (following ? " is-on" : "");
+    btn.setAttribute("aria-pressed", following ? "true" : "false");
+  }
+
+  function wireFollow(btn, otherId) {
+    paintFollow(btn);
+    btn.addEventListener("click", async function () {
+      btn.disabled = true;
+      var res = following ? await unfollow(otherId) : await follow(otherId);
+      btn.disabled = false;
+      if (res.off) {
+        document.getElementById("member-status").innerHTML =
+          '<div class="cx-status is-info">' + CONNECT_OFF_MESSAGE + "</div>";
+        return;
+      }
+      if (res.error) {
+        document.getElementById("member-status").innerHTML =
+          '<div class="cx-status is-err">Couldn\'t save that. Try again in a moment.</div>';
+        return;
+      }
+      following = !following;
+      paintFollow(btn);
+      document.getElementById("member-status").innerHTML = "";
+    });
+  }
+
+  (async function init() {
+    me = await requireUser("../login.html");
+    if (!me) return;
+
+    if (!targetId) {
+      state("No member selected",
+        "This page needs to know whose profile to show.",
+        '<a class="cx-btn cx-btn-primary" href="connect.html">Browse Connect</a>');
+      return;
+    }
+
+    var memberRes = await getMember(targetId);
+    if (memberRes.off) {
+      state("Connect isn't switched on yet", CONNECT_OFF_MESSAGE,
+        '<a class="cx-btn" href="dashboard.html">Back to dashboard</a>');
+      return;
+    }
+    if (memberRes.error) {
+      state("Couldn't load this profile",
+        "Something went wrong on the way to the server. Refreshing usually sorts it.",
+        '<a class="cx-btn" href="connect.html">Browse Connect</a>');
+      return;
+    }
+    if (!memberRes.data) { notDiscoverable(); return; }
+
+    // Activity and follow state are extras: if either fails the profile still
+    // renders, just without that part.
+    var activityRes = await getActivity(targetId);
+    var followRes = await myFollowing();
+    following = followRes.data.has(targetId);
+
+    render(memberRes.data, activityRes.data || null);
+  })();
+</script>
+<script src="../script.js"></script>
+</body>
+</html>

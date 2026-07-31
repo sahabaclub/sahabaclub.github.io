@@ -1,0 +1,465 @@
+/* Sahaba Club — Connect
+   ------------------------------------------------------------
+   Shared by app/member.html, app/connect.html and app/inbox.html. Loaded
+   after styles.css and built entirely on its variables (--bg, --text,
+   --text-secondary, --text-muted, --glass, --glass-border, --violet, --cyan,
+   --gold, --radius, --max-width), so light mode comes for free: styles.css
+   redefines those under html.light-mode and everything here follows.
+
+   Every class in this file is prefixed cx-. Nothing here overrides a
+   styles.css rule, and nothing in the Connect pages invents a class that
+   isn't either here or in styles.css.
+
+   Mobile first throughout — most of this is read on a phone. The wider
+   layouts are additive, inside min-width queries. */
+
+/* The pages hide their filter bar and inbox grid with the `hidden` attribute
+   until there's something to show. A class that sets `display` outranks the
+   user-agent's `[hidden] { display: none }`, so .cx-filters and .cx-inbox
+   were staying on screen while empty — an empty country dropdown above a
+   "Connect isn't switched on yet" message. Restore the attribute's meaning
+   for anything inside these pages. */
+[hidden] { display: none !important; }
+
+.cx-wrap {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 28px 16px 90px;
+}
+.cx-wrap-wide { max-width: var(--max-width); }
+
+/* ---- Page heading ---- */
+
+.cx-hero { margin-bottom: 20px; }
+.cx-hero h1 { font-size: 24px; margin: 0 0 6px; line-height: 1.25; }
+.cx-hero p {
+  color: var(--text-secondary);
+  font-size: 14.5px;
+  margin: 0;
+  max-width: 60ch;
+}
+.cx-back {
+  display: inline-block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.cx-back:hover { color: var(--text-secondary); }
+
+/* ---- Panels ---- */
+
+.cx-card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+.cx-card + .cx-card { margin-top: 14px; }
+
+.cx-section { margin-top: 22px; }
+.cx-section-title {
+  font-size: 12px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+  font-weight: 700;
+}
+
+.cx-note {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 12px 0 0;
+}
+
+/* ---- States: loading, empty, error ---- */
+
+.cx-state {
+  text-align: center;
+  padding: 40px 18px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+}
+.cx-state-title { font-size: 17px; font-weight: 700; margin: 0 0 8px; }
+.cx-state-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 auto;
+  max-width: 46ch;
+  line-height: 1.65;
+}
+.cx-state-actions { margin-top: 16px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+.cx-status {
+  font-size: 13px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  margin-top: 12px;
+  line-height: 1.55;
+}
+.cx-status.is-ok  { background: rgba(34,197,94,0.14);  border: 1px solid rgba(34,197,94,0.4);  color: #4ade80; }
+.cx-status.is-err { background: rgba(239,68,68,0.14);  border: 1px solid rgba(239,68,68,0.4);  color: #fca5a5; }
+.cx-status.is-info{ background: rgba(56,189,248,0.14); border: 1px solid rgba(56,189,248,0.4); color: #7dd3fc; }
+html.light-mode .cx-status.is-ok   { color: #15803d; }
+html.light-mode .cx-status.is-err  { color: #b91c1c; }
+html.light-mode .cx-status.is-info { color: #0369a1; }
+
+/* ---- Buttons ---- */
+
+.cx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text);
+  text-decoration: none;
+}
+.cx-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.cx-btn-primary {
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  border: none;
+  color: #05070d;
+  font-weight: 700;
+}
+html.light-mode .cx-btn-primary { color: #ffffff; }
+.cx-btn-sm { min-height: 34px; padding: 6px 14px; font-size: 13px; }
+/* Following: a filled state that still reads as "press to undo". */
+.cx-btn.is-on {
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.45);
+  color: var(--text);
+}
+
+.cx-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+
+/* ---- Avatars ---- */
+
+.cx-avatar {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  flex: 0 0 auto;
+}
+.cx-avatar-initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+  color: #05070d;
+  background: linear-gradient(140deg, var(--violet), var(--cyan));
+  border: none;
+}
+.cx-avatar-sm { width: 44px; height: 44px; }
+.cx-avatar-sm.cx-avatar-initial { font-size: 17px; }
+
+/* ---- Tags and topics ---- */
+
+.cx-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+.cx-tag {
+  font-size: 12px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+}
+/* Topics are derived from real attendance, so they get the accent that the
+   typed-in tags don't. */
+.cx-tag-topic {
+  color: var(--text);
+  background: rgba(139, 92, 246, 0.14);
+  border-color: rgba(139, 92, 246, 0.38);
+}
+.cx-topic-line {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin: 0 0 10px;
+}
+
+.cx-summary {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 10px 0 0;
+  line-height: 1.6;
+}
+
+/* ---- Profile header ---- */
+
+.cx-head { display: flex; gap: 14px; align-items: flex-start; }
+.cx-head-text { min-width: 0; }
+.cx-name { font-size: 21px; margin: 0 0 3px; line-height: 1.25; word-break: break-word; }
+.cx-headline {
+  font-size: 14.5px;
+  color: var(--text-secondary);
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+.cx-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.cx-meta span { white-space: nowrap; }
+
+/* ---- Numbers ---- */
+
+.cx-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 16px;
+}
+@media (min-width: 520px) { .cx-stats { grid-template-columns: repeat(4, 1fr); } }
+.cx-stat {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 12px 10px;
+  text-align: center;
+}
+.cx-stat-num {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: block;
+  line-height: 1.2;
+}
+.cx-stat-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 2px;
+}
+
+/* ---- Links out ---- */
+
+.cx-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.cx-link {
+  font-size: 12.5px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text-secondary);
+}
+.cx-link:hover { color: var(--text); border-color: rgba(139, 92, 246, 0.45); }
+
+/* ---- Directory ---- */
+
+.cx-filters { display: grid; gap: 10px; margin-bottom: 18px; }
+.cx-input,
+.cx-select {
+  width: 100%;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 11px 13px;
+  color: var(--text);
+  font-size: 15px; /* 16px-ish keeps iOS from zooming the page on focus */
+  font-family: inherit;
+}
+.cx-select-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (min-width: 720px) { .cx-select-row { grid-template-columns: repeat(4, 1fr); } }
+
+.cx-count {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cx-grid { display: grid; gap: 12px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .cx-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 960px) { .cx-grid { grid-template-columns: repeat(3, 1fr); } }
+
+.cx-member {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cx-member-link { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
+.cx-member-body { min-width: 0; flex: 1; }
+.cx-member-name { font-size: 15.5px; font-weight: 700; margin: 0 0 2px; word-break: break-word; }
+.cx-member-headline {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.45;
+}
+.cx-member-sub { font-size: 12px; color: var(--text-muted); margin: 4px 0 0; }
+.cx-member-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* ---- Inbox ---- */
+
+.cx-inbox { display: grid; grid-template-columns: 1fr; gap: 14px; }
+@media (min-width: 860px) {
+  .cx-inbox { grid-template-columns: 300px 1fr; align-items: start; }
+  /* Above this width both panes are on screen at once, so the phone's
+     one-at-a-time switching stops applying. */
+  .cx-inbox .cx-pane { display: block !important; }
+}
+
+.cx-threads { display: flex; flex-direction: column; gap: 8px; }
+.cx-thread {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 11px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+}
+.cx-thread.is-active { border-color: rgba(139, 92, 246, 0.5); background: rgba(139, 92, 246, 0.1); }
+.cx-thread-body { min-width: 0; flex: 1; }
+/* Both are spans rather than block elements so they can sit inside a button
+   without invalid nesting — which means display has to be set here, or the
+   name and the preview run together on one line. */
+.cx-thread-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cx-thread-preview {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cx-thread-side { text-align: right; flex: 0 0 auto; }
+.cx-thread-time { font-size: 11px; color: var(--text-muted); display: block; }
+.cx-unread {
+  display: inline-block;
+  min-width: 19px;
+  padding: 1px 6px;
+  margin-top: 4px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #05070d;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  font-variant-numeric: tabular-nums;
+}
+html.light-mode .cx-unread { color: #ffffff; }
+
+.cx-convo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 58vh;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+.cx-bubble {
+  max-width: 84%;
+  padding: 10px 13px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+}
+.cx-bubble.is-mine {
+  align-self: flex-end;
+  background: rgba(139, 92, 246, 0.16);
+  border-color: rgba(139, 92, 246, 0.36);
+}
+.cx-bubble-time {
+  display: block;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-top: 5px;
+}
+
+.cx-compose { display: flex; gap: 8px; align-items: flex-end; margin-top: 12px; }
+.cx-compose textarea {
+  flex: 1;
+  min-height: 44px;
+  max-height: 160px;
+  resize: vertical;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 11px 13px;
+  color: var(--text);
+  font-size: 15px;
+  font-family: inherit;
+}
+
+.cx-convo-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.cx-convo-head-text { flex: 1; min-width: 0; }
+.cx-convo-title {
+  display: block;
+  font-size: 15.5px;
+  font-weight: 700;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cx-convo-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 1px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cx-icon-btn {
+  background: none;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 5px 12px;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.cx-icon-btn:hover { color: var(--text); }
+
+/* The phone shows one pane at a time; JS toggles cx-is-hidden, and the
+   min-width rule above overrides it back on once both fit. */
+.cx-is-hidden { display: none; }

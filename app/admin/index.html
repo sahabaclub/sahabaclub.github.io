@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Overview — Sahaba Club Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body class="admin">
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>Overview</h1>
+      <p id="ad-greeting">Loading…</p>
+    </div>
+
+    <div class="ad-stats" id="ad-stats"></div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <h2>Next events</h2>
+        <div class="ad-spacer"></div>
+        <a class="ad-btn ad-btn-sm" href="events.html">Manage events</a>
+      </div>
+      <div class="ad-tablewrap">
+        <table class="ad-table" id="ad-upcoming">
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Date</th>
+              <th>Where</th>
+              <th>Access</th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="4" class="ad-empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <h2>Newest members</h2>
+        <div class="ad-spacer"></div>
+        <a class="ad-btn ad-btn-sm" href="members.html">All members</a>
+      </div>
+      <div class="ad-tablewrap">
+        <table class="ad-table" id="ad-newest">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Joined</th>
+              <th>Tier</th>
+              <th>Profile</th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="4" class="ad-empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="ad-note"></div>
+  </main>
+</div>
+
+<script type="module">
+  import { supabase } from "../../lib/supabase-client.js";
+  import { requireStaff, renderShell, escapeHtml, formatDate } from "../../lib/admin-guard.js";
+
+  const user = await requireStaff();
+  if (user) {
+    renderShell(user, "index.html");
+    document.getElementById("ad-greeting").textContent =
+      "Signed in as " + (user.fullName || user.email) + ".";
+    load();
+  }
+
+  async function load() {
+    // head:true with count gives a count without pulling the rows back.
+    const [members, premium, events, upcomingCount, regs] = await Promise.all([
+      supabase.from("profiles").select("user_id", { count: "exact", head: true }),
+      supabase.from("subscriptions").select("user_id", { count: "exact", head: true }).eq("tier", "premium"),
+      supabase.from("events").select("id", { count: "exact", head: true }),
+      supabase.from("events").select("id", { count: "exact", head: true })
+        .gte("event_date", new Date().toISOString().slice(0, 10)),
+      supabase.from("event_registrations").select("id", { count: "exact", head: true }),
+    ]);
+
+    const stats = [
+      { label: "Members", value: members.count ?? 0, sub: "total accounts" },
+      { label: "Premium", value: premium.count ?? 0, sub: "paying members" },
+      { label: "Upcoming events", value: upcomingCount.count ?? 0, sub: "of " + (events.count ?? 0) + " total" },
+      { label: "Registrations", value: regs.count ?? 0, sub: "across all events" },
+    ];
+
+    document.getElementById("ad-stats").innerHTML = stats.map(s =>
+      '<div class="ad-stat">' +
+        '<div class="ad-stat-label">' + s.label + "</div>" +
+        '<div class="ad-stat-value">' + s.value + "</div>" +
+        '<div class="ad-stat-sub">' + s.sub + "</div>" +
+      "</div>"
+    ).join("");
+
+    const { data: soon } = await supabase
+      .from("events")
+      .select("id, title, event_date, location, country, mode, tier_required, is_published")
+      .gte("event_date", new Date().toISOString().slice(0, 10))
+      .order("event_date", { ascending: true })
+      .limit(6);
+
+    const soonBody = document.querySelector("#ad-upcoming tbody");
+    soonBody.innerHTML = (soon && soon.length) ? soon.map(e =>
+      "<tr>" +
+        '<td class="ad-cell-strong">' + escapeHtml(e.title) +
+          (e.is_published ? "" : ' <span class="ad-pill muted">draft</span>') + "</td>" +
+        "<td>" + formatDate(e.event_date) + "</td>" +
+        '<td class="ad-cell-dim">' + escapeHtml(e.mode === "Online" ? "Online" : (e.location || e.country || "—")) + "</td>" +
+        "<td>" + (e.tier_required === "premium"
+          ? '<span class="ad-pill tier-premium">Premium</span>'
+          : '<span class="ad-pill muted">Everyone</span>') + "</td>" +
+      "</tr>"
+    ).join("") : '<tr><td colspan="4" class="ad-empty">No upcoming events.</td></tr>';
+
+    const { data: newest } = await supabase
+      .from("profiles")
+      .select("user_id, full_name, created_at, onboarding_completed_at, role")
+      .order("created_at", { ascending: false })
+      .limit(6);
+
+    // Tiers come from a second table; fetch them in one go and join here
+    // rather than issuing a query per member.
+    let tiers = {};
+    if (newest && newest.length) {
+      const { data: subs } = await supabase
+        .from("subscriptions")
+        .select("user_id, tier")
+        .in("user_id", newest.map(m => m.user_id));
+      (subs || []).forEach(s => { tiers[s.user_id] = s.tier; });
+    }
+
+    const newBody = document.querySelector("#ad-newest tbody");
+    newBody.innerHTML = (newest && newest.length) ? newest.map(m => {
+      const tier = tiers[m.user_id] || "standard";
+      return "<tr>" +
+        '<td class="ad-cell-strong">' + escapeHtml(m.full_name || "(no name yet)") +
+          (m.role !== "member" ? ' <span class="ad-pill role-' + m.role + '">' + m.role + "</span>" : "") + "</td>" +
+        "<td>" + formatDate(m.created_at) + "</td>" +
+        '<td><span class="ad-pill tier-' + tier + '">' + tier + "</span></td>" +
+        "<td>" + (m.onboarding_completed_at
+          ? '<span class="ad-pill ok">complete</span>'
+          : '<span class="ad-pill warn">unfinished</span>') + "</td>" +
+      "</tr>";
+    }).join("") : '<tr><td colspan="4" class="ad-empty">No members yet.</td></tr>';
+
+    // Be honest on the dashboard about what isn't automated yet, rather than
+    // letting someone assume mailboxes and emails are going out.
+    document.getElementById("ad-note").innerHTML =
+      '<div class="ad-msg warn">Microsoft 365 mailboxes and welcome emails are not yet automatic — ' +
+      "they need the server functions deploying. Until then, new members get an account and a profile, " +
+      "and you issue their mailbox by hand.</div>";
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marketing contacts — Sahaba Club Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+<style>
+  /* The engagement history. A vertical list rather than a table because the
+     entries vary in length and this is read as a story, not scanned. */
+  .ct-timeline { display: flex; flex-direction: column; gap: 0; margin-top: 6px; }
+  .ct-ev { display: grid; grid-template-columns: 82px 1fr; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--ad-line); }
+  .ct-ev:last-child { border-bottom: none; }
+  .ct-ev-date { font-size: 11.5px; color: var(--ad-text-3); font-variant-numeric: tabular-nums; }
+  .ct-ev-name { font-size: 13.5px; font-weight: 600; }
+  .ct-ev-type { font-size: 11.5px; color: var(--ad-text-3); }
+  .ct-detail-grid { display: grid; grid-template-columns: 132px 1fr; gap: 7px 14px; font-size: 13px; margin-bottom: 16px; }
+  .ct-detail-grid dt { color: var(--ad-text-3); }
+  .ct-detail-grid dd { margin: 0; color: var(--ad-text); word-break: break-word; }
+  .ct-warn { font-size: 12.5px; padding: 9px 12px; border-radius: 8px; margin-bottom: 14px;
+             background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.3); color: var(--ad-warn); }
+</style>
+</head>
+<body>
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>Marketing contacts</h1>
+      <p>Everyone who has ever registered, attended, voted or applied — 12 spreadsheets, deduplicated.</p>
+    </div>
+
+    <div class="ad-stats" id="ad-stats"></div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <input type="search" class="ad-search" id="ad-q" placeholder="Search name, email, phone or company…">
+        <select class="ad-search" id="ad-seg" style="min-width:auto;">
+          <option value="mailable">Mailable only</option>
+          <option value="all">Everyone</option>
+          <option value="warm">Warm (2+ engagements)</option>
+          <option value="mailbox">Has @sahabaclub.com</option>
+          <option value="unlinked_mailbox">Mailbox, not yet a member</option>
+          <option value="members">Joined sahabaclub.ai</option>
+          <option value="problem">Needs attention</option>
+        </select>
+        <select class="ad-search" id="ad-event" style="min-width:auto;">
+          <option value="">All events</option>
+        </select>
+        <select class="ad-search" id="ad-country" style="min-width:auto;">
+          <option value="">All countries</option>
+        </select>
+        <span class="ad-cell-dim" id="ad-count"></span>
+      </div>
+
+      <table class="ad-table" id="ad-list">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Country</th>
+            <th>Microsoft 365</th>
+            <th>Engagements</th>
+            <th>Last seen</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p class="ad-empty ad-hidden" id="ad-empty">No contacts match.</p>
+      <div class="ad-panel-head" id="ad-more-wrap" style="justify-content:center;">
+        <button class="ad-btn" id="ad-more">Show more</button>
+      </div>
+    </div>
+
+    <div id="ad-msg"></div>
+  </main>
+</div>
+
+<!-- Contact detail -->
+<div class="ad-modal-back ad-hidden" id="ad-modal-back">
+  <div class="ad-modal">
+    <h2 id="ct-name">Contact</h2>
+    <p class="ad-modal-sub" id="ct-email"></p>
+
+    <div id="ct-warnings"></div>
+
+    <dl class="ct-detail-grid" id="ct-details"></dl>
+
+    <h3 style="font-size:13px; margin:18px 0 0;">History</h3>
+    <div class="ct-timeline" id="ct-timeline"></div>
+
+    <div class="ad-field" style="margin-top:18px;">
+      <label for="ct-notes">Notes</label>
+      <input type="text" id="ct-notes" placeholder="Anything worth remembering about this person">
+    </div>
+
+    <label class="ad-check">
+      <input type="checkbox" id="ct-test">
+      Mark as a test or junk record (excluded from all sends)
+    </label>
+
+    <label class="ad-check">
+      <input type="checkbox" id="ct-unsub">
+      Unsubscribed — never email again
+    </label>
+
+    <div class="ad-modal-actions">
+      <button type="button" class="ad-btn ad-btn-primary" id="ct-save">Save</button>
+      <button type="button" class="ad-btn" id="ct-close">Close</button>
+    </div>
+    <div id="ct-msg"></div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase } from "../../lib/supabase-client.js";
+  import { requireStaff, renderShell, escapeHtml, showMessage, clearMessage }
+    from "../../lib/admin-guard.js";
+
+  const user = await requireStaff();
+  renderShell(user, "contacts.html");
+
+  const modal = document.getElementById("ad-modal-back");
+  let rows = [];
+  let shown = [];
+  let limit = 100;
+  let current = null;
+
+  const TYPE_LABEL = {
+    registration: "Registered",
+    checkin: "Attended",
+    voting: "Voted",
+    application: "Applied",
+    other: "Engaged",
+  };
+
+  function mailable(c) {
+    return c.email_valid && !c.is_test && !c.unsubscribed_at && !c.bounced_at;
+  }
+
+  async function load() {
+    // Contacts and their engagement summaries. The engagement rows are
+    // fetched separately and grouped here rather than joined, because a join
+    // would repeat every contact once per engagement over ~1,500 rows.
+    const [cRes, eRes] = await Promise.all([
+      supabase.from("marketing_contacts")
+        .select("id, email, email_valid, full_name, phone_raw, country, university_or_company, occupation, tech_experience, linkedin_url, github_url, date_of_birth, sahaba_username, sahaba_mailbox, says_member, linked_user_id, is_test, unsubscribed_at, bounced_at, engagement_count, first_seen_at, last_seen_at, how_heard, notes")
+        .order("engagement_count", { ascending: false })
+        .limit(2000),
+      supabase.from("contact_engagements")
+        .select("contact_id, event_name, engagement_type, occurred_at, source_file, details")
+        .limit(5000),
+    ]);
+
+    if (cRes.error) {
+      showMessage("ad-msg", "Couldn't load contacts: " + cRes.error.message
+        + " — has migration 0010 been run?", "err");
+      return;
+    }
+
+    const byContact = {};
+    (eRes.data || []).forEach(e => { (byContact[e.contact_id] = byContact[e.contact_id] || []).push(e); });
+    rows = (cRes.data || []).map(c => ({ ...c, events: byContact[c.id] || [] }));
+
+    buildFilterOptions();
+    render();
+  }
+
+  function buildFilterOptions() {
+    const events = new Set();
+    const countries = new Set();
+    rows.forEach(c => {
+      c.events.forEach(e => { if (e.event_name) events.add(e.event_name); });
+      if (c.country) countries.add(c.country);
+    });
+
+    const evSel = document.getElementById("ad-event");
+    [...events].sort().forEach(e => {
+      const o = document.createElement("option");
+      o.value = e; o.textContent = e;
+      evSel.appendChild(o);
+    });
+
+    const cSel = document.getElementById("ad-country");
+    [...countries].sort().forEach(c => {
+      const o = document.createElement("option");
+      o.value = c; o.textContent = c;
+      cSel.appendChild(o);
+    });
+  }
+
+  function render() {
+    const q = document.getElementById("ad-q").value.trim().toLowerCase();
+    const seg = document.getElementById("ad-seg").value;
+    const ev = document.getElementById("ad-event").value;
+    const country = document.getElementById("ad-country").value;
+
+    shown = rows.filter(c => {
+      if (seg === "mailable" && !mailable(c)) return false;
+      if (seg === "warm" && !(c.engagement_count >= 2 && mailable(c))) return false;
+      if (seg === "mailbox" && !c.sahaba_mailbox) return false;
+      if (seg === "unlinked_mailbox" && !(c.sahaba_mailbox && !c.linked_user_id)) return false;
+      if (seg === "members" && !c.linked_user_id) return false;
+      if (seg === "problem" && mailable(c)) return false;
+
+      if (country && c.country !== country) return false;
+      if (ev && !c.events.some(e => e.event_name === ev)) return false;
+
+      if (q) {
+        const hay = [c.full_name, c.email, c.phone_raw, c.university_or_company, c.sahaba_mailbox]
+          .filter(Boolean).join(" ").toLowerCase();
+        if (hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+
+    document.getElementById("ad-count").textContent =
+      shown.length === rows.length ? rows.length + " contacts"
+                                   : shown.length + " of " + rows.length;
+
+    const slice = shown.slice(0, limit);
+    document.querySelector("#ad-list tbody").innerHTML = slice.map(c => {
+      const problems = [];
+      if (!c.email_valid) problems.push('<span class="ad-pill danger">bad address</span>');
+      if (c.is_test) problems.push('<span class="ad-pill warn">test</span>');
+      if (c.unsubscribed_at) problems.push('<span class="ad-pill danger">unsubscribed</span>');
+      if (c.bounced_at) problems.push('<span class="ad-pill danger">bounced</span>');
+
+      const ms = c.sahaba_mailbox
+        ? (c.linked_user_id
+            ? '<span class="ad-pill ok">linked</span>'
+            : '<span class="ad-pill warn">not linked</span>')
+        : '<span class="ad-cell-dim">—</span>';
+
+      return '<tr>' +
+        '<td>' + escapeHtml(c.full_name || "—") +
+          (c.linked_user_id ? ' <span class="ad-pill role-staff">member</span>' : '') + '</td>' +
+        '<td>' + escapeHtml(c.email) + ' ' + problems.join(" ") + '</td>' +
+        '<td>' + escapeHtml(c.country || "—") + '</td>' +
+        '<td>' + ms + '</td>' +
+        '<td>' + c.engagement_count + '</td>' +
+        '<td>' + (c.last_seen_at ? String(c.last_seen_at).slice(0, 10) : "—") + '</td>' +
+        '<td><button class="ad-btn ad-btn-sm" data-open="' + escapeHtml(c.id) + '">View</button></td>' +
+      '</tr>';
+    }).join("");
+
+    document.getElementById("ad-empty").classList.toggle("ad-hidden", shown.length > 0);
+    document.getElementById("ad-more-wrap").style.display = shown.length > limit ? "" : "none";
+
+    document.querySelectorAll("[data-open]").forEach(b => {
+      b.addEventListener("click", () => openContact(b.getAttribute("data-open")));
+    });
+
+    renderStats();
+  }
+
+  function renderStats() {
+    const total = rows.length;
+    const canMail = rows.filter(mailable).length;
+    const warm = rows.filter(c => c.engagement_count >= 2 && mailable(c)).length;
+    const withBox = rows.filter(c => c.sahaba_mailbox).length;
+    const unlinked = rows.filter(c => c.sahaba_mailbox && !c.linked_user_id).length;
+    const joined = rows.filter(c => c.linked_user_id).length;
+
+    document.getElementById("ad-stats").innerHTML = [
+      { l: "contacts", v: total },
+      { l: "mailable", v: canMail },
+      { l: "warm (2+ events)", v: warm },
+      { l: "has a mailbox", v: withBox },
+      { l: "mailbox, not a member", v: unlinked, warn: unlinked > 0 },
+      { l: "joined the site", v: joined },
+    ].map(s =>
+      '<div class="ad-stat">' +
+        '<div class="ad-stat-label">' + s.l + '</div>' +
+        '<div class="ad-stat-value"' + (s.warn ? ' style="color:var(--ad-warn);"' : '') + '>' + s.v + '</div>' +
+      '</div>'
+    ).join("");
+  }
+
+  function openContact(id) {
+    clearMessage("ct-msg");
+    const c = rows.find(x => x.id === id);
+    if (!c) return;
+    current = c;
+
+    document.getElementById("ct-name").textContent = c.full_name || "(no name recorded)";
+    document.getElementById("ct-email").textContent = c.email;
+
+    const warn = [];
+    if (!c.email_valid) warn.push("This address looks mistyped (e.g. gamil.com). It will bounce — correct it or leave it out.");
+    if (c.unsubscribed_at) warn.push("Unsubscribed. Do not include in any send.");
+    if (c.bounced_at) warn.push("Previously bounced.");
+    if (c.is_test) warn.push("Marked as a test record.");
+    document.getElementById("ct-warnings").innerHTML =
+      warn.map(w => '<div class="ct-warn">' + escapeHtml(w) + '</div>').join("");
+
+    const d = [
+      ["Phone", c.phone_raw],
+      ["Country", c.country],
+      ["Company / university", c.university_or_company],
+      ["Studying or working", c.occupation],
+      ["Experience", c.tech_experience],
+      ["LinkedIn", c.linkedin_url],
+      ["GitHub", c.github_url],
+      ["Date of birth", c.date_of_birth],
+      ["Microsoft 365", c.sahaba_mailbox],
+      ["Says they're a member", c.says_member === null ? null : (c.says_member ? "Yes" : "No")],
+      ["Heard about us via", (c.how_heard || []).join(", ")],
+      ["First seen", c.first_seen_at ? String(c.first_seen_at).slice(0, 10) : null],
+      ["Joined the site", c.linked_user_id ? "Yes" : "Not yet"],
+    ].filter(([, v]) => v);
+
+    document.getElementById("ct-details").innerHTML = d.map(([k, v]) =>
+      "<dt>" + escapeHtml(k) + "</dt><dd>" + escapeHtml(String(v)) + "</dd>"
+    ).join("");
+
+    // The story, oldest first — this is what the tailored emails draw on.
+    const evs = [...c.events].sort((a, b) =>
+      String(a.occurred_at || "").localeCompare(String(b.occurred_at || "")));
+    document.getElementById("ct-timeline").innerHTML = evs.length
+      ? evs.map(e =>
+          '<div class="ct-ev">' +
+            '<div class="ct-ev-date">' + (e.occurred_at ? String(e.occurred_at).slice(0, 10) : "—") + '</div>' +
+            '<div>' +
+              '<div class="ct-ev-name">' + escapeHtml(e.event_name || "—") + '</div>' +
+              '<div class="ct-ev-type">' + (TYPE_LABEL[e.engagement_type] || e.engagement_type) + '</div>' +
+            '</div>' +
+          '</div>'
+        ).join("")
+      : '<p class="ad-cell-dim">No recorded engagements.</p>';
+
+    document.getElementById("ct-notes").value = c.notes || "";
+    document.getElementById("ct-test").checked = !!c.is_test;
+    document.getElementById("ct-unsub").checked = !!c.unsubscribed_at;
+
+    modal.classList.remove("ad-hidden");
+  }
+
+  function closeModal() { modal.classList.add("ad-hidden"); }
+  document.getElementById("ct-close").addEventListener("click", closeModal);
+  modal.addEventListener("click", e => { if (e.target === modal) closeModal(); });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !modal.classList.contains("ad-hidden")) closeModal();
+  });
+
+  document.getElementById("ct-save").addEventListener("click", async () => {
+    if (!current) return;
+    const btn = document.getElementById("ct-save");
+    btn.disabled = true;
+    showMessage("ct-msg", "Saving…", "info");
+
+    const unsub = document.getElementById("ct-unsub").checked;
+    const payload = {
+      notes: document.getElementById("ct-notes").value.trim() || null,
+      is_test: document.getElementById("ct-test").checked,
+      // Preserve the original opt-out date if it is already set; a re-save
+      // should not look like they unsubscribed again today.
+      unsubscribed_at: unsub ? (current.unsubscribed_at || new Date().toISOString()) : null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("marketing_contacts").update(payload).eq("id", current.id);
+    btn.disabled = false;
+    if (error) { showMessage("ct-msg", "Couldn't save: " + error.message, "err"); return; }
+
+    Object.assign(current, payload);
+    closeModal();
+    render();
+    showMessage("ad-msg", "Saved.", "ok");
+  });
+
+  ["ad-q", "ad-seg", "ad-event", "ad-country"].forEach(id => {
+    document.getElementById(id).addEventListener("input", () => { limit = 100; render(); });
+    document.getElementById(id).addEventListener("change", () => { limit = 100; render(); });
+  });
+  document.getElementById("ad-more").addEventListener("click", () => { limit += 200; render(); });
+
+  await load();
+</script>
+</body>
+</html>

@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Events — Sahaba Club</title>
+<meta name="description" content="Upcoming AI hackathons, meetups, and conferences curated by Sahaba Club — free and paid, in the UAE and around the world.">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* Attendee faces became links to app/member.html (see faceHtml in
+     events-ui.js). The anchor has to be the flex item, otherwise .ev-face
+     ends up first-child of its own wrapper and the -8px overlap that makes
+     the row read as a stack is cancelled on every face instead of just the
+     first. Scoped here rather than added to styles.css because events.html
+     is the only page that renders these. */
+  .ev-face-link { display: block; margin-left: -8px; border-radius: 50%; line-height: 0; }
+  .ev-face-link:first-child { margin-left: 0; }
+  .ev-face-link .ev-face { margin-left: 0; display: block; }
+  .ev-face-link:hover .ev-face { border-color: var(--violet); }
+
+  /* ------------------------------------------------------------------
+     Everything below is only ever rendered by events-ui.js on this page,
+     so it lives here rather than in styles.css.
+     ------------------------------------------------------------------ */
+
+  /* Section heading above the search row. */
+  .events-section-title {
+    margin: 10px 0 0;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+
+  /* Recommended block, now above the filters. No vertical padding, so the
+     wrapper collapses to nothing when there is nothing to recommend. */
+  .events-rec-wrap {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  /* The mega cards now point down the page instead of off it, so the
+     chevron should lift toward the list rather than slide sideways. */
+  .featured-card:hover .featured-cta svg { transform: translateY(2px); }
+
+  /* ---- Card date + time row ---- */
+  .ev-when {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 9px;
+    margin-bottom: 5px;
+  }
+  .ev-when .ev-time { margin-bottom: 0; }
+  .ev-date {
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.015em;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+  .ev-when.is-today .ev-date { color: var(--cyan); }
+
+  /* ---- Tag / format / price chips ---- */
+  .ev-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .ev-chip {
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.45;
+    padding: 2px 9px;
+    border-radius: 999px;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    /* Chips never break mid-word; the count chip is what absorbs a long
+       tag list, so the row stays at most two lines on a phone. */
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  html.light-mode .ev-chip { background: rgba(0, 0, 0, 0.04); }
+  .ev-chip.is-free {
+    color: #4ade80;
+    border-color: rgba(74, 222, 128, 0.45);
+    background: rgba(34, 197, 94, 0.14);
+  }
+  .ev-chip.is-mode {
+    color: var(--cyan);
+    border-color: rgba(34, 211, 238, 0.35);
+    background: rgba(34, 211, 238, 0.10);
+  }
+  .ev-chip.is-more { color: var(--text-muted); border-style: dashed; }
+
+  /* ---- Where a jump lands ---- */
+  .ev-card.is-flash {
+    border-color: rgba(34, 211, 238, 0.75);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
+    animation: ev-flash 2.2s ease-out;
+  }
+  @keyframes ev-flash {
+    0% { background: rgba(34, 211, 238, 0.20); }
+    100% { background: var(--glass); }
+  }
+  /* The ring alone still says "here it is" without any movement. */
+  html.reduce-motion .ev-card.is-flash { animation: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .ev-card.is-flash { animation: none; }
+  }
+
+  /* ---- Recommended: a compact suggestion list ----
+     Deliberately unlike both the mega banner and the list cards — one
+     tinted panel holding three tight rows, so it reads as an aside rather
+     than as more of the same catalogue. */
+  .ev-rec-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid rgba(139, 92, 246, 0.30);
+    border-radius: 16px;
+    background: linear-gradient(140deg, rgba(139, 92, 246, 0.11), rgba(34, 211, 238, 0.06));
+  }
+  .ev-rec-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 11px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background: rgba(0, 0, 0, 0.24);
+    transition: border-color 0.2s, background 0.2s;
+  }
+  html.light-mode .ev-rec-card { background: rgba(255, 255, 255, 0.62); }
+  .ev-rec-card:hover { border-color: rgba(139, 92, 246, 0.45); }
+  .ev-rec-thumb {
+    width: 46px; height: 46px;
+    border-radius: 10px;
+    object-fit: cover;
+    display: block;
+    background: var(--glass);
+  }
+  .ev-rec-thumb.is-empty {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text);
+    background: linear-gradient(140deg, rgba(139, 92, 246, 0.35), rgba(34, 211, 238, 0.20));
+  }
+  .ev-rec-thumb.is-empty svg { width: 18px; height: 18px; }
+  .ev-rec-main { min-width: 0; }
+  .ev-rec-when {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .ev-rec-name { margin: 1px 0 0; font-size: 15px; font-weight: 700; line-height: 1.3; }
+  .ev-rec-link { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Stretches the link over the whole row, so the card is one target. */
+  .ev-rec-link::after { content: ""; position: absolute; inset: 0; border-radius: 12px; }
+  .ev-rec-card:hover .ev-rec-link { color: var(--cyan); }
+  .ev-rec-card .ev-rec-reason { margin-top: 3px; font-size: 11.5px; min-width: 0; }
+  .ev-rec-card .ev-rec-reason svg { flex-shrink: 0; }
+  .ev-rec-card .ev-rec-reason span {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Sits above the stretched link so the heart is still its own button. */
+  .ev-rec-side { position: relative; z-index: 1; display: flex; align-items: center; gap: 4px; }
+  .ev-rec-fav {
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .ev-rec-fav:hover { color: var(--text); border-color: var(--text-muted); }
+  .ev-rec-fav.is-on {
+    color: #fb7185;
+    border-color: rgba(251, 113, 133, 0.5);
+    background: rgba(251, 113, 133, 0.14);
+  }
+  .ev-rec-fav svg { width: 15px; height: 15px; }
+  .ev-rec-go { display: flex; color: var(--text-muted); }
+  .ev-rec-go svg { width: 16px; height: 16px; }
+
+  @media (max-width: 420px) {
+    /* The whole row is already the tap target; the chevron is just decor. */
+    .ev-rec-go { display: none; }
+  }
+  @media (max-width: 720px) {
+    .events-section-title { font-size: 22px; }
+  }
+</style>
+<script>
+  // Apply saved theme before first paint so the page never flashes dark.
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+    if (localStorage.getItem("sc_reduce_motion") === "1") {
+      document.documentElement.classList.add("reduce-motion");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav has-drawer">
+  <div class="nav-inner">
+    <a href="index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="index.html" class="nav-link">Home</a>
+      <a href="podcast.html" class="nav-link">Podcast</a>
+      <a href="app/admin/index.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
+      <a href="index.html#join" class="btn btn-glow">Join free</a>
+    </div>
+    <p class="nav-slogan" aria-label="We don't teach tech, we coach IT">
+      <span>We Don&rsquo;t Teach Tech,</span>
+      <span>We Coach IT&hellip;</span>
+    </p>
+    <div class="nav-compact">
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
+        <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/>
+          <path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/>
+        </svg>
+        <svg class="theme-icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.5 13.4A8.4 8.4 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z"/>
+        </svg>
+      </button>
+      <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
+<div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
+<nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
+  <div class="mobile-menu-panel">
+    <a class="mobile-menu-item" href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in" data-signin-link>Sign in</a>
+    <a class="mobile-menu-item is-primary" href="index.html#join">Join the Club</a>
+    <a class="mobile-menu-item" href="index.html">Home</a>
+    <a class="mobile-menu-item" href="events.html">Events</a>
+    <a class="mobile-menu-item" href="podcast.html">Podcast</a>
+    <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="app/admin/index.html">Admin</a>
+
+    <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-language">
+      <span>Language</span>
+      <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
+    </button>
+    <div class="mobile-submenu" id="submenu-language" hidden>
+      <button class="mobile-submenu-item is-active" type="button" data-lang="en">English</button>
+      <button class="mobile-submenu-item" type="button" data-lang="ar">
+        العربية <span class="mobile-soon">soon</span>
+      </button>
+    </div>
+
+    <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-settings">
+      <span>Settings</span>
+      <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
+    </button>
+    <div class="mobile-submenu" id="submenu-settings" hidden>
+      <div class="theme-choice-row">
+        <span class="theme-choice-label">Appearance</span>
+        <div class="theme-choice" role="group" aria-label="Appearance">
+          <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+          <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+        </div>
+      </div>
+      <label class="mobile-switch">
+        <span>Reduce motion</span>
+        <input type="checkbox" id="setting-reduce-motion">
+        <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
+      </label>
+      <p class="mobile-setting-note">Turns off the moving starfield and scrolling photo strip.</p>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <section class="events-hero">
+    <p class="kicker center">Upcoming</p>
+    <h1 class="glow-text">AI Events</h1>
+    <p class="lead">Hackathons, meetups, and conferences from across the AI universe &mdash; curated by Sahaba Club. Free and paid, in the UAE and beyond.</p>
+  </section>
+
+  <!-- Featured banner for the region's landmark AI conferences. Cards are
+       injected by events-ui.js from featured-events.js. -->
+  <section class="featured-strip" id="featured-strip" aria-label="Major AI events">
+    <div class="featured-head">
+      <p class="kicker center">Mark your calendar</p>
+      <h2 class="featured-title">Mega AI Events</h2>
+      <p class="featured-sub">The region&rsquo;s landmark AI summits, expos and deep-tech showcases.</p>
+    </div>
+    <div class="featured-stage">
+      <button type="button" class="featured-nav featured-nav-prev" id="featured-prev" aria-label="Previous event">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <div class="featured-viewport" id="featured-viewport" tabindex="0" role="group" aria-label="Major AI events carousel">
+        <div class="featured-track" id="featured-track"></div>
+      </div>
+      <button type="button" class="featured-nav featured-nav-next" id="featured-next" aria-label="Next event">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    </div>
+    <div class="featured-controls">
+      <button type="button" class="featured-play" id="featured-play" aria-pressed="false" aria-label="Pause the events carousel" title="Pause">
+        <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg>
+        <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.5v13l11-6.5z"/></svg>
+        <span class="featured-play-label">Pause</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- Recommended sits between the mega events and the full list: it is a
+       short answer to "which of these is for me?", and it belongs before
+       the search box rather than buried under it. Filled in only for
+       signed-in members with something to learn from; stays empty
+       otherwise rather than showing a hollow heading. -->
+  <section class="events-rec-wrap" aria-label="Recommended for you">
+    <div id="events-recommended"></div>
+  </section>
+
+  <!-- Search + filters. Tag chips are built from the data at runtime, so
+       adding an event with a new tag needs no change here. On phones the
+       panel below becomes a bottom sheet opened by the Filters button. -->
+  <section class="events-filters" aria-labelledby="all-upcoming-heading">
+    <h2 class="events-section-title glow-text" id="all-upcoming-heading">All Upcoming Events</h2>
+
+    <div class="filter-bar">
+      <div class="filter-search">
+        <svg class="filter-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+        </svg>
+        <input type="search" id="filter-q" placeholder="Search events by name, topic or venue…" autocomplete="off" aria-label="Search events">
+        <button type="button" class="filter-clear-q hidden" id="filter-clear-q" aria-label="Clear search">&times;</button>
+      </div>
+      <button type="button" class="filter-open" id="filter-open" aria-expanded="false" aria-controls="filter-panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M7 12h10M10 17h4"/>
+        </svg>
+        <span>Filters</span>
+        <span class="filter-badge hidden" id="filter-badge">0</span>
+      </button>
+    </div>
+
+    <div class="filter-backdrop" id="filter-backdrop" hidden></div>
+
+    <div class="filter-panel" id="filter-panel">
+    <div class="filter-panel-head">
+      <span class="filter-panel-grip" aria-hidden="true"></span>
+      <h2 class="filter-panel-title">Filters</h2>
+      <button type="button" class="filter-close" id="filter-close" aria-label="Close filters">&times;</button>
+    </div>
+
+    <div class="filter-row">
+      <div class="filter-group" role="group" aria-label="When">
+        <span class="filter-legend">When</span>
+        <div class="filter-chips" id="filter-when">
+          <button type="button" class="filter-chip is-active" data-when="all">Any date</button>
+          <button type="button" class="filter-chip" data-when="today">Today</button>
+          <button type="button" class="filter-chip" data-when="7">Next 7 days</button>
+          <button type="button" class="filter-chip" data-when="30">Next 30 days</button>
+        </div>
+      </div>
+
+      <div class="filter-group" role="group" aria-label="Format">
+        <span class="filter-legend">Format</span>
+        <div class="filter-chips" id="filter-mode">
+          <button type="button" class="filter-chip is-active" data-mode="all">All</button>
+          <button type="button" class="filter-chip" data-mode="In-Person">In-Person</button>
+          <button type="button" class="filter-chip" data-mode="Online">Online</button>
+        </div>
+      </div>
+
+      <div class="filter-group" role="group" aria-label="Price">
+        <span class="filter-legend">Price</span>
+        <div class="filter-chips" id="filter-price">
+          <button type="button" class="filter-chip is-active" data-price="all">All</button>
+          <button type="button" class="filter-chip" data-price="free">Free</button>
+          <button type="button" class="filter-chip" data-price="paid">Paid</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-group filter-group-tags" role="group" aria-label="Topics">
+      <span class="filter-legend">Topics</span>
+      <div class="filter-chips" id="filter-tags"></div>
+    </div>
+
+    <div class="filter-panel-foot">
+      <button type="button" class="filter-reset-sheet" id="filter-reset-sheet">Reset</button>
+      <button type="button" class="filter-apply" id="filter-apply">Show <span id="filter-apply-count"></span></button>
+    </div>
+    </div>
+
+    <div class="filter-summary">
+      <p class="filter-count" id="filter-count" role="status" aria-live="polite"></p>
+      <button type="button" class="filter-reset hidden" id="filter-reset">Reset filters</button>
+    </div>
+  </section>
+
+  <section class="events-list">
+    <div class="ev-timeline" id="events-grid"></div>
+    <p class="events-empty hidden" id="events-empty">No upcoming events right now &mdash; check back soon, or follow us on social for updates.</p>
+    <p class="events-empty hidden" id="events-no-match">No events match your search. Try a different word or clear a filter.</p>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-top">
+    <div class="footer-links">
+      <a href="index.html">About</a>
+      <a href="events.html">Events</a>
+      <a href="membership.html">Membership</a>
+      <a href="mailto:info@sahabaclub.com">Contact</a>
+      <a href="#">Privacy</a>
+    </div>
+    <div class="footer-social">
+      <a href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="LinkedIn">LinkedIn</a>
+      <a href="https://youtube.com/@sahabaclub" target="_blank" rel="noopener" aria-label="YouTube">YouTube</a>
+      <a href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
+      <a href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
+      <a href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
+    </div>
+  </div>
+  <p class="footer-signature">We Don&rsquo;t Teach Tech, We Coach IT&hellip;</p>
+  <p class="footer-watermark">Developed by Sahaba Club Technologies</p>
+</footer>
+
+<script src="featured-events.js"></script>
+<script src="script.js"></script>
+<script src="events-ui.js"></script>
+</body>
+</html>

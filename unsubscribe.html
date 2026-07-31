@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unsubscribe — Sahaba Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="stylesheet" href="styles.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+<style>
+  .un-wrap { max-width: 460px; margin: 0 auto; padding: 72px 20px 100px; text-align: center; }
+  .un-card { background: var(--glass); border: 1px solid var(--glass-border);
+             border-radius: var(--radius); padding: 32px 26px; }
+  .un-card h1 { font-size: 22px; margin: 0 0 10px; }
+  .un-card p { font-size: 14.5px; color: var(--text-secondary); line-height: 1.65; margin: 0 0 18px; }
+  .un-card p:last-child { margin-bottom: 0; }
+  .un-btn { display: inline-block; padding: 12px 26px; border-radius: 999px; border: none;
+            font-size: 14.5px; font-weight: 600; font-family: inherit; cursor: pointer;
+            background: var(--accent); color: #fff; }
+  .un-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .un-quiet { font-size: 13px; color: var(--text-muted); margin-top: 22px; }
+</style>
+</head>
+<body>
+
+<div class="un-wrap">
+  <div class="un-card" id="un-card">
+    <h1>Unsubscribe</h1>
+    <p id="un-text">One moment…</p>
+    <button class="un-btn" id="un-go" hidden>Yes, unsubscribe me</button>
+    <p class="un-quiet" id="un-quiet" hidden>
+      This only affects marketing emails. If you have a Sahaba Club account,
+      messages about your membership will still reach you.
+    </p>
+  </div>
+</div>
+
+<script type="module">
+  // Deliberately not a one-click-on-load unsubscribe: mail clients and
+  // security scanners fetch links in emails automatically, and a page that
+  // acts on GET would unsubscribe people who never opened the message. The
+  // button is the confirmation.
+  //
+  // The exception is the one-click header path (List-Unsubscribe-Post), which
+  // mail providers POST rather than GET — that never reaches this page.
+  import { supabase } from "./lib/supabase-client.js";
+
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("t");
+
+  const text = document.getElementById("un-text");
+  const btn = document.getElementById("un-go");
+  const quiet = document.getElementById("un-quiet");
+
+  if (!token) {
+    text.textContent =
+      "This link is missing its code. Use the unsubscribe link in the email you received, " +
+      "or reply to that email and we'll take you off the list by hand.";
+  } else {
+    text.textContent = "Would you like to stop receiving marketing emails from Sahaba Club?";
+    btn.hidden = false;
+    quiet.hidden = false;
+  }
+
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    text.textContent = "Removing you from the list…";
+
+    // A SECURITY DEFINER function is the only thing anon can reach on this
+    // table. It returns a boolean and nothing about the person.
+    const { data, error } = await supabase.rpc("unsubscribe_by_token", { p_token: token });
+
+    if (error) {
+      btn.disabled = false;
+      text.textContent =
+        "Something went wrong at our end. Please try again, or reply to the email and " +
+        "we'll remove you manually.";
+      return;
+    }
+
+    btn.hidden = true;
+    quiet.hidden = true;
+    document.querySelector("#un-card h1").textContent = data ? "Done" : "Nothing to do";
+    text.textContent = data
+      ? "You won't receive marketing emails from us again. Thank you for the time you gave us."
+      : "We couldn't find that code — it may already have been used. Either way, if you're " +
+        "still receiving mail from us, reply to it and we'll sort it out.";
+  });
+</script>
+</body>
+</html>

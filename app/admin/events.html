@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Events — Sahaba Club Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body class="admin">
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>Events</h1>
+      <p>Changes save straight to the site — no code, no GitHub, no waiting.</p>
+    </div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <input type="search" class="ad-search" id="ad-q" placeholder="Search title, venue or country…">
+        <select class="ad-search" id="ad-when" style="min-width:auto;">
+          <option value="upcoming">Upcoming only</option>
+          <option value="all">All dates</option>
+          <option value="past">Past only</option>
+        </select>
+        <div class="ad-spacer"></div>
+        <span class="ad-cell-dim" id="ad-count"></span>
+        <button class="ad-btn ad-btn-primary" id="ad-new">+ New event</button>
+      </div>
+      <div class="ad-tablewrap">
+        <table class="ad-table" id="ad-list">
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>Date</th>
+              <th>Format</th>
+              <th>Price</th>
+              <th>Access</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="7" class="ad-empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="ad-msg"></div>
+  </main>
+</div>
+
+<!-- Editor -->
+<div class="ad-modal-back ad-hidden" id="ad-modal-back">
+  <div class="ad-modal">
+    <h2 id="ad-modal-title">New event</h2>
+    <p class="ad-modal-sub" id="ad-modal-sub">Everything except title and date is optional.</p>
+
+    <!-- Step 0, shown only when adding. Editing goes straight to the form. -->
+    <div id="ad-source" class="ad-hidden">
+      <div class="ad-source-choice">
+        <button type="button" class="ad-source-card" id="src-link">
+          <strong>Import from a link</strong>
+          <span>Paste the event page and we read the details, tags and picture.</span>
+        </button>
+        <button type="button" class="ad-source-card" id="src-manual">
+          <strong>Fill it in myself</strong>
+          <span>The normal form.</span>
+        </button>
+      </div>
+
+      <div id="src-link-panel" class="ad-hidden" style="margin-top:18px;">
+        <div class="ad-field">
+          <label for="f-url">Event link</label>
+          <input type="url" id="f-url" placeholder="https://www.meetup.com/... or luma.com/...">
+          <span class="ad-hint">Meetup and Luma read cleanly. LinkedIn, Microsoft Events, AWS and Kaggle
+            hide their details from anything that is not a logged-in browser &mdash; for those you will be asked
+            to paste the page, which takes about ten seconds.</span>
+        </div>
+
+        <!-- Only appears when the fetch came back too thin to trust. -->
+        <div id="src-paste" class="ad-hidden">
+          <div class="ad-field">
+            <label for="f-pagetext">Paste the page</label>
+            <textarea id="f-pagetext" rows="7" placeholder="Open the event, select all (Ctrl+A), copy, paste here."></textarea>
+          </div>
+        </div>
+
+        <label class="ad-check" style="margin:4px 0 14px;">
+          <input type="checkbox" id="f-genimage" checked>
+          Generate artwork if the page has no image of its own
+        </label>
+
+        <div class="ad-modal-actions">
+          <button type="button" class="ad-btn ad-btn-primary" id="src-go">Read the event</button>
+          <button type="button" class="ad-btn" id="src-back">Back</button>
+        </div>
+        <div id="src-msg"></div>
+      </div>
+    </div>
+
+    <form id="ad-form">
+      <input type="hidden" id="f-id">
+
+      <div class="ad-field">
+        <label for="f-title">Title *</label>
+        <input type="text" id="f-title" required>
+      </div>
+
+      <div class="ad-row-2">
+        <div class="ad-field">
+          <label for="f-country">Country</label>
+          <input type="text" id="f-country" placeholder="UAE">
+        </div>
+        <div class="ad-field">
+          <label for="f-location">Venue / location</label>
+          <input type="text" id="f-location" placeholder="DIFC, Dubai">
+        </div>
+      </div>
+
+      <div class="ad-row-3">
+        <div class="ad-field">
+          <label for="f-date">Date *</label>
+          <input type="date" id="f-date" required>
+        </div>
+        <div class="ad-field">
+          <label for="f-time">Time</label>
+          <input type="text" id="f-time" placeholder="6:00 PM – 8:00 PM">
+          <span class="ad-hint">Shown exactly as typed</span>
+        </div>
+        <div class="ad-field">
+          <label for="f-mode">Format</label>
+          <select id="f-mode">
+            <option value="In-Person">In-Person</option>
+            <option value="Online">Online</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="ad-row-2">
+        <div class="ad-field">
+          <label for="f-price">Price</label>
+          <input type="text" id="f-price" placeholder="Free, or Paid — $28" value="Free">
+        </div>
+        <div class="ad-field">
+          <label for="f-tags">Tags</label>
+          <input type="text" id="f-tags" placeholder="AI, Startups">
+          <span class="ad-hint">Comma-separated, first two show as badges</span>
+        </div>
+      </div>
+
+      <div class="ad-row-2">
+        <div class="ad-field">
+          <label for="f-register">Registration link</label>
+          <input type="url" id="f-register" placeholder="https://…">
+        </div>
+        <div class="ad-field">
+          <label for="f-maps">Google Maps link</label>
+          <input type="url" id="f-maps" placeholder="https://…">
+          <span class="ad-hint">In-person events only</span>
+        </div>
+      </div>
+
+      <div class="ad-row-2">
+        <div class="ad-field">
+          <label for="f-image">Image URL</label>
+          <input type="text" id="f-image" placeholder="https://… or assets/events/photo.jpg">
+        </div>
+        <div class="ad-field">
+          <label for="f-brand">Special badge</label>
+          <select id="f-brand">
+            <option value="">None</option>
+            <option value="microsoft">Microsoft official training</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="ad-field">
+        <label for="f-desc">Description</label>
+        <textarea id="f-desc" placeholder="A sentence or two about the event."></textarea>
+      </div>
+
+      <label class="ad-check">
+        <input type="checkbox" id="f-premium">
+        <span><strong>Premium members only.</strong> Everyone still sees it listed, but it shows
+        locked, with an upgrade prompt instead of the registration button.</span>
+      </label>
+
+      <label class="ad-check">
+        <input type="checkbox" id="f-published" checked>
+        <span><strong>Published.</strong> Untick to keep it as a draft that only staff can see.</span>
+      </label>
+
+      <div class="ad-modal-actions">
+        <button type="submit" class="ad-btn ad-btn-primary" id="f-save">Save event</button>
+        <button type="button" class="ad-btn" id="f-cancel">Cancel</button>
+        <div class="ad-spacer" style="flex:1"></div>
+        <button type="button" class="ad-btn ad-btn-danger ad-hidden" id="f-delete">Delete</button>
+      </div>
+      <div id="ad-form-msg"></div>
+    </form>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase } from "../../lib/supabase-client.js";
+  import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
+    from "../../lib/admin-guard.js";
+
+  const user = await requireStaff();
+  if (!user) throw new Error("not staff");
+  renderShell(user, "events.html");
+
+  let allEvents = [];
+
+  const modal = document.getElementById("ad-modal-back");
+  const F = {
+    id: document.getElementById("f-id"),
+    title: document.getElementById("f-title"),
+    country: document.getElementById("f-country"),
+    location: document.getElementById("f-location"),
+    date: document.getElementById("f-date"),
+    time: document.getElementById("f-time"),
+    mode: document.getElementById("f-mode"),
+    price: document.getElementById("f-price"),
+    tags: document.getElementById("f-tags"),
+    register: document.getElementById("f-register"),
+    maps: document.getElementById("f-maps"),
+    image: document.getElementById("f-image"),
+    brand: document.getElementById("f-brand"),
+    desc: document.getElementById("f-desc"),
+    premium: document.getElementById("f-premium"),
+    published: document.getElementById("f-published"),
+  };
+
+  async function loadEvents() {
+    const { data, error } = await supabase
+      .from("events")
+      .select("*")
+      .order("event_date", { ascending: true });
+
+    if (error) {
+      showMessage("ad-msg", "Couldn't load events: " + error.message, "err");
+      return;
+    }
+    allEvents = data || [];
+    render();
+  }
+
+  function render() {
+    const q = document.getElementById("ad-q").value.trim().toLowerCase();
+    const when = document.getElementById("ad-when").value;
+    const today = new Date().toISOString().slice(0, 10);
+
+    const rows = allEvents.filter(e => {
+      if (when === "upcoming" && e.event_date < today) return false;
+      if (when === "past" && e.event_date >= today) return false;
+      if (!q) return true;
+      return [e.title, e.location, e.country].filter(Boolean)
+        .join(" ").toLowerCase().includes(q);
+    });
+
+    document.getElementById("ad-count").textContent =
+      rows.length + " of " + allEvents.length + " shown";
+
+    const body = document.querySelector("#ad-list tbody");
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="7" class="ad-empty">Nothing matches.</td></tr>';
+      return;
+    }
+
+    body.innerHTML = rows.map(e =>
+      "<tr>" +
+        '<td class="ad-cell-strong">' + escapeHtml(e.title) +
+          (e.tags && e.tags.length
+            ? '<div class="ad-cell-dim">' + escapeHtml(e.tags.join(" · ")) + "</div>" : "") +
+        "</td>" +
+        "<td>" + formatDate(e.event_date) +
+          (e.time_label ? '<div class="ad-cell-dim">' + escapeHtml(e.time_label) + "</div>" : "") +
+        "</td>" +
+        "<td>" + escapeHtml(e.mode) +
+          (e.mode !== "Online" && e.location
+            ? '<div class="ad-cell-dim">' + escapeHtml(e.location) + "</div>" : "") +
+        "</td>" +
+        "<td>" + escapeHtml(e.price_label || "Free") + "</td>" +
+        "<td>" + (e.tier_required === "premium"
+          ? '<span class="ad-pill tier-premium">Premium</span>'
+          : '<span class="ad-pill muted">Everyone</span>') + "</td>" +
+        "<td>" + (e.is_published
+          ? '<span class="ad-pill ok">live</span>'
+          : '<span class="ad-pill warn">draft</span>') + "</td>" +
+        '<td><button class="ad-btn ad-btn-sm" data-edit="' + e.id + '">Edit</button></td>' +
+      "</tr>"
+    ).join("");
+
+    body.querySelectorAll("[data-edit]").forEach(btn => {
+      btn.addEventListener("click", () => openEditor(btn.getAttribute("data-edit")));
+    });
+  }
+
+  function openEditor(id) {
+    clearMessage("ad-form-msg");
+    const e = id ? allEvents.find(x => x.id === id) : null;
+
+    document.getElementById("ad-modal-title").textContent = e ? "Edit event" : "New event";
+    document.getElementById("f-delete").classList.toggle("ad-hidden", !e);
+
+    F.id.value = e ? e.id : "";
+    F.title.value = e ? e.title : "";
+    F.country.value = e ? (e.country || "") : "";
+    F.location.value = e ? (e.location || "") : "";
+    F.date.value = e ? e.event_date : "";
+    F.time.value = e ? (e.time_label || "") : "";
+    F.mode.value = e ? e.mode : "In-Person";
+    F.price.value = e ? (e.price_label || "Free") : "Free";
+    F.tags.value = e && e.tags ? e.tags.join(", ") : "";
+    F.register.value = e ? (e.register_link || "") : "";
+    F.maps.value = e ? (e.maps_link || "") : "";
+    F.image.value = e ? (e.image_url || "") : "";
+    F.brand.value = e ? (e.brand || "") : "";
+    F.desc.value = e ? (e.description || "") : "";
+    F.premium.checked = e ? e.tier_required === "premium" : false;
+    F.published.checked = e ? e.is_published : true;
+
+    modal.classList.remove("ad-hidden");
+
+    // Adding starts at the source chooser; editing goes straight to the form.
+    showStep(e ? "form" : "source");
+    if (e) F.title.focus();
+  }
+
+  // ---- Add from a link --------------------------------------------------
+
+  var sourceStep = document.getElementById("ad-source");
+  var formEl = document.getElementById("ad-form");
+  var linkPanel = document.getElementById("src-link-panel");
+  var pastePanel = document.getElementById("src-paste");
+  var subEl = document.getElementById("ad-modal-sub");
+
+  function showStep(step) {
+    sourceStep.classList.toggle("ad-hidden", step !== "source");
+    formEl.classList.toggle("ad-hidden", step !== "form");
+    if (step === "source") {
+      linkPanel.classList.add("ad-hidden");
+      pastePanel.classList.add("ad-hidden");
+      document.getElementById("f-url").value = "";
+      document.getElementById("f-pagetext").value = "";
+      clearMessage("src-msg");
+      subEl.textContent = "Start from a link, or fill the form in yourself.";
+    } else {
+      subEl.textContent = "Everything except title and date is optional.";
+    }
+  }
+
+  document.getElementById("src-manual").addEventListener("click", function () {
+    showStep("form");
+    F.title.focus();
+  });
+
+  document.getElementById("src-link").addEventListener("click", function () {
+    linkPanel.classList.remove("ad-hidden");
+    document.getElementById("f-url").focus();
+  });
+
+  document.getElementById("src-back").addEventListener("click", function () {
+    showStep("source");
+  });
+
+  document.getElementById("src-go").addEventListener("click", async function () {
+    var btn = this;
+    var url = document.getElementById("f-url").value.trim();
+    var pageText = document.getElementById("f-pagetext").value.trim();
+
+    if (!url && !pageText) {
+      showMessage("src-msg", "Paste the event link first.", "err");
+      return;
+    }
+
+    btn.disabled = true;
+    showMessage("src-msg", pageText ? "Reading what you pasted..." : "Reading the event page...", "info");
+
+    var res;
+    try {
+      res = await supabase.functions.invoke("import-event", {
+        body: {
+          url: url,
+          pageText: pageText,
+          generateImage: document.getElementById("f-genimage").checked,
+        },
+      });
+    } catch (err) {
+      btn.disabled = false;
+      showMessage("src-msg", "Couldn't reach the importer: " + String(err), "err");
+      return;
+    }
+    btn.disabled = false;
+
+    var data = res.data;
+    if (res.error || !data) {
+      showMessage("src-msg", "Import failed. Fill the form in manually, or try again.", "err");
+      return;
+    }
+
+    // The site gave the server nothing worth reading - ask for the page text
+    // rather than handing a model a login screen and letting it invent.
+    if (data.needsPaste) {
+      pastePanel.classList.remove("ad-hidden");
+      showMessage("src-msg", data.reason + " " + data.hint, "info");
+      document.getElementById("f-pagetext").focus();
+      return;
+    }
+
+    if (data.error) {
+      showMessage("src-msg", data.error, "err");
+      return;
+    }
+
+    fillFormFrom(data.draft);
+    showStep("form");
+
+    var notes = [];
+    if (data.confidence === "low") {
+      notes.push("Some details were missing from the page - check the date and title before publishing.");
+    } else if (data.confidence === "medium") {
+      notes.push("Most of it came through; give it a quick read.");
+    }
+    notes.push(data.imageOrigin === "source"
+      ? "Picture taken from the event page."
+      : data.imageOrigin === "generated"
+        ? "No picture on the page, so this one was generated - abstract artwork, no logos."
+        : "No picture found or generated.");
+
+    showMessage("ad-form-msg", notes.join(" "), data.confidence === "low" ? "err" : "info");
+  });
+
+  function fillFormFrom(d) {
+    F.id.value = "";
+    F.title.value = d.title || "";
+    F.country.value = d.country || "";
+    F.location.value = d.location || "";
+    F.date.value = d.event_date || "";
+    F.time.value = d.time_label || "";
+    F.mode.value = d.mode === "Online" ? "Online" : "In-Person";
+    F.price.value = d.price_label || "Free";
+    F.tags.value = (d.tags || []).join(", ");
+    F.register.value = d.register_link || "";
+    F.maps.value = "";
+    F.image.value = d.image_url || "";
+    F.brand.value = d.brand || "";
+    F.desc.value = d.description || "";
+    F.premium.checked = false;
+    // Anything imported starts unpublished. A machine-read event going
+    // straight onto the public site with a wrong date is exactly the failure
+    // worth designing out.
+    F.published.checked = false;
+    document.getElementById("f-delete").classList.add("ad-hidden");
+  }
+
+  function closeEditor() { modal.classList.add("ad-hidden"); }
+
+  document.getElementById("ad-new").addEventListener("click", () => openEditor(null));
+  document.getElementById("f-cancel").addEventListener("click", closeEditor);
+  document.getElementById("ad-q").addEventListener("input", render);
+  document.getElementById("ad-when").addEventListener("change", render);
+  modal.addEventListener("click", (ev) => { if (ev.target === modal) closeEditor(); });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape" && !modal.classList.contains("ad-hidden")) closeEditor();
+  });
+
+  document.getElementById("ad-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const saveBtn = document.getElementById("f-save");
+    saveBtn.disabled = true;
+    showMessage("ad-form-msg", "Saving…", "info");
+
+    const payload = {
+      title: F.title.value.trim(),
+      country: F.country.value.trim() || null,
+      location: F.location.value.trim() || null,
+      event_date: F.date.value,
+      time_label: F.time.value.trim() || null,
+      mode: F.mode.value,
+      price_label: F.price.value.trim() || "Free",
+      tags: F.tags.value.split(",").map(s => s.trim()).filter(Boolean),
+      register_link: F.register.value.trim() || null,
+      // An online event has no venue to navigate to, so drop any stale map link
+      // rather than leaving a Find Location button that makes no sense.
+      maps_link: F.mode.value === "Online" ? null : (F.maps.value.trim() || null),
+      image_url: F.image.value.trim() || null,
+      brand: F.brand.value || null,
+      description: F.desc.value.trim() || null,
+      tier_required: F.premium.checked ? "premium" : "all",
+      is_published: F.published.checked,
+    };
+
+    const id = F.id.value;
+    const { error } = id
+      ? await supabase.from("events").update(payload).eq("id", id)
+      : await supabase.from("events").insert(payload);
+
+    saveBtn.disabled = false;
+    if (error) {
+      showMessage("ad-form-msg", "Couldn't save: " + error.message, "err");
+      return;
+    }
+    closeEditor();
+    showMessage("ad-msg", id ? "Event updated. It's live now." : "Event created. It's live now.", "ok");
+    loadEvents();
+  });
+
+  document.getElementById("f-delete").addEventListener("click", async () => {
+    const id = F.id.value;
+    if (!id) return;
+    const e = allEvents.find(x => x.id === id);
+    if (!confirm('Delete "' + (e ? e.title : "this event") + '"?\n\nThis cannot be undone.')) return;
+
+    const { error } = await supabase.from("events").delete().eq("id", id);
+    if (error) {
+      showMessage("ad-form-msg", "Couldn't delete: " + error.message, "err");
+      return;
+                           }
+    closeEditor();
+    showMessage("ad-msg", "Event deleted.", "ok");
+    loadEvents();
+  });
+
+  loadEvents();
+</script>
+</body>
+</html>

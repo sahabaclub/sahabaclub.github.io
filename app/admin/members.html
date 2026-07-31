@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Members — Sahaba Club Admin</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body class="admin">
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>Members</h1>
+      <p>Everyone who has joined Sahaba Club.</p>
+    </div>
+
+    <div class="ad-stats" id="ad-stats"></div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <input type="search" class="ad-search" id="ad-q" placeholder="Search name, skills or interests…">
+        <select class="ad-search" id="ad-tier" style="min-width:auto;">
+          <option value="">All tiers</option>
+          <option value="standard">Standard</option>
+          <option value="premium">Premium</option>
+        </select>
+        <select class="ad-search" id="ad-state" style="min-width:auto;">
+          <option value="">Any profile state</option>
+          <option value="done">Profile complete</option>
+          <option value="pending">Profile unfinished</option>
+        </select>
+        <div class="ad-spacer"></div>
+        <span class="ad-cell-dim" id="ad-count"></span>
+      </div>
+      <div class="ad-tablewrap">
+        <table class="ad-table" id="ad-list">
+          <thead>
+            <tr>
+              <th>Member</th>
+              <th>Joined</th>
+              <th>Tier</th>
+              <th>Role</th>
+              <th>Microsoft 365</th>
+              <th>Profile</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="7" class="ad-empty">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="ad-msg"></div>
+  </main>
+</div>
+
+<!-- Member detail -->
+<div class="ad-modal-back ad-hidden" id="ad-modal-back">
+  <div class="ad-modal">
+    <h2 id="ad-modal-title">Member</h2>
+    <p class="ad-modal-sub" id="ad-modal-sub"></p>
+    <div id="ad-detail"></div>
+    <div class="ad-modal-actions">
+      <button type="button" class="ad-btn" id="d-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase } from "../../lib/supabase-client.js";
+  import { requireStaff, renderShell, escapeHtml, formatDate, showMessage }
+    from "../../lib/admin-guard.js";
+
+  const user = await requireStaff();
+  if (!user) throw new Error("not staff");
+  renderShell(user, "members.html");
+
+  let members = [];
+
+  async function load() {
+    // Three separate reads joined in the browser. Supabase can join related
+    // tables in one query, but only where a foreign key links them — these
+    // all hang off auth.users rather than each other, so it's cleaner to
+    // fetch and stitch than to fight the query builder.
+    const [{ data: profiles, error: pErr }, { data: subs }, { data: ms365 }] = await Promise.all([
+      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+      supabase.from("subscriptions").select("user_id, tier, status, renews_at"),
+      supabase.from("ms365_accounts").select("user_id, mailbox, status, license_expires_at"),
+    ]);
+
+    if (pErr) {
+      showMessage("ad-msg", "Couldn't load members: " + pErr.message, "err");
+      return;
+    }
+
+    const subBy = {}; (subs || []).forEach(s => { subBy[s.user_id] = s; });
+    const msBy = {}; (ms365 || []).forEach(m => { msBy[m.user_id] = m; });
+
+    members = (profiles || []).map(p => ({
+      ...p,
+      tier: (subBy[p.user_id] || {}).tier || "standard",
+      ms365: msBy[p.user_id] || null,
+    }));
+
+    renderStats();
+    render();
+  }
+
+  function renderStats() {
+    const total = members.length;
+    const premium = members.filter(m => m.tier === "premium").length;
+    const done = members.filter(m => m.onboarding_completed_at).length;
+    const withMailbox = members.filter(m => m.ms365 && m.ms365.status === "active").length;
+
+    document.getElementById("ad-stats").innerHTML = [
+      { label: "Total members", value: total, sub: "all accounts" },
+      { label: "Premium", value: premium, sub: total ? Math.round(premium / total * 100) + "% of members" : "—" },
+      { label: "Profile complete", value: done, sub: (total - done) + " unfinished" },
+      { label: "Has a mailbox", value: withMailbox, sub: (total - withMailbox) + " still to issue" },
+    ].map(s =>
+      '<div class="ad-stat">' +
+        '<div class="ad-stat-label">' + s.label + "</div>" +
+        '<div class="ad-stat-value">' + s.value + "</div>" +
+        '<div class="ad-stat-sub">' + s.sub + "</div>" +
+      "</div>"
+    ).join("");
+  }
+
+  function render() {
+    const q = document.getElementById("ad-q").value.trim().toLowerCase();
+    const tier = document.getElementById("ad-tier").value;
+    const state = document.getElementById("ad-state").value;
+
+    const rows = members.filter(m => {
+      if (tier && m.tier !== tier) return false;
+      if (state === "done" && !m.onboarding_completed_at) return false;
+      if (state === "pending" && m.onboarding_completed_at) return false;
+      if (!q) return true;
+      const hay = [m.full_name, m.industry, m.bio,
+        (m.skills || []).join(" "), (m.interests || []).join(" ")]
+        .filter(Boolean).join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+
+    document.getElementById("ad-count").textContent =
+      rows.length + " of " + members.length + " shown";
+
+    const body = document.querySelector("#ad-list tbody");
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="7" class="ad-empty">Nobody matches.</td></tr>';
+      return;
+    }
+
+    body.innerHTML = rows.map(m => {
+      const ms = m.ms365;
+      const msCell = !ms
+        ? '<span class="ad-pill muted">none yet</span>'
+        : ms.status === "active"
+          ? '<span class="ad-pill ok">active</span>'
+          : ms.status === "grace_unlicensed"
+            ? '<span class="ad-pill warn">paused</span>'
+            : '<span class="ad-pill danger">' + escapeHtml(ms.status) + "</span>";
+
+      return "<tr>" +
+        '<td class="ad-cell-strong">' + escapeHtml(m.full_name || "(no name yet)") +
+          (m.industry ? '<div class="ad-cell-dim">' + escapeHtml(m.industry) + "</div>" : "") +
+        "</td>" +
+        "<td>" + formatDate(m.created_at) + "</td>" +
+        '<td><span class="ad-pill tier-' + m.tier + '">' + m.tier + "</span></td>" +
+        '<td><span class="ad-pill role-' + m.role + '">' + m.role + "</span></td>" +
+        "<td>" + msCell + "</td>" +
+        "<td>" + (m.onboarding_completed_at
+          ? '<span class="ad-pill ok">complete</span>'
+          : '<span class="ad-pill warn">unfinished</span>') + "</td>" +
+        '<td><button class="ad-btn ad-btn-sm" data-view="' + m.user_id + '">View</button></td>' +
+      "</tr>";
+    }).join("");
+
+    body.querySelectorAll("[data-view]").forEach(btn => {
+      btn.addEventListener("click", () => openDetail(btn.getAttribute("data-view")));
+    });
+  }
+
+  function tagList(arr) {
+    if (!arr || !arr.length) return '<span class="ad-cell-dim">—</span>';
+    return arr.map(t => '<span class="ad-pill muted" style="margin:0 4px 4px 0;">' +
+      escapeHtml(t) + "</span>").join("");
+  }
+
+  function openDetail(userId) {
+    const m = members.find(x => x.user_id === userId);
+    if (!m) return;
+
+    document.getElementById("ad-modal-title").textContent = m.full_name || "(no name yet)";
+    document.getElementById("ad-modal-sub").textContent =
+      "Joined " + formatDate(m.created_at) + " · " + m.tier + " · " + m.role;
+
+    const row = (label, value) =>
+      '<div style="display:grid;grid-template-columns:150px 1fr;gap:12px;padding:9px 0;' +
+      'border-bottom:1px solid var(--ad-line);">' +
+      '<div class="ad-cell-dim">' + label + "</div><div>" + value + "</div></div>";
+
+    document.getElementById("ad-detail").innerHTML =
+      row("Bio", m.bio ? escapeHtml(m.bio) : '<span class="ad-cell-dim">—</span>') +
+      row("Experience", m.experience_level ? escapeHtml(m.experience_level) : '<span class="ad-cell-dim">—</span>') +
+      row("Industry", m.industry ? escapeHtml(m.industry) : '<span class="ad-cell-dim">—</span>') +
+      row("Timezone", m.timezone ? escapeHtml(m.timezone) : '<span class="ad-cell-dim">—</span>') +
+      row("Language", m.language ? escapeHtml(m.language) : '<span class="ad-cell-dim">—</span>') +
+      row("Skills", tagList(m.skills)) +
+      row("Interests", tagList(m.interests)) +
+      row("Goals", tagList(m.goals)) +
+      row("Newsletter", m.newsletter_opt_in
+        ? '<span class="ad-pill ok">subscribed</span>'
+        : '<span class="ad-pill muted">opted out</span>') +
+      row("Profile source", m.profile_source
+        ? escapeHtml(m.profile_source.replace("_", " "))
+        : '<span class="ad-cell-dim">—</span>') +
+      row("Microsoft 365", m.ms365
+        ? escapeHtml(m.ms365.mailbox) + " · " + escapeHtml(m.ms365.status)
+        : '<span class="ad-cell-dim">not issued yet</span>') +
+      // Being explicit about why there's no edit button here, so nobody
+      // wastes time looking for one.
+      '<div class="ad-msg info" style="margin-top:16px;">Tier and role can\'t be changed from ' +
+      "here yet — those are locked at the database level and need the server functions " +
+      "deploying. For now they're changed from the Supabase dashboard.</div>";
+
+    document.getElementById("ad-modal-back").classList.remove("ad-hidden");
+  }
+
+  const modal = document.getElementById("ad-modal-back");
+  document.getElementById("d-close").addEventListener("click", () => modal.classList.add("ad-hidden"));
+  modal.addEventListener("click", (ev) => { if (ev.target === modal) modal.classList.add("ad-hidden"); });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") modal.classList.add("ad-hidden");
+  });
+
+  ["ad-q", "ad-tier", "ad-state"].forEach(id => {
+    document.getElementById(id).addEventListener("input", render);
+    document.getElementById(id).addEventListener("change", render);
+  });
+
+  load();
+</script>
+</body>
+</html>

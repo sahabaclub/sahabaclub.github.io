@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Newsletter — Sahaba Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+<style>
+  .nl-wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 100px; }
+  .nl-hero { margin-bottom: 24px; }
+  .nl-hero h1 { font-size: 26px; margin: 0 0 6px; }
+  .nl-hero p { color: var(--text-secondary); font-size: 14.5px; margin: 0; }
+  .nl-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 24px; }
+  .nl-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .nl-field label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .nl-field input, .nl-field textarea {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: 8px;
+    padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit;
+  }
+  .nl-field textarea { min-height: 180px; resize: vertical; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 13px; }
+  .nl-hidden { display: none !important; }
+  .nl-status { font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-top: 14px; }
+  .nl-status.ok { background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.4); color: #4ade80; }
+  .nl-status.err { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
+  .nl-status.info { background: rgba(56,189,248,0.14); border: 1px solid rgba(56,189,248,0.4); color: #7dd3fc; }
+  .nl-btn-primary {
+    background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
+    font-weight: 700; border-radius: 999px; cursor: pointer; padding: 11px 22px; font-size: 14.5px; font-family: inherit;
+  }
+  .nl-btn-secondary { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text); border-radius: 999px; cursor: pointer; padding: 10px 20px; font-size: 14px; font-family: inherit; }
+  .nl-btn-primary:disabled, .nl-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .nl-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .nl-note { font-size: 12.5px; color: var(--text-muted); margin-top: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="../assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+    </div>
+  </div>
+</header>
+
+<main class="nl-wrap">
+  <div class="nl-hero">
+    <p class="kicker">Private tool</p>
+    <h1 class="glow-text">Send a newsletter</h1>
+    <p>Goes only to members who've opted in. Check the audience before you send — there's no unsend.</p>
+  </div>
+
+  <div id="gate-status"></div>
+
+  <div class="nl-card nl-hidden" id="composer">
+    <div class="nl-field">
+      <label for="f-interests">Audience — interests (comma-separated, blank for everyone)</label>
+      <input type="text" id="f-interests" placeholder="Agentic AI, Hackathons">
+    </div>
+
+    <div class="nl-actions" style="margin-bottom:18px;">
+      <button type="button" class="nl-btn-secondary" id="btn-count">Check audience size</button>
+      <span id="count-result" style="font-size:13.5px; color:var(--text-secondary);"></span>
+    </div>
+
+    <div class="nl-field">
+      <label for="f-subject">Subject</label>
+      <input type="text" id="f-subject" placeholder="What's on at Sahaba Club this month">
+    </div>
+
+    <div class="nl-field">
+      <label for="f-html">Body (HTML)</label>
+      <textarea id="f-html" placeholder="&lt;p&gt;Hi,&lt;/p&gt;&#10;&lt;p&gt;Here's what's coming up…&lt;/p&gt;"></textarea>
+    </div>
+
+    <div class="nl-actions">
+      <button type="button" class="nl-btn-primary" id="btn-send">Send newsletter</button>
+    </div>
+    <div id="send-status"></div>
+    <p class="nl-note">Every recipient gets their own email — nobody sees anyone else's address.</p>
+  </div>
+</main>
+
+<script type="module">
+  import { supabase } from "../lib/supabase-client.js";
+  import { getSession } from "../lib/auth.js";
+
+  function showStatus(elId, msg, kind) {
+    document.getElementById(elId).innerHTML = '<div class="nl-status ' + kind + '">' + msg + "</div>";
+  }
+
+  function targetInterests() {
+    return document.getElementById("f-interests").value
+      .split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  (async function init() {
+    var session = await getSession();
+    if (!session) {
+      window.location.href = "../login.html";
+      return;
+    }
+
+    // The function enforces this too — this check only decides whether to
+    // show the composer, so a non-admin gets a clear message instead of a
+    // form that fails on submit.
+    var { data } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+
+    if (!data || data.role !== "admin") {
+      showStatus("gate-status", "This page is for admins only.", "err");
+      return;
+    }
+    document.getElementById("composer").classList.remove("nl-hidden");
+  })();
+
+  document.getElementById("btn-count").addEventListener("click", async function () {
+    var countEl = document.getElementById("count-result");
+    countEl.textContent = "Counting…";
+
+    var { data, error } = await supabase.functions.invoke("send-newsletter", {
+      body: { interests: targetInterests(), dryRun: true },
+    });
+
+    if (error || (data && data.error)) {
+      countEl.textContent = (data && data.error) || error.message;
+      return;
+    }
+    countEl.textContent = data.reachable + " will receive it" +
+      (data.matched !== data.reachable
+        ? " (" + (data.matched - data.reachable) + " matched but have no email address)"
+        : "");
+  });
+
+  document.getElementById("btn-send").addEventListener("click", async function () {
+    var subject = document.getElementById("f-subject").value.trim();
+    var html = document.getElementById("f-html").value.trim();
+    if (!subject || !html) {
+      showStatus("send-status", "Add a subject and a body first.", "err");
+      return;
+    }
+
+    var interests = targetInterests();
+    var audience = interests.length ? "members interested in " + interests.join(", ") : "every opted-in member";
+    if (!confirm('Send "' + subject + '" to ' + audience + "?\n\nThis can't be undone.")) return;
+
+    var sendBtn = document.getElementById("btn-send");
+    sendBtn.disabled = true;
+    showStatus("send-status", "Sending…", "info");
+
+    var { data, error } = await supabase.functions.invoke("send-newsletter", {
+      body: { subject: subject, html: html, interests: interests },
+    });
+
+    sendBtn.disabled = false;
+    if (error || (data && data.error)) {
+      showStatus("send-status", (data && data.error) || error.message, "err");
+      return;
+    }
+    showStatus("send-status",
+      "Sent to " + data.sent + " members." + (data.failed ? " " + data.failed + " didn't go through — check the function logs." : ""),
+      data.failed ? "info" : "ok");
+  });
+</script>
+<script src="../script.js"></script>
+</body>
+</html>

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sahaba Club — The AI universe in the shape of a club</title>
+<meta name="description" content="Join Sahaba Club, a global AI and cloud community founded by a Microsoft partner. Get Microsoft 365 free for 3 months when you join.">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Apply saved theme before first paint so the page never flashes dark.
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+    if (localStorage.getItem("sc_reduce_motion") === "1") {
+      document.documentElement.classList.add("reduce-motion");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav has-drawer">
+  <div class="nav-inner">
+    <a href="#" class="logo" aria-label="Sahaba Club — home">
+      <img src="assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="tab-toggle" role="tablist" aria-label="Audience">
+      <button class="tab-btn active" data-tab="individual" role="tab" aria-selected="true">Individuals</button>
+      <button class="tab-btn" data-tab="corporate" role="tab" aria-selected="false">Corporate</button>
+    </div>
+    <div class="nav-actions">
+      <a href="events.html" class="nav-link">Events</a>
+      <a href="podcast.html" class="nav-link">Podcast</a>
+      <a href="app/admin/index.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
+      <a href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in" class="btn btn-ghost" data-signin-link>Sign in</a>
+      <a href="#join" class="btn btn-glow nav-cta indiv-only">Join free</a>
+      <a href="#join" class="btn btn-glow nav-cta corp-only">Talk to sales</a>
+    </div>
+    <p class="nav-slogan" aria-label="We don't teach tech, we coach IT">
+      <span>We Don&rsquo;t Teach Tech,</span>
+      <span>We Coach IT&hellip;</span>
+    </p>
+    <div class="nav-compact">
+      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
+        <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/>
+          <path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/>
+        </svg>
+        <svg class="theme-icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.5 13.4A8.4 8.4 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z"/>
+        </svg>
+      </button>
+      <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
+<div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
+<nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
+  <div class="mobile-menu-panel">
+    <a class="mobile-menu-item" href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in" data-signin-link>Sign in</a>
+    <a class="mobile-menu-item is-primary" href="#join">Join the Club</a>
+    <a class="mobile-menu-item" href="events.html">Events</a>
+    <a class="mobile-menu-item" href="podcast.html">Podcast</a>
+    <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="app/admin/index.html">Admin</a>
+
+    <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-language">
+      <span>Language</span>
+      <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
+    </button>
+    <div class="mobile-submenu" id="submenu-language" hidden>
+      <button class="mobile-submenu-item is-active" type="button" data-lang="en">English</button>
+      <button class="mobile-submenu-item" type="button" data-lang="ar">
+        العربية <span class="mobile-soon">soon</span>
+      </button>
+    </div>
+
+    <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-settings">
+      <span>Settings</span>
+      <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
+    </button>
+    <div class="mobile-submenu" id="submenu-settings" hidden>
+      <div class="theme-choice-row">
+        <span class="theme-choice-label">Appearance</span>
+        <div class="theme-choice" role="group" aria-label="Appearance">
+          <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+          <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+        </div>
+      </div>
+      <label class="mobile-switch">
+        <span>Reduce motion</span>
+        <input type="checkbox" id="setting-reduce-motion">
+        <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
+      </label>
+      <p class="mobile-setting-note">Turns off the moving starfield and scrolling photo strip.</p>
+    </div>
+  </div>
+</nav>
+
+<!-- Audience switcher — lives under the header on phones, where it
+     doesn't fit in the top bar. Stays in sync with the desktop toggle. -->
+<div class="mobile-audience-bar">
+  <div class="tab-toggle mobile-tab-toggle" role="tablist" aria-label="Audience">
+    <button class="tab-btn active" data-tab="individual" role="tab" aria-selected="true">Individuals</button>
+    <button class="tab-btn" data-tab="corporate" role="tab" aria-selected="false">Corporate</button>
+  </div>
+</div>
+
+<main>
+
+  <section class="hero">
+    <span class="eyebrow corp-only"><span class="eyebrow-item"><span class="dot"></span>Microsoft AI Cloud Partner</span><span class="eyebrow-item"><span class="dot"></span>DIFC AI Campus, Dubai</span></span>
+    <h1 class="glow-text indiv-only">
+      <span class="line-big">Join the AI Universe</span>
+      <span class="line-small">Get Microsoft 365 free for 3 months</span>
+    </h1>
+    <h1 class="glow-text corp-only">Power Platform, agentic AI, and training — delivered by a Microsoft partner.</h1>
+    <p class="lead indiv-only">
+      <span class="lead-line1">Sahaba Club is a global community for AI and cloud dreamers</span>
+      <span class="lead-line2">Coaching, Hackathons, PromptArena, Play ZuZu AI, build your own AI apps &mdash; low-code and vibe-code, podcast with Zoka, and more and more with Microsoft and AI&hellip;</span>
+    </p>
+    <p class="lead corp-only">We help GCC companies scale with Power Apps, Power Automate, Copilot Studio, and Azure AI — backed by hands-on training so your team keeps building after we're done.</p>
+    <div class="hero-actions">
+      <a href="#join" class="btn btn-glow btn-lg indiv-only">Join FREE, Get Microsoft 365</a>
+      <a href="#join" class="btn btn-glow btn-lg corp-only">Request a consultation</a>
+      <a href="#universe" class="btn btn-outline btn-lg">Discover The AI Universe</a>
+    </div>
+  </section>
+
+  <section class="universe-section" id="universe">
+    <h2 class="universe-heading glow-text">Sahaba Club AI Universe</h2>
+    <canvas id="universe-canvas"></canvas>
+    <nav class="universe-links sr-only" aria-label="Jump to an activity">
+      <a href="#coaching">Coaching</a>
+      <a href="#hackathons">Hackathons</a>
+      <a href="#promptarena">PromptArena</a>
+      <a href="#zuzu-ai">ZuZu-AI</a>
+      <a href="#podcast">PodCast</a>
+      <a href="#low-code">Low-Code</a>
+      <a href="#vibe-code">Vibe-Code</a>
+    </nav>
+  </section>
+
+  <section class="story">
+    <div class="story-text">
+      <p class="kicker">Our story</p>
+      <p>“Sahaba - سحابة” is the Arabic word for cloud. Founded in 2020, Sahaba Club grew from a community for tech dreamers into a Microsoft partner, an AI hackathon operator, and a home for anyone who wants to build in the AI universe — led by Zoka (Ahmed Abdel Razek), an ex-Microsoft AI and cloud strategist.</p>
+    </div>
+    <div class="story-video">
+      <div class="video-embed">
+        <iframe
+          src="https://www.youtube-nocookie.com/embed/BfMIFOYH97o"
+          title="Tech Talk with Zoka — YouTube"
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+        ></iframe>
+      </div>
+    </div>
+  </section>
+
+  <section class="connect">
+    <p class="kicker center">Stay connected</p>
+    <h2 class="connect-heading glow-text">Connect With Us</h2>
+    <div class="social-grid">
+      <a class="social-btn social-linkedin" href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="Sahaba Club on LinkedIn">
+        <span class="social-icon-circle">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="16.5" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="12" fill="currentColor">in</text></svg>
+        </span>
+        <span class="social-name">LinkedIn</span>
+      </a>
+      <a class="social-btn social-youtube" href="https://youtube.com/@sahabaclub" target="_blank" rel="noopener" aria-label="Sahaba Club on YouTube">
+        <span class="social-icon-circle">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="1.6"/><polygon points="10,9 10,15 15.5,12" fill="currentColor"/></svg>
+        </span>
+        <span class="social-name">YouTube</span>
+      </a>
+      <a class="social-btn social-facebook" href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Sahaba Club on Facebook">
+        <span class="social-icon-circle">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><text x="12" y="17.5" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="16" fill="currentColor">f</text></svg>
+        </span>
+        <span class="social-name">Facebook</span>
+      </a>
+      <a class="social-btn social-instagram" href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Sahaba Club on Instagram">
+        <span class="social-icon-circle">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.2" y="3.2" width="17.6" height="17.6" rx="5.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4.1" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="7" r="1.05" fill="currentColor"/></svg>
+        </span>
+        <span class="social-name">Instagram</span>
+      </a>
+      <a class="social-btn social-tiktok" href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="Zoka on TikTok">
+        <span class="social-icon-circle">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.2 3.2v9.9a3.5 3.5 0 1 1-2-3.15V3.2h2z" fill="currentColor"/><path d="M14.2 5.4c.4 2 2 3.4 4 3.6v2c-1.5-.05-2.9-.5-4-1.3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="social-name">TikTok</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="events-gallery-section">
+    <p class="kicker center">Gallery</p>
+    <h2 class="section-heading glow-text">Moments From Our Events</h2>
+    <p class="section-sub">Hackathons, meetups, and demo days from across the Sahaba Club community.</p>
+
+    <!--
+      HOW TO ADD REAL EVENT PHOTOS
+      -----------------------------
+      Each slot below tries to load an image from
+      assets/events/event-01.jpg through event-10.jpg.
+      Until a file exists at that path, a placeholder icon is shown
+      automatically — no other code needs to change.
+      Just send the photos and they'll be uploaded to those exact
+      filenames to make them appear.
+    -->
+    <div class="event-gallery">
+      <div class="event-gallery-track">
+        <div class="event-photo"><img src="assets/events/event-01.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 01</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-02.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 02</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-03.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 03</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-04.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 04</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-05.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 05</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-06.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 06</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-07.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 07</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-08.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 08</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-09.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 09</span></div></div>
+        <div class="event-photo"><img src="assets/events/event-10.jpg" alt="Sahaba Club event photo" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 10</span></div></div>
+        <!-- duplicate set so the strip loops seamlessly -->
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-01.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 01</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-02.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 02</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-03.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 03</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-04.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 04</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-05.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 05</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-06.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 06</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-07.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 07</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-08.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 08</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-09.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 09</span></div></div>
+        <div class="event-photo" aria-hidden="true"><img src="assets/events/event-10.jpg" alt="" loading="lazy" onload="this.parentElement.classList.add('has-photo')" onerror="this.remove()"><div class="event-photo-fallback"><span class="event-photo-icon">&#128247;</span><span>Photo 10</span></div></div>
+      </div>
+    </div>
+
+    <a href="events.html" class="btn btn-glow btn-lg events-cta">Discover The Coming Events <span aria-hidden="true">&rarr;</span></a>
+  </section>
+
+  <!-- Full-screen photo viewer. Opens when a gallery photo is clicked,
+       closes on another click, the X, or the Escape key. -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Event photo" hidden>
+    <button class="lightbox-close" id="lightbox-close" type="button" aria-label="Close photo">&times;</button>
+    <button class="lightbox-nav lightbox-prev" id="lightbox-prev" type="button" aria-label="Previous photo">&#8249;</button>
+    <img class="lightbox-img" id="lightbox-img" src="" alt="">
+    <button class="lightbox-nav lightbox-next" id="lightbox-next" type="button" aria-label="Next photo">&#8250;</button>
+    <p class="lightbox-counter" id="lightbox-counter"></p>
+  </div>
+
+  <section class="ecosystem">
+    <h2 class="section-heading glow-text indiv-only">Ecosystem</h2>
+    <h2 class="section-heading glow-text corp-only">What We Deliver</h2>
+
+    <div class="card-grid indiv-only">
+      <div class="card" id="coaching">
+        <div class="card-icon"><img src="assets/icons/coaching.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">Coaching</p>
+        <p class="card-desc">1:1 and group coaching on AI, cloud, and Microsoft tools — from people who've shipped real products.</p>
+      </div>
+      <div class="card" id="hackathons">
+        <div class="card-icon"><img src="assets/icons/hackathons.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">Hackathons</p>
+        <p class="card-subtitle">EduHackAI</p>
+        <p class="card-desc">A 10-day AI app hackathon — build a real AI app with Microsoft tools, zero or advanced coding.</p>
+      </div>
+      <a class="card card-link" href="events.html">
+        <div class="card-icon"><img src="assets/icons/events.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">Events</p>
+        <p class="card-desc">Hackathons, meetups, and AI events happening around the world &mdash; see what's next.</p>
+      </a>
+      <a class="card" id="podcast" href="podcast.html">
+        <div class="card-icon"><img src="assets/icons/podcast.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">PodCast</p>
+        <p class="card-subtitle">Tech Talk with Zoka</p>
+        <p class="card-desc">Our podcast: AI, cloud, and tech careers, with 20,000+ daily listeners.</p>
+      </a>
+      <div class="card" id="low-code">
+        <div class="card-icon"><img src="assets/icons/low-code.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">Low-Code</p>
+        <p class="card-desc">Build real AI apps with Power Apps and Copilot Studio — zero coding background needed.</p>
+      </div>
+      <div class="card" id="vibe-code">
+        <div class="card-icon"><img src="assets/icons/vibe-code.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">Vibe-Code</p>
+        <p class="card-desc">Prefer to code? Ship AI apps fast with AI-paired "vibe coding" workflows.</p>
+      </div>
+      <div class="card" id="promptarena">
+        <div class="card-icon"><img src="assets/icons/promptarena.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">PromptArena</p>
+        <p class="card-desc">A live, gamified AI prompt-writing competition — judged by experts and the audience.</p>
+      </div>
+      <div class="card" id="zuzu-ai">
+        <div class="card-icon"><img src="assets/icons/zuzu-ai.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">ZuZu-AI</p>
+        <p class="card-desc">Play ZuZu AI, our gamified AI companion — learn prompting and app-building while you play.</p>
+      </div>
+    </div>
+
+    <div class="card-grid corp-only">
+      <div class="card">
+        <div class="card-icon"><img src="assets/icons/power-platform.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">Power Platform</p>
+        <p class="card-desc">Power Apps, Power Automate, and Power BI dashboards, built fast.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon"><img src="assets/icons/agentic-ai.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">Agentic AI</p>
+        <p class="card-desc">Custom AI agents and Copilot Studio bots for service, automation, and analytics.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon"><img src="assets/icons/training.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">Training and coaching</p>
+        <p class="card-desc">Maker labs, prompt and bot workshops, admin and governance clinics for your team.</p>
+      </div>
+      <div class="card">
+        <div class="card-icon"><img src="assets/icons/partnership.svg" alt="" width="96" height="96" loading="lazy"></div>
+        <p class="card-title">Microsoft partnership</p>
+        <p class="card-desc">Certified delivery across the GCC — CATRION, Majid Al Futtaim, KIPIC, and more.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Numbers presented as spheres drifting inside a lit stage. Each orb
+       floats on its own timing so the group never looks mechanical. -->
+  <section class="stats">
+    <div class="stats-stage">
+      <div class="stat-orb orb-1">
+        <span class="orb-num">1M+</span>
+        <span class="orb-label">People reached</span>
+      </div>
+      <div class="stat-orb orb-2">
+        <span class="orb-num">20k+</span>
+        <span class="orb-label">Daily podcast listeners</span>
+      </div>
+      <div class="stat-orb orb-3">
+        <span class="orb-num">8k+</span>
+        <span class="orb-label">Community followers</span>
+      </div>
+      <div class="stat-orb orb-4">
+        <span class="orb-num">Coming soon</span>
+        <span class="orb-label">Marketplace</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta-band" id="join">
+    <p class="cta-title indiv-only">Join Sahaba Club, get Microsoft 365 free for 3 months.</p>
+    <p class="cta-title corp-only">Let's talk about your Microsoft AI roadmap.</p>
+
+    <form id="individual-form" class="signup-form indiv-only" novalidate>
+      <input type="text" name="name" placeholder="Full name" required>
+      <input type="email" name="email" placeholder="Email" required>
+      <input type="tel" name="phone" placeholder="Phone (optional)">
+      <input type="text" name="how_heard" placeholder="How did you hear about us? (optional)">
+      <button type="submit" class="btn btn-glow">Join free</button>
+    </form>
+    <div id="individual-thanks" class="form-thanks indiv-only hidden">Thanks — we're reviewing your details now and will email your onboarding info, including your Microsoft 365 account access, shortly.</div>
+
+    <form id="corporate-form" class="signup-form corp-only" novalidate>
+      <input type="text" name="name" placeholder="Full name" required>
+      <input type="email" name="email" placeholder="Work email" required>
+      <input type="text" name="company" placeholder="Company" required>
+      <input type="text" name="role" placeholder="Role (optional)">
+      <select name="interest" required>
+        <option value="" disabled selected>Area of interest</option>
+        <option value="Power Platform">Power Platform</option>
+        <option value="Agentic AI">Agentic AI</option>
+        <option value="Training">Training</option>
+      </select>
+      <input type="tel" name="phone" placeholder="Phone (optional)">
+      <button type="submit" class="btn btn-glow">Talk to sales</button>
+    </form>
+    <div id="corporate-thanks" class="form-thanks corp-only hidden">Thanks — our team will reach out within 1–2 business days to set up a consultation.</div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-top">
+    <div class="footer-links">
+      <a href="#">About</a>
+      <a href="events.html">Events</a>
+      <a href="membership.html">Membership</a>
+      <a href="mailto:info@sahabaclub.com">Contact</a>
+      <a href="#">Privacy</a>
+    </div>
+    <div class="footer-social">
+      <a href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="LinkedIn">LinkedIn</a>
+      <a href="https://youtube.com/@sahabaclub" target="_blank" rel="noopener" aria-label="YouTube">YouTube</a>
+      <a href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
+      <a href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
+      <a href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
+    </div>
+  </div>
+  <p class="footer-signature">We Don&rsquo;t Teach Tech, We Coach IT&hellip;</p>
+  <p class="footer-watermark">Developed by Sahaba Club Technologies</p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
