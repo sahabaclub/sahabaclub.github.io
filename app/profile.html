@@ -44,6 +44,32 @@
   }
   .prof-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .prof-note { font-size: 12.5px; color: var(--text-muted); margin-top: 12px; line-height: 1.6; }
+
+  /* The two Connect switches. These decide whether strangers can see and
+     contact you, so they get a bordered block of their own rather than
+     sitting in the run of tick-boxes above — the consequence of each one
+     is spelled out under it instead of in a note at the bottom. */
+  .prof-privacy {
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin: 4px 0 18px;
+    background: var(--glass);
+  }
+  .prof-privacy-title {
+    font-size: 12px; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 700; margin: 0 0 10px;
+  }
+  .prof-toggle { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 4px; }
+  .prof-toggle input { width: auto; margin-top: 3px; flex: 0 0 auto; }
+  .prof-toggle-text { font-size: 14px; font-weight: 600; color: var(--text); }
+  .prof-toggle-why {
+    font-size: 12.5px; color: var(--text-muted); line-height: 1.6;
+    margin: 0 0 14px 26px;
+  }
+  .prof-toggle-why:last-child { margin-bottom: 0; }
+  .prof-privacy-link { font-size: 12.5px; }
+  .prof-privacy-link a { color: var(--cyan); text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -60,6 +86,8 @@
     </a>
     <div class="nav-actions">
       <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="connect.html" class="nav-link">Connect</a>
+      <a href="inbox.html" class="nav-link">Inbox</a>
       <a href="../events.html" class="nav-link">Events</a>
     </div>
   </div>
@@ -78,8 +106,22 @@
         <input type="text" id="f-name" required>
       </div>
       <div class="prof-field">
+        <label for="f-headline">Headline</label>
+        <input type="text" id="f-headline" maxlength="120" placeholder="e.g. Power Platform developer, learning agents">
+      </div>
+      <div class="prof-field">
         <label for="f-bio">Short bio</label>
         <textarea id="f-bio"></textarea>
+      </div>
+      <div class="prof-row">
+        <div class="prof-field">
+          <label for="f-city">City</label>
+          <input type="text" id="f-city" placeholder="e.g. Dubai">
+        </div>
+        <div class="prof-field">
+          <label for="f-country">Country</label>
+          <input type="text" id="f-country" placeholder="e.g. United Arab Emirates">
+        </div>
       </div>
       <div class="prof-row">
         <div class="prof-field">
@@ -119,6 +161,49 @@
         <label for="f-goals">What you're hoping to get out of Sahaba Club (comma-separated)</label>
         <input type="text" id="f-goals">
       </div>
+      <div class="prof-row">
+        <div class="prof-field">
+          <label for="f-linkedin">LinkedIn</label>
+          <input type="url" id="f-linkedin" inputmode="url" placeholder="linkedin.com/in/you">
+        </div>
+        <div class="prof-field">
+          <label for="f-github">GitHub</label>
+          <input type="url" id="f-github" inputmode="url" placeholder="github.com/you">
+        </div>
+      </div>
+      <div class="prof-field">
+        <label for="f-site">Website</label>
+        <input type="url" id="f-site" inputmode="url" placeholder="yoursite.com">
+      </div>
+
+      <div class="prof-privacy">
+        <p class="prof-privacy-title">Connect</p>
+
+        <label class="prof-toggle">
+          <input type="checkbox" id="f-discoverable">
+          <span class="prof-toggle-text">Show me in Connect</span>
+        </label>
+        <p class="prof-toggle-why">Off by default. While it's off, no other member can find you
+          in the member directory, open your profile, or send you a message &mdash; nothing on this
+          page is visible to anyone but you and the Sahaba Club team. Switch it on and other
+          members can see your name, photo, headline, location, skills, interests, links and the
+          events you've attended. Your email address and phone number are never shown, whichever
+          way this is set.</p>
+
+        <label class="prof-toggle">
+          <input type="checkbox" id="f-accepts-messages">
+          <span class="prof-toggle-text">Let members message me</span>
+        </label>
+        <p class="prof-toggle-why">On by default, and only does anything while the switch above
+          is on. Turn it off and members can still see and follow you, but the Message button
+          disappears from your profile. Conversations you already have stay in your inbox.</p>
+
+        <p class="prof-privacy-link" id="connect-links" hidden>
+          <a href="connect.html">Browse Connect</a> &middot;
+          <a href="member.html" id="link-my-public">See my profile as others see it</a>
+        </p>
+      </div>
+
       <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--text-secondary); margin-bottom:12px;">
         <input type="checkbox" id="f-newsletter" style="width:auto;">
         Send me the Sahaba Club newsletter, tailored to my interests
@@ -139,8 +224,14 @@
 <script type="module">
   import { supabase } from "../lib/supabase-client.js";
   import { getSession } from "../lib/auth.js";
+  import { isMissingSchema, safeUrl } from "../lib/connect.js";
 
   var session;
+  // Migration 0013 adds the Connect columns. Until it's applied they don't
+  // exist, and sending them in an UPDATE fails the whole save — including the
+  // fields that have nothing to do with Connect. So: detect once on load, and
+  // leave them out of the payload until they're really there.
+  var hasConnectColumns = false;
 
   function showStatus(msg, kind) {
     document.getElementById("profile-status").innerHTML =
@@ -169,8 +260,37 @@
       return;
     }
 
+    // `select("*")` returns whatever columns exist, so the presence of this
+    // one is the honest test for "has 0013 been applied".
+    hasConnectColumns = Object.prototype.hasOwnProperty.call(data, "is_discoverable");
+
     document.getElementById("f-name").value = data.full_name || "";
     document.getElementById("f-bio").value = data.bio || "";
+    document.getElementById("f-headline").value = data.headline || "";
+    document.getElementById("f-city").value = data.city || "";
+    document.getElementById("f-country").value = data.country || "";
+
+    var links = (data.links && typeof data.links === "object") ? data.links : {};
+    document.getElementById("f-linkedin").value = links.linkedin || "";
+    document.getElementById("f-github").value = links.github || "";
+    document.getElementById("f-site").value = links.site || "";
+
+    // Both default to the column defaults, not to "on" — a member who hasn't
+    // opted in must never be shown a ticked "Show me in Connect".
+    document.getElementById("f-discoverable").checked = Boolean(data.is_discoverable);
+    document.getElementById("f-accepts-messages").checked =
+      data.accepts_messages === undefined ? true : Boolean(data.accepts_messages);
+
+    if (hasConnectColumns && data.is_discoverable) {
+      document.getElementById("link-my-public").href =
+        "member.html?u=" + encodeURIComponent(session.user.id);
+      document.getElementById("connect-links").hidden = false;
+    }
+    if (!hasConnectColumns) {
+      showStatus("Connect isn't switched on yet, so the Connect settings below won't save. " +
+                 "Everything else on this page works normally.", "info");
+    }
+
     document.getElementById("f-experience").value = data.experience_level || "";
     document.getElementById("f-industry").value = data.industry || "";
     document.getElementById("f-timezone").value = data.timezone || "";
@@ -191,7 +311,7 @@
     saveBtn.disabled = true;
     showStatus("Saving…", "info");
 
-    var { error } = await supabase.from("profiles").update({
+    var payload = {
       full_name: document.getElementById("f-name").value.trim(),
       bio: document.getElementById("f-bio").value.trim(),
       experience_level: document.getElementById("f-experience").value,
@@ -203,11 +323,52 @@
       goals: splitTags(document.getElementById("f-goals").value),
       newsletter_opt_in: document.getElementById("f-newsletter").checked,
       show_in_attendees: document.getElementById("f-attendees").checked,
-    }).eq("user_id", session.user.id);
+    };
+
+    if (hasConnectColumns) {
+      // Links go in as jsonb. Anything that isn't a usable http(s) address is
+      // dropped rather than stored — a broken or `javascript:` value would
+      // otherwise be rendered on the public profile as if it worked.
+      var links = {};
+      [["linkedin", "f-linkedin"], ["github", "f-github"], ["site", "f-site"]]
+        .forEach(function (pair) {
+          var url = safeUrl(document.getElementById(pair[1]).value);
+          if (url) links[pair[0]] = url;
+        });
+
+      payload.headline = document.getElementById("f-headline").value.trim();
+      payload.city = document.getElementById("f-city").value.trim();
+      payload.country = document.getElementById("f-country").value.trim();
+      payload.links = links;
+      payload.is_discoverable = document.getElementById("f-discoverable").checked;
+      payload.accepts_messages = document.getElementById("f-accepts-messages").checked;
+    }
+
+    var { error } = await supabase.from("profiles").update(payload)
+      .eq("user_id", session.user.id);
 
     saveBtn.disabled = false;
     if (error) {
+      if (isMissingSchema(error)) {
+        showStatus("Connect isn't switched on yet, so those settings can't be saved. " +
+                   "Nothing else was changed.", "info");
+        return;
+      }
       showStatus("Couldn't save: " + error.message, "err");
+      return;
+    }
+
+    if (hasConnectColumns) {
+      var visible = document.getElementById("f-discoverable").checked;
+      document.getElementById("connect-links").hidden = !visible;
+      if (visible) {
+        document.getElementById("link-my-public").href =
+          "member.html?u=" + encodeURIComponent(session.user.id);
+      }
+      showStatus(visible
+        ? "Saved. You're visible in Connect — other members can find you."
+        : "Saved. You're not listed in Connect, so no other member can find or message you.",
+        "ok");
       return;
     }
     showStatus("Saved.", "ok");
