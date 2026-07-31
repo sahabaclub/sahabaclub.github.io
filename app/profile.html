@@ -62,6 +62,10 @@
     background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
     font-weight: 700; border-radius: 999px; cursor: pointer; padding: 11px 22px; font-size: 14.5px; font-family: inherit;
   }
+  /* Same measured fix as .av-shot in styles.css. The light theme swaps
+     --violet/--cyan for #6d28d9/#0e7490, so the near-black label on this
+     gradient falls to 2.83:1. White is 5.36:1 at the worst (cyan) stop. */
+  html.light-mode .prof-btn-primary { color: #fff; }
   .prof-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .prof-note { font-size: 12.5px; color: var(--text-muted); margin-top: 12px; line-height: 1.6; }
 

@@ -184,6 +184,10 @@ td.ad-num, th.ad-num { text-align: right; font-variant-numeric: tabular-nums; }
   background: linear-gradient(135deg, var(--ad-violet), var(--ad-cyan));
   color: #05070d; border: none;
 }
+/* Light mode swaps --ad-violet/--ad-cyan for #6d28d9/#0e7490, so the
+   near-black label on this gradient falls to 2.83:1. White is 5.36:1 at the
+   worst (cyan) stop. */
+html.light-mode .ad-btn-primary { color: #fff; }
 .ad-btn-danger { color: var(--ad-danger); border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.08); }
 .ad-btn-sm { padding: 5px 11px; font-size: 12.5px; }
 
