@@ -20,27 +20,114 @@
   } catch (e) {}
 </script>
 <style>
-  .dash-wrap { max-width: 780px; margin: 0 auto; padding: 40px 20px 100px; }
-  .dash-hero { margin-bottom: 24px; }
-  .dash-hero h1 { font-size: 26px; margin: 0 0 6px; }
-  .dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 620px) { .dash-grid { grid-template-columns: 1fr; } }
-  .dash-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 20px; }
-  .dash-card h3 { margin: 0 0 10px; font-size: 15px; }
-  .dash-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
+  /* ---- Shell -----------------------------------------------------------
+     Sidebar on the left from 860px up. Below that the sidebar becomes a
+     fixed bottom bar: this site is used mostly on phones, and a bar under
+     the thumb beats a drawer you have to open before you can move. */
+  .dash-shell { max-width: var(--max-width); margin: 0 auto; display: grid; grid-template-columns: 224px 1fr; gap: 0; }
+  .dash-side { border-right: 1px solid var(--glass-border); padding: 26px 14px 40px; display: flex; flex-direction: column; gap: 2px; }
+  .dash-main { padding: 30px 24px 90px; min-width: 0; }
+
+  .dash-nav-main { display: flex; flex-direction: column; gap: 2px; }
+  .dash-navlabel { font-size: 10.5px; letter-spacing: 0.11em; text-transform: uppercase; color: var(--text-muted); padding: 16px 10px 6px; font-weight: 700; }
+  .dash-nav {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 10px 11px; border-radius: 10px; border: 1px solid transparent;
+    background: none; color: var(--text-secondary); font-family: inherit;
+    font-size: 14.5px; font-weight: 600; text-align: left; cursor: pointer;
+  }
+  .dash-nav:hover { background: var(--glass); color: var(--text); }
+  .dash-nav.is-active { background: var(--glass); border-color: var(--glass-border); color: var(--text); }
+  .dash-nav svg { flex-shrink: 0; }
+  .dash-nav.is-active svg { color: var(--cyan); }
+  .dash-nav-label { min-width: 0; }
+
+  /* Not yet built, and saying so honestly: dimmed, unfocusable, no pointer. */
+  .dash-nav.is-soon { opacity: 0.4; cursor: default; }
+  .dash-nav.is-soon:hover { background: none; color: var(--text-secondary); }
+
+  .dash-side-foot { margin-top: auto; padding-top: 18px; }
+  .dash-side-foot .dash-navlabel { padding-top: 0; }
+  .dash-signout { margin-top: 16px; padding: 0 10px; }
+
+  /* ---- Content ---- */
+  .dash-head { margin-bottom: 22px; }
+  .dash-head h1 { font-size: 25px; margin: 0 0 5px; }
+  .dash-head p { margin: 0; color: var(--text-secondary); font-size: 14.5px; }
+  .dash-section { display: none; }
+  .dash-section.is-active { display: block; }
+
+  .dash-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 22px; margin-bottom: 16px; }
+  .dash-card h2 { margin: 0 0 6px; font-size: 17px; }
+  .dash-card h3 { margin: 0 0 10px; font-size: 14.5px; }
+  .dash-card p { font-size: 14px; color: var(--text-secondary); margin: 0 0 10px; line-height: 1.6; }
+  .dash-card p:last-child { margin-bottom: 0; }
+  .dash-note { font-size: 12.5px; color: var(--text-muted); line-height: 1.6; margin-top: 12px; }
+  .dash-empty { font-size: 14px; color: var(--text-muted); padding: 6px 0; }
+  .dash-link { color: var(--cyan); font-weight: 600; font-size: 13.5px; }
+  .dash-link:hover { text-decoration: underline; }
+
+  .dash-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 999px; }
   .dash-pill.tier-standard { background: rgba(34,211,238,0.14); color: #7dd3fc; border: 1px solid rgba(34,211,238,0.35); }
   .dash-pill.tier-premium { background: rgba(224,168,62,0.16); color: #f0c674; border: 1px solid rgba(224,168,62,0.4); }
   .dash-pill.status-active { background: rgba(34,197,94,0.14); color: #4ade80; border: 1px solid rgba(34,197,94,0.4); }
   .dash-pill.status-pending { background: rgba(56,189,248,0.14); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.4); }
-  .dash-card p { font-size: 13.5px; color: var(--text-secondary); margin: 0 0 4px; }
-  .dash-soon-list { list-style: none; margin: 0; padding: 0; font-size: 13.5px; color: var(--text-muted); }
-  .dash-soon-list li { padding: 6px 0; border-bottom: 1px solid var(--glass-border); }
-  .dash-soon-list li:last-child { border-bottom: none; }
-  .dash-signout { margin-top: 26px; }
-  .dash-btn-secondary { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text); border-radius: 999px; cursor: pointer; padding: 9px 18px; font-size: 13.5px; font-family: inherit; }
 
-  /* Licence countdown. The number carries the message, so it gets the size;
-     the bar is there for the at-a-glance "how much of it is gone". */
+  /* ---- Two-way choice (profile intake) ---- */
+  .dash-choice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 620px) { .dash-choice-row { grid-template-columns: 1fr; } }
+  .dash-choice {
+    text-align: left; padding: 16px 18px; border-radius: 12px;
+    border: 1px solid var(--glass-border); background: var(--glass);
+    color: var(--text); cursor: pointer; font-family: inherit;
+  }
+  .dash-choice:hover { border-color: var(--cyan); }
+  .dash-choice strong { display: block; margin-bottom: 4px; font-size: 15px; }
+  .dash-choice span { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+  .dash-back { background: none; border: none; color: var(--text-secondary); font-size: 13px; cursor: pointer; padding: 0; margin-bottom: 14px; font-family: inherit; }
+
+  /* ---- Forms ---- */
+  .dash-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .dash-field label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+  .dash-field input, .dash-field select, .dash-field textarea {
+    background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: 8px;
+    padding: 10px 12px; color: var(--text); font-size: 14px; font-family: inherit; width: 100%;
+  }
+  html.light-mode .dash-field input, html.light-mode .dash-field select,
+  html.light-mode .dash-field textarea { background: rgba(16,22,39,0.03); }
+  .dash-field textarea { min-height: 70px; resize: vertical; }
+  .dash-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 620px) { .dash-row { grid-template-columns: 1fr; } }
+  .dash-check { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5; }
+  .dash-check input { width: auto; margin-top: 3px; flex-shrink: 0; }
+  .dash-btn-primary {
+    background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
+    font-weight: 700; border-radius: 999px; cursor: pointer; padding: 11px 22px; font-size: 14.5px; font-family: inherit;
+  }
+  .dash-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .dash-btn-secondary { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text); border-radius: 999px; cursor: pointer; padding: 10px 20px; font-size: 13.5px; font-family: inherit; }
+  .dash-status { font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-top: 14px; }
+  .dash-status.ok { background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.4); color: #4ade80; }
+  .dash-status.err { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
+  .dash-status.info { background: rgba(56,189,248,0.14); border: 1px solid rgba(56,189,248,0.4); color: #7dd3fc; }
+  .dash-review { border: 1px solid rgba(56,189,248,0.4); background: rgba(56,189,248,0.1); border-radius: 10px; padding: 12px 14px; font-size: 13.5px; color: #7dd3fc; margin-bottom: 18px; line-height: 1.6; }
+
+  /* ---- Membership plans ---- */
+  .dash-plans { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 760px) { .dash-plans { grid-template-columns: 1fr; } }
+  .dash-plan { border: 1px solid var(--glass-border); background: var(--glass); border-radius: var(--radius); padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+  .dash-plan.is-premium { border-color: rgba(224,168,62,0.4); }
+  .dash-plan-name { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin: 0; color: #7dd3fc; }
+  .dash-plan.is-premium .dash-plan-name { color: #f0c674; }
+  .dash-price { font-size: 28px; font-weight: 800; margin: 0; line-height: 1.1; }
+  .dash-price small { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-top: 6px; }
+  .dash-plan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
+  .dash-plan-list li { font-size: 14px; line-height: 1.55; color: var(--text-secondary); padding-left: 18px; position: relative; }
+  .dash-plan-list li::before { content: "\2713"; position: absolute; left: 0; color: var(--cyan); font-weight: 700; }
+  .dash-plan.is-premium .dash-plan-list li::before { color: var(--gold); }
+  .dash-plan-cta { margin-top: auto; padding-top: 6px; }
+
+  /* ---- Microsoft 365 countdown ---- */
   .dash-count { display: flex; align-items: baseline; gap: 7px; margin: 14px 0 8px; }
   .dash-count-num { font-size: 30px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; color: var(--text); }
   .dash-count-num.is-low { color: #fbbf24; }
@@ -48,22 +135,59 @@
   .dash-meter { height: 5px; border-radius: 999px; background: var(--glass-border); overflow: hidden; }
   .dash-meter-fill { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--violet), var(--cyan)); transition: width 0.4s; }
   .dash-meter-fill.is-low { background: #fbbf24; }
-  .dash-count-note { font-size: 12.5px !important; margin-top: 9px !important; }
+  .dash-mailbox { font-size: 16px; font-weight: 700; color: var(--text); word-break: break-all; }
+  .dash-offers { list-style: none; margin: 0; padding: 0; }
+  .dash-offer { padding: 12px 0; border-bottom: 1px solid var(--glass-border); }
+  .dash-offer:last-child { border-bottom: none; }
+  .dash-offer strong { display: block; font-size: 14px; margin-bottom: 3px; }
+  .dash-offer span { font-size: 13px; color: var(--text-secondary); line-height: 1.55; }
+  .dash-offer em { font-style: normal; font-size: 11.5px; color: var(--text-muted); }
 
-  /* Saved events. A list, not cards — this is a reference you scan, and the
-     dates want to line up down the left edge to be scannable at all. */
-  .dash-saved-sub { margin-bottom: 12px !important; }
-  .dash-saved-row { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--glass-border); }
-  .dash-saved-row:last-child { border-bottom: none; }
-  .dash-saved-date { font-size: 12.5px; font-weight: 700; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-  .dash-saved-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .dash-saved-title { font-size: 14px; font-weight: 600; color: var(--text); }
-  .dash-saved-meta { font-size: 12.5px; color: var(--text-muted); }
-  .dash-link { color: var(--cyan); text-decoration: none; font-size: 13.5px; font-weight: 600; }
-  .dash-link:hover { text-decoration: underline; }
-  @media (max-width: 480px) {
-    .dash-saved-row { grid-template-columns: 44px 1fr; }
-    .dash-saved-pills { grid-column: 2; }
+  /* ---- Event lists ---- */
+  .dash-group { margin-bottom: 26px; }
+  .dash-group:last-child { margin-bottom: 0; }
+  .dash-group h3 { margin: 0 0 4px; font-size: 15px; }
+  .dash-group-sub { font-size: 13px; color: var(--text-muted); margin: 0 0 10px; }
+  .dash-event { display: grid; grid-template-columns: 54px 1fr; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--glass-border); }
+  .dash-event:last-child { border-bottom: none; }
+  .dash-event-date { font-size: 12.5px; font-weight: 700; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .dash-event-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .dash-event-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .dash-event-meta { font-size: 12.5px; color: var(--text-muted); }
+  .dash-event-why { font-size: 12.5px; color: var(--cyan); }
+
+  /* ---- Mobile: sidebar becomes a bottom bar --------------------------- */
+  .dash-more { display: none; }
+  @media (max-width: 860px) {
+    .dash-shell { grid-template-columns: 1fr; }
+    .dash-main { padding: 22px 16px 96px; }
+    .dash-side {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 12;
+      flex-direction: row; gap: 2px; padding: 6px 4px;
+      border-right: none; border-top: 1px solid var(--glass-border);
+      background: rgba(5, 7, 13, 0.92);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      padding-bottom: calc(6px + env(safe-area-inset-bottom));
+    }
+    html.light-mode .dash-side { background: rgba(244, 247, 252, 0.94); }
+    .dash-side .dash-navlabel { display: none; }
+    .dash-nav { flex: 1; min-width: 0; flex-direction: column; gap: 3px; padding: 7px 2px; font-size: 10.5px; text-align: center; border-radius: 9px; }
+    .dash-nav-label { font-size: 10.5px; line-height: 1.25; }
+    .dash-nav-main { display: contents; }
+    .dash-more { display: flex; }
+
+    /* Everything that doesn't earn a permanent slot on a phone lives in a
+       sheet behind "More" — the coming-soon list and signing out. */
+    .dash-side-foot {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 11;
+      margin: 0; padding: 16px 16px calc(84px + env(safe-area-inset-bottom));
+      background: var(--bg); border-top: 1px solid var(--glass-border);
+      border-radius: 18px 18px 0 0;
+    }
+    .dash-side-foot:not(.is-open) { display: none; }
+    .dash-side-foot .dash-navlabel { display: block; padding: 0 10px 6px; }
+    .dash-side-foot .dash-nav { flex-direction: row; gap: 10px; font-size: 14.5px; text-align: left; padding: 9px 11px; }
+    .dash-side-foot .dash-nav-label { font-size: 14.5px; }
   }
 </style>
 </head>
@@ -80,7 +204,6 @@
       <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
     </a>
     <div class="nav-actions">
-      <a href="profile.html" class="nav-link">My profile</a>
       <a href="newsletter.html" class="nav-link" id="nav-newsletter-link" hidden>Newsletter</a>
       <a href="../events.html" class="nav-link">Events</a>
       <a href="../podcast.html" class="nav-link">Podcast</a>
@@ -88,67 +211,356 @@
   </div>
 </header>
 
-<main class="dash-wrap">
-  <div class="dash-hero">
-    <h1 class="glow-text" id="dash-greeting">Welcome</h1>
-    <p style="color:var(--text-secondary); font-size:14.5px;">Your Sahaba Club account, in one place.</p>
-  </div>
+<div class="dash-shell">
 
-  <div class="dash-grid">
-    <div class="dash-card">
-      <h3>Membership</h3>
-      <p><span class="dash-pill" id="tier-pill">—</span></p>
-      <p style="margin-top:10px;">Premium unlocks coaching and hackathon discounts, exclusive events, and the full Learning Library.</p>
+  <nav class="dash-side" aria-label="Dashboard sections">
+    <p class="dash-navlabel">My account</p>
+    <div class="dash-nav-main">
+      <button type="button" class="dash-nav" data-section="profile">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>
+        <span class="dash-nav-label">Profile</span>
+      </button>
+      <button type="button" class="dash-nav" data-section="membership">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.6 5.6 6.1.8-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.4l6.1-.8z"/></svg>
+        <span class="dash-nav-label">Membership</span>
+      </button>
+      <button type="button" class="dash-nav" data-section="ms365">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.2" y="3.2" width="7.6" height="7.6"/><rect x="13.2" y="3.2" width="7.6" height="7.6"/><rect x="3.2" y="13.2" width="7.6" height="7.6"/><rect x="13.2" y="13.2" width="7.6" height="7.6"/></svg>
+        <span class="dash-nav-label">Microsoft 365</span>
+      </button>
+      <button type="button" class="dash-nav" data-section="events">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.2" y="5" width="17.6" height="15.8" rx="2.4"/><path d="M3.2 10h17.6M8 3v4M16 3v4"/></svg>
+        <span class="dash-nav-label">My events</span>
+      </button>
+      <button type="button" class="dash-nav dash-more" id="btn-more" aria-expanded="false" aria-controls="dash-side-foot">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="5.5" cy="12" r="0.6"/><circle cx="12" cy="12" r="0.6"/><circle cx="18.5" cy="12" r="0.6"/></svg>
+        <span class="dash-nav-label">More</span>
+      </button>
     </div>
-    <div class="dash-card">
-      <h3>Microsoft 365</h3>
-      <p><span class="dash-pill" id="ms365-pill">—</span></p>
-      <p id="ms365-mailbox" style="margin-top:10px;"></p>
 
-      <!-- Countdown. Only rendered for a trial that has an end date, because
-           a lifetime or Premium licence has nothing to count down to and a
-           "0 days left" on one of those would be alarming and wrong. -->
-      <div id="ms365-countdown" hidden>
-        <div class="dash-count">
-          <span class="dash-count-num" id="ms365-days">—</span>
-          <span class="dash-count-lbl" id="ms365-days-lbl">days left</span>
-        </div>
-        <div class="dash-meter"><span class="dash-meter-fill" id="ms365-meter"></span></div>
-        <p class="dash-count-note" id="ms365-note"></p>
-        <p style="margin-top:10px;"><a class="dash-link" href="../membership.html">Keep it beyond the trial &rarr;</a></p>
+    <div class="dash-side-foot" id="dash-side-foot">
+      <p class="dash-navlabel">Coming soon</p>
+      <span class="dash-nav is-soon" aria-disabled="true"><span class="dash-nav-label">AI Matching</span></span>
+      <span class="dash-nav is-soon" aria-disabled="true"><span class="dash-nav-label">Coaching</span></span>
+      <span class="dash-nav is-soon" aria-disabled="true"><span class="dash-nav-label">Learning Library</span></span>
+      <span class="dash-nav is-soon" aria-disabled="true"><span class="dash-nav-label">My Sessions</span></span>
+      <span class="dash-nav is-soon" aria-disabled="true"><span class="dash-nav-label">Payments</span></span>
+      <div class="dash-signout">
+        <button type="button" class="dash-btn-secondary" id="btn-sign-out">Sign out</button>
       </div>
     </div>
-  </div>
+  </nav>
 
-  <!-- Saved events. Hidden until we know there is something to show, so a new
-       member does not meet an empty box on their first visit. -->
-  <div class="dash-card" style="margin-top:16px;" id="saved-card" hidden>
-    <h3>Saved events</h3>
-    <p class="dash-saved-sub" id="saved-sub"></p>
-    <div class="dash-saved" id="saved-list"></div>
-    <p style="margin-top:14px;"><a class="dash-link" href="../events.html">Browse all events &rarr;</a></p>
-  </div>
+  <main class="dash-main">
 
-  <div class="dash-card" style="margin-top:16px;">
-    <h3>Coming soon</h3>
-    <ul class="dash-soon-list">
-      <li>Find a Coach — AI-matched, once coach profiles are live</li>
-      <li>Learning Library</li>
-      <li>My Sessions</li>
-    </ul>
-  </div>
+    <div class="dash-head">
+      <h1 class="glow-text" id="dash-greeting">Welcome</h1>
+      <p id="dash-subhead">Your Sahaba Club account, in one place.</p>
+    </div>
 
-  <div class="dash-signout">
-    <button type="button" class="dash-btn-secondary" id="btn-sign-out">Sign out</button>
-  </div>
-</main>
+    <!-- ---- Profile ---- -->
+    <section class="dash-section" id="section-profile" aria-labelledby="dash-greeting">
+      <div class="dash-card" id="profile-choice">
+        <h2>Your profile</h2>
+        <p>This is what we use to match you with coaches, events and content. Two ways to fill it in — the fields are the same either way.</p>
+        <div class="dash-choice-row">
+          <button type="button" class="dash-choice" id="choice-ai">
+            <strong>Build with AI</strong>
+            <span>Upload your CV or LinkedIn PDF and we'll read it. You check every field before anything saves.</span>
+          </button>
+          <button type="button" class="dash-choice" id="choice-manual">
+            <strong>Fill it in myself</strong>
+            <span>Go straight to the form. Whatever you've already told us is in there.</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="dash-card hidden" id="profile-upload">
+        <button type="button" class="dash-back" id="back-from-upload">&larr; Back</button>
+        <h2>Build with AI</h2>
+        <p>Upload a CV or a LinkedIn profile export and we'll fill the form in for you.</p>
+        <div class="dash-field">
+          <label for="f-document">Your CV or LinkedIn PDF</label>
+          <input type="file" id="f-document" accept="application/pdf,text/plain">
+        </div>
+        <button type="button" class="dash-btn-primary" id="btn-parse-document">Read my document</button>
+        <div id="upload-status"></div>
+        <p class="dash-note">To get the LinkedIn PDF: open your LinkedIn profile, click <strong>Resources</strong>, then
+        <strong>Save to PDF</strong>. We ask for the export because LinkedIn's public API doesn't hand over work history —
+        only your name, photo and email — so the PDF is the only way to bring your experience across. Word documents need
+        saving as PDF first.</p>
+      </div>
+
+      <div class="dash-card hidden" id="profile-form-card">
+        <button type="button" class="dash-back" id="back-from-form">&larr; Back</button>
+        <div class="dash-review hidden" id="review-banner">
+          Here's what we read from your document. Check it over and fix anything that's off — nothing is saved until you press Save below.
+        </div>
+        <form id="profile-form">
+          <div class="dash-field">
+            <label for="f-name">Full name</label>
+            <input type="text" id="f-name" required>
+          </div>
+          <div class="dash-field">
+            <label for="f-bio">Short bio</label>
+            <textarea id="f-bio" placeholder="A couple of sentences about your background."></textarea>
+          </div>
+          <div class="dash-row">
+            <div class="dash-field">
+              <label for="f-experience">Experience level</label>
+              <select id="f-experience">
+                <option value="">Select one</option>
+                <option value="student">Student</option>
+                <option value="early-career">Early career</option>
+                <option value="mid-career">Mid career</option>
+                <option value="senior">Senior / leadership</option>
+              </select>
+            </div>
+            <div class="dash-field">
+              <label for="f-industry">Industry</label>
+              <input type="text" id="f-industry" placeholder="e.g. Fintech">
+            </div>
+          </div>
+          <div class="dash-row">
+            <div class="dash-field">
+              <label for="f-timezone">Timezone</label>
+              <input type="text" id="f-timezone" placeholder="e.g. Asia/Dubai">
+            </div>
+            <div class="dash-field">
+              <label for="f-language">Preferred language</label>
+              <input type="text" id="f-language" placeholder="e.g. English">
+            </div>
+          </div>
+          <div class="dash-field">
+            <label for="f-skills">Skills (comma-separated)</label>
+            <input type="text" id="f-skills" placeholder="Power Apps, Copilot Studio, Python">
+          </div>
+          <div class="dash-field">
+            <label for="f-interests">Interests (comma-separated)</label>
+            <input type="text" id="f-interests" placeholder="Agentic AI, Hackathons, Low-code">
+          </div>
+          <div class="dash-field">
+            <label for="f-goals">What you're hoping to get out of Sahaba Club (comma-separated)</label>
+            <input type="text" id="f-goals" placeholder="Break into AI, find a coach, ship a side project">
+          </div>
+          <label class="dash-check">
+            <input type="checkbox" id="f-newsletter">
+            Send me the Sahaba Club newsletter, tailored to my interests
+          </label>
+          <label class="dash-check">
+            <input type="checkbox" id="f-attendees">
+            Show my name and photo to other members on events I'm attending
+          </label>
+          <button type="submit" class="dash-btn-primary" id="btn-save">Save changes</button>
+          <div id="profile-status"></div>
+          <p class="dash-note">Your interests decide which newsletters reach you — untick the first box to stop all of them.
+          Attendee lists are members-only and never public; untick the second and you disappear from them entirely,
+          including from events you've already said you're going to.</p>
+        </form>
+      </div>
+    </section>
+
+    <!-- ---- Membership ---- -->
+    <section class="dash-section" id="section-membership">
+      <div class="dash-card">
+        <h2>You're on <span id="tier-name">Standard</span></h2>
+        <p><span class="dash-pill" id="tier-pill">—</span></p>
+        <p id="tier-line">Everyone starts free — including Microsoft 365 for 3 months.</p>
+      </div>
+
+      <div class="dash-plans">
+        <div class="dash-plan">
+          <p class="dash-plan-name">Standard</p>
+          <p class="dash-price">Free<small>Always. No card needed.</small></p>
+          <ul class="dash-plan-list">
+            <li><strong>Microsoft 365 free for 3 months</strong>, on your own @sahabaclub.com account</li>
+            <li>Your member profile, built once and used everywhere</li>
+            <li>Every public event, meetup and hackathon</li>
+            <li>The podcast, and previews from the learning library</li>
+            <li>Book 1:1 or group coaching at standard rates</li>
+          </ul>
+        </div>
+
+        <div class="dash-plan is-premium">
+          <p class="dash-plan-name">Premium</p>
+          <p class="dash-price">$10<small>per month, or <strong>$100 a year</strong> — two months free</small></p>
+          <ul class="dash-plan-list">
+            <li><strong>Everything in Standard</strong></li>
+            <li>Member discount on <strong>1:1 and group coaching</strong></li>
+            <li>Member discount on <strong>hackathon entry</strong></li>
+            <li>The <strong>Premium-only events</strong> — smaller rooms, deeper sessions</li>
+            <li>The <strong>full learning library</strong>, not just previews</li>
+            <li>Priority when we match you with a coach</li>
+          </ul>
+          <div class="dash-plan-cta">
+            <a href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20Premium" class="btn btn-outline" id="cta-premium">Talk to us about Premium</a>
+          </div>
+        </div>
+      </div>
+
+      <p class="dash-note">Your Microsoft 365 account stays active for 3 months. After that, if you haven't upgraded, it keeps
+      all your files but pauses access for another 3 months — upgrade any time in that window and everything switches back on
+      exactly as you left it. <a class="dash-link" href="../membership.html">Full membership details &rarr;</a></p>
+    </section>
+
+    <!-- ---- Microsoft 365 ---- -->
+    <section class="dash-section" id="section-ms365">
+      <div class="dash-card">
+        <h2>Microsoft 365 Cloud Licenses</h2>
+        <p><span class="dash-pill" id="ms365-pill">—</span></p>
+        <p class="dash-mailbox" id="ms365-mailbox" hidden></p>
+
+        <!-- Countdown. Only rendered for a trial with an end date — a lifetime
+             or Premium licence has nothing to count down to, and "0 days left"
+             on one of those would be alarming and wrong. -->
+        <div id="ms365-countdown" hidden>
+          <div class="dash-count">
+            <span class="dash-count-num" id="ms365-days">—</span>
+            <span class="dash-count-lbl" id="ms365-days-lbl">days left</span>
+          </div>
+          <div class="dash-meter"><span class="dash-meter-fill" id="ms365-meter"></span></div>
+        </div>
+        <p id="ms365-note" style="margin-top:10px;"></p>
+
+        <div id="ms365-setup" hidden>
+          <p>You don't have a Sahaba Club mailbox yet. It takes a minute to set up, and it's free for your first 3 months.</p>
+          <p><a href="onboarding.html" class="btn btn-glow">Set up my account</a></p>
+        </div>
+        <p id="ms365-upgrade-line" hidden style="margin-top:12px;"><a class="dash-link" href="../membership.html">Keep it beyond the trial &rarr;</a></p>
+      </div>
+
+      <div class="dash-card">
+        <h3>What you get</h3>
+        <ul class="dash-offers" id="ms365-offers"><li class="dash-empty">Loading…</li></ul>
+      </div>
+    </section>
+
+    <!-- ---- My events ---- -->
+    <section class="dash-section" id="section-events">
+      <div class="dash-card">
+        <div class="dash-group">
+          <h3>Saved</h3>
+          <p class="dash-group-sub">Events you've favourited.</p>
+          <div id="events-saved"><p class="dash-empty">Loading…</p></div>
+        </div>
+        <div class="dash-group">
+          <h3>I'm going</h3>
+          <p class="dash-group-sub">Events you've registered for.</p>
+          <div id="events-going"><p class="dash-empty">Loading…</p></div>
+        </div>
+        <div class="dash-group">
+          <h3>Recommended for you</h3>
+          <p class="dash-group-sub">From the topics, cities and formats you go for.</p>
+          <div id="events-recommended"><p class="dash-empty">Loading…</p></div>
+        </div>
+        <p style="margin-top:18px;"><a class="dash-link" href="../events.html">Browse all events &rarr;</a></p>
+      </div>
+    </section>
+
+  </main>
+</div>
 
 <script type="module">
   import { supabase } from "../lib/supabase-client.js";
   import { getSession, signOut, hasCompletedOnboarding, syncAvatar } from "../lib/auth.js";
+  import { recommendEvents } from "../lib/event-social.js";
 
+  var session = null;
+  var profileSource = null;   // set only when a document filled the form in
+
+  // Which section the URL is asking for. The hash is the single source of
+  // truth, so a refresh or a shared link lands in the same place.
+  var SECTIONS = ["profile", "membership", "ms365", "events"];
+  var loaded = {};            // sections are fetched once, on first view
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function showStatus(elId, msg, kind) {
+    document.getElementById(elId).innerHTML =
+      '<div class="dash-status ' + kind + '">' + msg + "</div>";
+  }
+
+  function splitTags(value) {
+    return value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function shortDate(iso) {
+    var p = String(iso).split("-");
+    return parseInt(p[2], 10) + " " + MONTHS[parseInt(p[1], 10) - 1];
+  }
+  function longDate(iso) {
+    var p = String(iso).split("-");
+    var months = ["January","February","March","April","May","June",
+                  "July","August","September","October","November","December"];
+    return parseInt(p[2], 10) + " " + months[parseInt(p[1], 10) - 1] + " " + p[0];
+  }
+
+  // ---- Routing ----------------------------------------------------------
+  function currentSection() {
+    var want = (window.location.hash || "").replace("#", "");
+    return SECTIONS.indexOf(want) === -1 ? "profile" : want;
+  }
+
+  var SUBHEADS = {
+    profile: "Keep this current and the matches get better.",
+    membership: "What you're on today, and what Premium adds.",
+    ms365: "Your @sahabaclub.com account and what comes with it.",
+    events: "What you've saved, what you're going to, and what's worth a look.",
+  };
+
+  function showSection(name) {
+    SECTIONS.forEach(function (s) {
+      document.getElementById("section-" + s).classList.toggle("is-active", s === name);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-section]"), function (btn) {
+      btn.classList.toggle("is-active", btn.getAttribute("data-section") === name);
+    });
+    document.getElementById("dash-subhead").textContent = SUBHEADS[name];
+    closeMore();
+
+    if (!loaded[name]) {
+      loaded[name] = true;
+      if (name === "membership") loadMembership();
+      if (name === "ms365") loadMs365();
+      if (name === "events") loadEvents();
+    }
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-section]"), function (btn) {
+    btn.addEventListener("click", function () {
+      window.location.hash = btn.getAttribute("data-section");
+    });
+  });
+  window.addEventListener("hashchange", function () { showSection(currentSection()); });
+
+  // ---- Mobile "More" sheet ----------------------------------------------
+  var sideFoot = document.getElementById("dash-side-foot");
+  var moreBtn = document.getElementById("btn-more");
+
+  function closeMore() {
+    sideFoot.classList.remove("is-open");
+    moreBtn.setAttribute("aria-expanded", "false");
+  }
+  moreBtn.addEventListener("click", function (ev) {
+    ev.stopPropagation();
+    var open = !sideFoot.classList.contains("is-open");
+    sideFoot.classList.toggle("is-open", open);
+    moreBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  // Nothing in the sheet except Sign out is clickable, so tapping anywhere
+  // else has to be a way out of it.
+  document.addEventListener("click", function (ev) {
+    if (!sideFoot.contains(ev.target)) closeMore();
+  });
+
+  // ---- Boot -------------------------------------------------------------
   (async function init() {
-    var session = await getSession();
+    session = await getSession();
     if (!session) {
       window.location.href = "../login.html";
       return;
@@ -159,13 +571,8 @@
       return;
     }
 
-    var [{ data: profile }, { data: subscription }, { data: ms365 }] = await Promise.all([
-      supabase.from("profiles").select("full_name, role").eq("user_id", session.user.id).maybeSingle(),
-      supabase.from("subscriptions").select("tier").eq("user_id", session.user.id).maybeSingle(),
-      supabase.from("ms365_accounts")
-        .select("mailbox, status, plan, license_expires_at, grace_ends_at")
-        .eq("user_id", session.user.id).maybeSingle(),
-    ]);
+    var { data: profile } = await supabase
+      .from("profiles").select("*").eq("user_id", session.user.id).maybeSingle();
 
     var name = (profile && profile.full_name) || session.user.email || session.user.phone || "there";
     document.getElementById("dash-greeting").textContent = "Welcome, " + name;
@@ -174,60 +581,228 @@
       document.getElementById("nav-newsletter-link").hidden = false;
     }
 
-    var tier = (subscription && subscription.tier) || "standard";
-    var tierPill = document.getElementById("tier-pill");
-    tierPill.textContent = tier === "premium" ? "Premium" : "Standard";
-    tierPill.classList.add(tier === "premium" ? "tier-premium" : "tier-standard");
-
-    var ms365Pill = document.getElementById("ms365-pill");
-    var ms365Mailbox = document.getElementById("ms365-mailbox");
-    if (ms365 && ms365.status) {
-      var statusLabels = {
-        provisioning: "Setting up…",
-        active: "Active",
-        grace_unlicensed: "Access paused — renew to restore",
-        deactivated: "Deactivated",
-        deleted: "Removed",
-      };
-      ms365Pill.textContent = statusLabels[ms365.status] || ms365.status;
-      ms365Pill.classList.add(ms365.status === "active" ? "status-active" : "status-pending");
-      ms365Mailbox.textContent = ms365.mailbox || "";
-      renderMs365Countdown(ms365);
-    } else {
-      ms365Pill.textContent = "Not set up yet";
-      ms365Pill.classList.add("status-pending");
-    }
-
-    loadSaved(session.user.id);
+    fillForm(profile || {});
+    loaded.profile = true;
+    showSection(currentSection());
     syncAvatar(session).catch(function () {});
   })();
 
-  // ---- Microsoft 365 countdown ------------------------------------------
-  // Only a trial counts down. Lifetime and Premium licences stay alive for as
-  // long as the membership does, so there is no date to show and showing one
-  // would invent a deadline that does not exist.
-  function renderMs365Countdown(ms365) {
-    var box = document.getElementById("ms365-countdown");
+  // ---- Profile ----------------------------------------------------------
+  var choiceCard = document.getElementById("profile-choice");
+  var uploadCard = document.getElementById("profile-upload");
+  var formCard = document.getElementById("profile-form-card");
+  var reviewBanner = document.getElementById("review-banner");
+
+  function showProfilePanel(el) {
+    [choiceCard, uploadCard, formCard].forEach(function (panel) {
+      panel.classList.toggle("hidden", panel !== el);
+    });
+  }
+
+  document.getElementById("choice-manual").addEventListener("click", function () {
+    showProfilePanel(formCard);
+  });
+  document.getElementById("choice-ai").addEventListener("click", function () {
+    showProfilePanel(uploadCard);
+  });
+  document.getElementById("back-from-upload").addEventListener("click", function () {
+    showProfilePanel(choiceCard);
+  });
+  document.getElementById("back-from-form").addEventListener("click", function () {
+    showProfilePanel(choiceCard);
+  });
+
+  // A missing row is a setup state, not an error the member can act on —
+  // an empty form is the right thing to show either way.
+  function fillForm(p) {
+    document.getElementById("f-name").value = p.full_name || "";
+    document.getElementById("f-bio").value = p.bio || "";
+    document.getElementById("f-experience").value = p.experience_level || "";
+    document.getElementById("f-industry").value = p.industry || "";
+    document.getElementById("f-timezone").value = p.timezone || "";
+    document.getElementById("f-language").value = p.language || "";
+    document.getElementById("f-skills").value = (p.skills || []).join(", ");
+    document.getElementById("f-interests").value = (p.interests || []).join(", ");
+    document.getElementById("f-goals").value = (p.goals || []).join(", ");
+    document.getElementById("f-newsletter").checked = Boolean(p.newsletter_opt_in);
+    // Default to shown when the column isn't there yet (migration 0005), which
+    // matches the column's own default rather than implying opted-out.
+    document.getElementById("f-attendees").checked =
+      p.show_in_attendees === undefined ? true : Boolean(p.show_in_attendees);
+  }
+
+  // The inverse of fillForm, in the shape the profiles table takes — used
+  // both to save and as the base the document import is layered onto.
+  function readForm() {
+    return {
+      full_name: document.getElementById("f-name").value.trim(),
+      bio: document.getElementById("f-bio").value.trim(),
+      experience_level: document.getElementById("f-experience").value,
+      industry: document.getElementById("f-industry").value.trim(),
+      timezone: document.getElementById("f-timezone").value.trim(),
+      language: document.getElementById("f-language").value.trim(),
+      skills: splitTags(document.getElementById("f-skills").value),
+      interests: splitTags(document.getElementById("f-interests").value),
+      goals: splitTags(document.getElementById("f-goals").value),
+      newsletter_opt_in: document.getElementById("f-newsletter").checked,
+      show_in_attendees: document.getElementById("f-attendees").checked,
+    };
+  }
+
+  document.getElementById("btn-parse-document").addEventListener("click", function () {
+    var file = document.getElementById("f-document").files[0];
+    if (!file) { showStatus("upload-status", "Choose a file first.", "err"); return; }
+
+    showStatus("upload-status", "Reading your document…", "info");
+
+    var reader = new FileReader();
+    reader.onload = async function () {
+      var base64 = String(reader.result).split(",")[1];
+      var { data, error } = await supabase.functions.invoke("parse-profile-document", {
+        body: { fileBase64: base64, mediaType: file.type },
+      });
+
+      if (error || !data || data.error || !data.profile) {
+        // data.error is our own wording; a bare `error` is usually the function
+        // not being reachable, which the member can't act on — point them at
+        // the manual form instead of showing the raw text.
+        showStatus(
+          "upload-status",
+          (data && data.error) || "We couldn't read that document. Go back and fill the form in directly instead.",
+          "err"
+        );
+        return;
+      }
+
+      // Overlay onto what's already in the form rather than replacing it. A
+      // member here usually has a profile already, and a sparse CV shouldn't
+      // blank out details they typed in themselves.
+      var merged = readForm();
+      Object.keys(data.profile).forEach(function (k) {
+        var v = data.profile[k];
+        if (v === null || v === undefined || v === "") return;
+        if (Array.isArray(v) && !v.length) return;
+        merged[k] = v;
+      });
+      fillForm(merged);
+
+      profileSource = file.name.toLowerCase().indexOf("linkedin") !== -1 ? "linkedin_pdf" : "cv";
+      reviewBanner.classList.remove("hidden");
+      showProfilePanel(formCard);
+    };
+    reader.onerror = function () {
+      showStatus("upload-status", "Couldn't read that file — try another, or fill the form in directly.", "err");
+    };
+    reader.readAsDataURL(file);
+  });
+
+  document.getElementById("profile-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var saveBtn = document.getElementById("btn-save");
+    saveBtn.disabled = true;
+    showStatus("profile-status", "Saving…", "info");
+
+    var patch = readForm();
+    if (profileSource) patch.profile_source = profileSource;
+
+    var { error } = await supabase.from("profiles").update(patch).eq("user_id", session.user.id);
+
+    saveBtn.disabled = false;
+    if (error) {
+      showStatus("profile-status", "Couldn't save: " + error.message, "err");
+      return;
+    }
+    showStatus("profile-status", "Saved.", "ok");
+    reviewBanner.classList.add("hidden");
+    document.getElementById("dash-greeting").textContent = "Welcome, " + (patch.full_name || "there");
+  });
+
+  // ---- Membership -------------------------------------------------------
+  async function loadMembership() {
+    var res = await supabase.from("subscriptions").select("tier")
+      .eq("user_id", session.user.id).maybeSingle();
+
+    // Every member gets a subscriptions row from the signup trigger; falling
+    // back to Standard covers the row not being there yet, which is the
+    // honest default rather than a blank panel.
+    var tier = (res.data && res.data.tier) || "standard";
+    var premium = tier === "premium";
+
+    document.getElementById("tier-name").textContent = premium ? "Premium" : "Standard";
+    var pill = document.getElementById("tier-pill");
+    pill.textContent = premium ? "Premium" : "Standard";
+    pill.classList.add(premium ? "tier-premium" : "tier-standard");
+
+    document.getElementById("tier-line").textContent = premium
+      ? "Coaching and hackathon discounts, the Premium-only events, and the full learning library are all switched on."
+      : "Everyone starts free — including Microsoft 365 for 3 months. Premium is for people who want the coaching, the discounts, and the room where the smaller events happen.";
+
+    if (premium) {
+      var cta = document.getElementById("cta-premium");
+      cta.textContent = "You're already Premium";
+      cta.removeAttribute("href");
+    }
+  }
+
+  // ---- Microsoft 365 ----------------------------------------------------
+  async function loadMs365() {
+    var acctRes = await supabase.from("ms365_accounts")
+      .select("mailbox, status, plan, license_expires_at, grace_ends_at")
+      .eq("user_id", session.user.id).maybeSingle();
+
+    renderMs365(acctRes.error ? null : acctRes.data);
+    renderOffers();
+  }
+
+  function renderMs365(acct) {
+    var pill = document.getElementById("ms365-pill");
     var note = document.getElementById("ms365-note");
 
-    if (ms365.plan && ms365.plan !== "trial") {
-      box.hidden = false;
-      document.querySelector(".dash-count").hidden = true;
-      document.querySelector(".dash-meter").hidden = true;
-      box.querySelector("a").hidden = true;
-      note.textContent = ms365.plan === "lifetime"
+    if (!acct || !acct.status) {
+      // No row yet — the common case for a new member, and not a failure.
+      pill.textContent = "Not set up yet";
+      pill.classList.add("status-pending");
+      document.getElementById("ms365-setup").hidden = false;
+      return;
+    }
+
+    var statusLabels = {
+      provisioning: "Setting up…",
+      active: "Active",
+      grace_unlicensed: "Access paused — renew to restore",
+      deactivated: "Deactivated",
+      deleted: "Removed",
+    };
+    pill.textContent = statusLabels[acct.status] || acct.status;
+    pill.classList.add(acct.status === "active" ? "status-active" : "status-pending");
+
+    if (acct.mailbox) {
+      var mb = document.getElementById("ms365-mailbox");
+      mb.textContent = acct.mailbox;
+      mb.hidden = false;
+    }
+
+    // Mirrors public.ms365_days_left: only a trial with an end date counts
+    // down. Lifetime and Premium have no expiry, and inventing one would
+    // manufacture a deadline that doesn't exist.
+    if (acct.plan && acct.plan !== "trial") {
+      note.textContent = acct.plan === "lifetime"
         ? "Included for as long as your Sahaba Club membership is active — no expiry date."
         : "Included with your Premium membership — it stays active while your membership does.";
       return;
     }
 
-    var end = ms365.license_expires_at;
-    if (!end) return;                       // nothing to count down to yet
+    var end = acct.license_expires_at;
+    if (!end) {
+      note.textContent = "Your free 3 months start as soon as the account is ready.";
+      return;
+    }
 
     var days = Math.ceil((new Date(end + "T00:00:00") - new Date()) / 86400000);
-    var TRIAL_DAYS = 90;                    // the 3-month trial, for the bar
+    var TRIAL_DAYS = 90;
 
-    box.hidden = false;
+    document.getElementById("ms365-countdown").hidden = false;
+    document.getElementById("ms365-upgrade-line").hidden = false;
     var numEl = document.getElementById("ms365-days");
     var lblEl = document.getElementById("ms365-days-lbl");
     var meter = document.getElementById("ms365-meter");
@@ -243,99 +818,124 @@
       note.textContent = "Your free Microsoft 365 runs until " + longDate(end) + ".";
     } else {
       // Expired. Say what actually happens next rather than just "expired",
-      // because the data is still there and that is the reassuring part.
+      // because the files are still there and that is the reassuring part.
       numEl.textContent = "0";
       lblEl.textContent = "days left";
       meter.style.width = "2%";
       meter.classList.add("is-low");
       numEl.classList.add("is-low");
-      note.textContent = ms365.grace_ends_at
-        ? "Your free period ended. Your files are kept until " + longDate(ms365.grace_ends_at)
+      note.textContent = acct.grace_ends_at
+        ? "Your free period ended. Your files are kept until " + longDate(acct.grace_ends_at)
           + ", but sign-in is paused until you upgrade."
         : "Your free period has ended. Upgrade to restore access.";
     }
   }
 
-  function longDate(iso) {
-    var p = String(iso).split("-");
-    var months = ["January","February","March","April","May","June",
-                  "July","August","September","October","November","December"];
-    return parseInt(p[2], 10) + " " + months[parseInt(p[1], 10) - 1] + " " + p[0];
+  // The offer list comes from the catalogue table so a new Microsoft service
+  // shows up here without a code change. Staff-only entries are excluded —
+  // they're granted by hand, not chosen.
+  async function renderOffers() {
+    var host = document.getElementById("ms365-offers");
+    var res = await supabase.from("ms365_license_catalog")
+      .select("public_name, blurb, is_trial, sort_order")
+      .eq("is_active", true).eq("staff_only", false)
+      .order("sort_order", { ascending: true });
+
+    var rows = res.error ? [] : (res.data || []);
+    if (!rows.length) {
+      host.innerHTML = '<li class="dash-empty">We\'ll list what\'s included here once your account is set up.</li>';
+      return;
+    }
+
+    host.innerHTML = rows.map(function (r) {
+      return '<li class="dash-offer">' +
+        "<strong>" + esc(r.public_name) + "</strong>" +
+        "<span>" + esc(r.blurb || "") + "</span>" +
+        (r.is_trial ? "<br><em>Trial licence — Microsoft sets the expiry date.</em>" : "") +
+      "</li>";
+    }).join("");
   }
 
-  // ---- Saved events -----------------------------------------------------
-  // Favourites plus anything they have told us they registered for, in one
-  // list, because from a member's point of view both are "events I care
-  // about". Past events are dropped — a dashboard is about what is ahead.
-  function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
+  // ---- My events --------------------------------------------------------
+  // recommendEvents() works on the shape events-ui.js uses, not raw rows, so
+  // the mapping has to match it — `date` and `tags` are what it scores on.
+  function fromRow(row) {
+    return {
+      id: row.id,
+      title: row.title,
+      country: row.country,
+      location: row.location,
+      date: row.event_date,
+      time: row.time_label,
+      mode: row.mode,
+      tags: row.tags || [],
+    };
   }
 
-  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  function shortDate(iso) {
-    var p = String(iso).split("-");
-    return parseInt(p[2], 10) + " " + MONTHS[parseInt(p[1], 10) - 1];
+  function eventRow(e, why) {
+    var where = e.mode === "Online" ? "Online" : (e.location || e.country || "");
+    return '<div class="dash-event">' +
+      '<span class="dash-event-date">' + esc(shortDate(e.date)) + "</span>" +
+      '<span class="dash-event-main">' +
+        '<span class="dash-event-title">' + esc(e.title) + "</span>" +
+        '<span class="dash-event-meta">' + esc([e.time, where].filter(Boolean).join(" · ")) + "</span>" +
+        (why ? '<span class="dash-event-why">' + esc("Because you like " + why) + "</span>" : "") +
+      "</span>" +
+    "</div>";
   }
 
-  async function loadSaved(userId) {
+  function renderGroup(hostId, items, emptyMsg) {
+    var host = document.getElementById(hostId);
+    if (!items.length) {
+      host.innerHTML = '<p class="dash-empty">' + emptyMsg + "</p>";
+      return;
+    }
+    host.innerHTML = items.map(function (x) { return eventRow(x.event || x, x.why); }).join("");
+  }
+
+  async function loadEvents() {
     var todayIso = new Date().toISOString().slice(0, 10);
+    var uid = session.user.id;
 
-    var [favRes, regRes] = await Promise.all([
-      supabase.from("event_favourites").select("event_id").eq("user_id", userId),
-      supabase.from("event_registrations").select("event_id, status")
-        .eq("user_id", userId).eq("status", "registered"),
+    var [evRes, favRes, regRes, viewRes] = await Promise.all([
+      supabase.from("events").select("*")
+        .eq("is_published", true).gte("event_date", todayIso)
+        .order("event_date", { ascending: true }),
+      supabase.from("event_favourites").select("event_id").eq("user_id", uid),
+      supabase.from("event_registrations").select("event_id, status").eq("user_id", uid),
+      supabase.from("event_views").select("event_id, view_count").eq("user_id", uid),
     ]);
 
-    // Migration 0005 may not have run yet on a fresh project. That is a setup
-    // state, not a member-facing error — leave the card hidden.
-    if (favRes.error) return;
+    // Any of these tables can be missing on a project that hasn't run every
+    // migration. Treat each one as "nothing yet" rather than taking the
+    // whole section down.
+    var events = (evRes.error ? [] : (evRes.data || [])).map(fromRow);
+    var favourites = new Set((favRes.error ? [] : (favRes.data || [])).map(function (r) { return r.event_id; }));
+    var registrations = {};
+    (regRes.error ? [] : (regRes.data || [])).forEach(function (r) { registrations[r.event_id] = r.status; });
+    var viewCounts = {};
+    (viewRes.error ? [] : (viewRes.data || [])).forEach(function (v) { viewCounts[v.event_id] = v.view_count; });
 
-    var favIds = (favRes.data || []).map(function (r) { return r.event_id; });
-    var goingIds = ((regRes && regRes.data) || []).map(function (r) { return r.event_id; });
-    var allIds = [];
-    favIds.concat(goingIds).forEach(function (id) {
-      if (allIds.indexOf(id) === -1) allIds.push(id);
-    });
-    if (!allIds.length) return;
+    renderGroup("events-saved",
+      events.filter(function (e) { return favourites.has(e.id); }),
+      "Nothing saved yet. Tap the heart on an event and it'll show up here.");
 
-    var { data: events } = await supabase
-      .from("events")
-      .select("id, title, event_date, time_label, location, country, mode, register_link")
-      .in("id", allIds)
-      .gte("event_date", todayIso)
-      .order("event_date", { ascending: true });
+    renderGroup("events-going",
+      events.filter(function (e) { return registrations[e.id] === "registered"; }),
+      "You're not signed up for anything yet.");
 
-    if (!events || !events.length) return;
-
-    var favSet = new Set(favIds);
-    var goingSet = new Set(goingIds);
-
-    document.getElementById("saved-sub").textContent =
-      events.length === 1 ? "1 upcoming event you've saved."
-                          : events.length + " upcoming events you've saved.";
-
-    document.getElementById("saved-list").innerHTML = events.map(function (e) {
-      var where = e.mode === "Online" ? "Online" : (e.location || e.country || "");
-      var pills = "";
-      if (goingSet.has(e.id)) pills += '<span class="dash-pill status-active">Going</span>';
-      else if (favSet.has(e.id)) pills += '<span class="dash-pill status-pending">Saved</span>';
-      return '<div class="dash-saved-row">' +
-        '<span class="dash-saved-date">' + esc(shortDate(e.event_date)) + '</span>' +
-        '<span class="dash-saved-main">' +
-          '<span class="dash-saved-title">' + esc(e.title) + '</span>' +
-          '<span class="dash-saved-meta">' +
-            esc([e.time_label, where].filter(Boolean).join(" · ")) +
-          '</span>' +
-        '</span>' +
-        '<span class="dash-saved-pills">' + pills + '</span>' +
-      '</div>';
-    }).join("");
-
-    document.getElementById("saved-card").hidden = false;
+    var rec = recommendEvents(events, favourites, registrations, viewCounts, 4);
+    if (rec.needsSignal) {
+      document.getElementById("events-recommended").innerHTML =
+        '<p class="dash-empty">Save a few events you like and we\'ll start suggesting others that fit — ' +
+        "based on the topics, cities and formats you go for.</p>";
+    } else {
+      renderGroup("events-recommended", rec.items,
+        "Nothing new to suggest right now — you've already saved the ones that fit.");
+    }
   }
 
+  // ---- Sign out ---------------------------------------------------------
   document.getElementById("btn-sign-out").addEventListener("click", async function () {
     await signOut();
     window.location.href = "../login.html";
