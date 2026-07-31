@@ -53,6 +53,10 @@
   .prof-status.ok { background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.4); color: #4ade80; }
   .prof-status.err { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
   .prof-status.info { background: rgba(56,189,248,0.14); border: 1px solid rgba(56,189,248,0.4); color: #7dd3fc; }
+  /* Dark-theme status ink is unreadable on the light card. */
+  html.light-mode .prof-status.ok { color: #166534; }
+  html.light-mode .prof-status.err { color: #b91c1c; }
+  html.light-mode .prof-status.info { color: #155e75; }
 
   .prof-btn-primary {
     background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
@@ -85,6 +89,8 @@
   .prof-connect-state.info { background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.3); color: #7dd3fc; }
   .prof-connect-state.ok { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: #4ade80; }
   .prof-connect-state svg { flex-shrink: 0; margin-top: 1px; }
+  html.light-mode .prof-connect-state.info { color: #155e75; }
+  html.light-mode .prof-connect-state.ok { color: #166534; }
   .prof-privacy-link { font-size: 12.5px; margin: 12px 0 0; }
   .prof-privacy-link a { color: var(--cyan); text-decoration: underline; }
 
