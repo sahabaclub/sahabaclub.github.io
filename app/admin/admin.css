@@ -7,6 +7,10 @@
    operating, not persuading. */
 
 :root {
+  /* Admin pages load only this file, so the scheme has to be declared here.
+     Without it the browser paints <select> popups on its own light base while
+     the panel stays dark, and the near-white options vanish (1.14:1). */
+  color-scheme: dark;
   --ad-bg: #080b12;
   --ad-panel: #10141f;
   --ad-panel-2: #151a28;
@@ -14,7 +18,9 @@
   --ad-line-strong: rgba(255, 255, 255, 0.16);
   --ad-text: #eef0f6;
   --ad-text-2: #9aa2b8;
-  --ad-text-3: #666e85;
+  /* Carries table emails, hints, empty states and the muted pills — measured
+     3.62:1 on the panel, so it was the one token failing AA. */
+  --ad-text-3: #7b839c;
   --ad-violet: #a78bfa;
   --ad-cyan: #22d3ee;
   --ad-gold: #e0a83e;
@@ -26,6 +32,7 @@
 }
 
 html.light-mode {
+  color-scheme: light;
   --ad-bg: #f5f7fb;
   --ad-panel: #ffffff;
   --ad-panel-2: #eef1f7;
@@ -33,12 +40,12 @@ html.light-mode {
   --ad-line-strong: rgba(16, 22, 39, 0.2);
   --ad-text: #101627;
   --ad-text-2: #4d5670;
-  --ad-text-3: #7d8599;
+  --ad-text-3: #6b7386; /* 3.69:1 on the white panel — same fix, light side. */
   --ad-violet: #6d28d9;
   --ad-cyan: #0e7490;
   --ad-gold: #9a6413;
   --ad-ok: #15803d;
-  --ad-warn: #a16207;
+  --ad-warn: #854d0e; /* #a16207 measured 4.40:1 on the warn banner tint. */
   --ad-danger: #b91c1c;
 }
 
