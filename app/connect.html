@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect — Sahaba Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="connect.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="../assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="inbox.html" class="nav-link">Inbox</a>
+      <a href="../events.html" class="nav-link">Events</a>
+    </div>
+  </div>
+</header>
+
+<main class="cx-wrap cx-wrap-wide">
+  <div class="cx-hero">
+    <h1 class="glow-text">Connect</h1>
+    <p>The members who've chosen to be found. Search for someone, or see who keeps
+       turning up to the same things you do.</p>
+  </div>
+
+  <div id="self-note"></div>
+
+  <div class="cx-filters" id="filters" hidden>
+    <label class="sr-only" for="q">Search members</label>
+    <input class="cx-input" type="search" id="q" placeholder="Search name, headline, or skill" autocomplete="off">
+    <div class="cx-select-row">
+      <label class="sr-only" for="f-country">Country</label>
+      <select class="cx-select" id="f-country"><option value="">Any country</option></select>
+      <label class="sr-only" for="f-industry">Industry</label>
+      <select class="cx-select" id="f-industry"><option value="">Any industry</option></select>
+      <label class="sr-only" for="f-experience">Experience level</label>
+      <select class="cx-select" id="f-experience"><option value="">Any experience</option></select>
+      <label class="sr-only" for="f-topic">Topic</label>
+      <select class="cx-select" id="f-topic"><option value="">Any topic</option></select>
+    </div>
+  </div>
+
+  <p class="cx-count" id="count" hidden></p>
+  <div id="results">
+    <div class="cx-state"><p class="cx-state-text">Loading members…</p></div>
+  </div>
+</main>
+
+<script type="module">
+  import {
+    requireUser, listDirectory, getActivityFor, myFollowing, follow, unfollow,
+    shortSummary, escapeHtml, initialOf, placeOf, experienceLabel, joinWords,
+    CONNECT_OFF_MESSAGE, DIRECTORY_CAP,
+  } from "../lib/connect.js";
+
+  var results = document.getElementById("results");
+  var countEl = document.getElementById("count");
+  var filtersEl = document.getElementById("filters");
+  var me = null;
+  var members = [];
+  var activity = {};
+  var followingSet = new Set();
+
+  function state(title, text, actionsHtml) {
+    results.innerHTML =
+      '<div class="cx-state">' +
+        (title ? '<p class="cx-state-title">' + title + "</p>" : "") +
+        '<p class="cx-state-text">' + text + "</p>" +
+        (actionsHtml ? '<div class="cx-state-actions">' + actionsHtml + "</div>" : "") +
+      "</div>";
+  }
+
+  // ---- Filters ----------------------------------------------------------
+
+  function fillSelect(id, values, keepFirst) {
+    var sel = document.getElementById(id);
+    var current = sel.value;
+    sel.innerHTML = '<option value="">' + keepFirst + "</option>" +
+      values.map(function (v) {
+        return '<option value="' + escapeHtml(v.value) + '">' + escapeHtml(v.label) + "</option>";
+      }).join("");
+    sel.value = current;
+  }
+
+  // Options come from the members actually on screen, so nobody can pick a
+  // filter that returns nothing.
+  function buildFilters() {
+    var countries = {}, industries = {}, levels = {}, topics = {};
+    members.forEach(function (m) {
+      if (m.country) countries[m.country] = true;
+      if (m.industry) industries[m.industry] = true;
+      if (m.experience_level) levels[m.experience_level] = true;
+      var act = activity[m.user_id];
+      ((act && act.top_topics) || []).forEach(function (t) { if (t) topics[t] = true; });
+    });
+    var plain = function (o) {
+      return Object.keys(o).sort(function (a, b) { return a.localeCompare(b); })
+        .map(function (v) { return { value: v, label: v }; });
+    };
+    fillSelect("f-country", plain(countries), "Any country");
+    fillSelect("f-industry", plain(industries), "Any industry");
+    fillSelect("f-experience",
+      Object.keys(levels).sort().map(function (v) {
+        return { value: v, label: experienceLabel(v) };
+      }), "Any experience");
+    fillSelect("f-topic", plain(topics), "Any topic");
+    filtersEl.hidden = false;
+  }
+
+  function matches(m) {
+    var q = document.getElementById("q").value.trim().toLowerCase();
+    var country = document.getElementById("f-country").value;
+    var industry = document.getElementById("f-industry").value;
+    var level = document.getElementById("f-experience").value;
+    var topic = document.getElementById("f-topic").value;
+
+    if (country && m.country !== country) return false;
+    if (industry && m.industry !== industry) return false;
+    if (level && m.experience_level !== level) return false;
+    if (topic) {
+      var act = activity[m.user_id];
+      var list = (act && act.top_topics) || [];
+      if (list.indexOf(topic) === -1) return false;
+    }
+    if (!q) return true;
+
+    var haystack = [
+      m.full_name, m.headline, m.industry, m.city, m.country,
+      (m.skills || []).join(" "), (m.interests || []).join(" "),
+    ].filter(Boolean).join(" ").toLowerCase();
+    // Every word has to appear somewhere — "ai dubai" should mean both.
+    return q.split(/\s+/).every(function (word) { return haystack.indexOf(word) !== -1; });
+  }
+
+  // ---- Cards ------------------------------------------------------------
+
+  function avatarHtml(m) {
+    if (m.avatar_url) {
+      return '<img class="cx-avatar cx-avatar-sm" src="' + escapeHtml(m.avatar_url) +
+             '" alt="" loading="lazy">';
+    }
+    return '<span class="cx-avatar cx-avatar-sm cx-avatar-initial" aria-hidden="true">' +
+           escapeHtml(initialOf(m.full_name)) + "</span>";
+  }
+
+  function cardHtml(m) {
+    var act = activity[m.user_id];
+    var topics = (act && act.top_topics) || [];
+    var place = placeOf(m);
+    var sub = [shortSummary(m, act), place].filter(Boolean).join(" · ");
+    var isMe = me && m.user_id === me.id;
+    var href = "member.html?u=" + encodeURIComponent(m.user_id);
+
+    return '<article class="cx-member">' +
+      '<a class="cx-member-link" href="' + href + '">' +
+        avatarHtml(m) +
+        '<div class="cx-member-body">' +
+          '<p class="cx-member-name">' + escapeHtml(m.full_name || "Member") +
+            (isMe ? " (you)" : "") + "</p>" +
+          (m.headline ? '<p class="cx-member-headline">' + escapeHtml(m.headline) + "</p>" : "") +
+          (sub ? '<p class="cx-member-sub">' + escapeHtml(sub) + "</p>" : "") +
+        "</div>" +
+      "</a>" +
+      (topics.length
+        ? '<div class="cx-tags">' + topics.slice(0, 3).map(function (t) {
+            return '<span class="cx-tag cx-tag-topic">' + escapeHtml(t) + "</span>";
+          }).join("") + "</div>"
+        : "") +
+      '<div class="cx-member-foot">' +
+        '<a class="cx-btn cx-btn-sm" href="' + href + '">View profile</a>' +
+        (isMe ? "" : followButtonHtml(m.user_id)) +
+      "</div>" +
+    "</article>";
+  }
+
+  function followButtonHtml(userId) {
+    var on = followingSet.has(userId);
+    return '<button type="button" class="cx-btn cx-btn-sm' + (on ? " is-on" : "") +
+      '" data-follow="' + escapeHtml(userId) + '" aria-pressed="' + (on ? "true" : "false") +
+      '">' + (on ? "Following" : "Follow") + "</button>";
+  }
+
+  function render() {
+    var shown = members.filter(matches);
+    countEl.hidden = false;
+    countEl.textContent = shown.length === members.length
+      ? members.length + (members.length === 1 ? " member" : " members")
+      : shown.length + " of " + members.length + " members";
+
+    if (!shown.length) {
+      state("Nobody matches that",
+        "Try fewer words, or clear a filter.",
+        '<button type="button" class="cx-btn" id="btn-clear">Clear filters</button>');
+      var clear = document.getElementById("btn-clear");
+      if (clear) clear.addEventListener("click", function () {
+        document.getElementById("q").value = "";
+        ["f-country", "f-industry", "f-experience", "f-topic"].forEach(function (id) {
+          document.getElementById(id).value = "";
+        });
+        render();
+      });
+      return;
+    }
+    results.innerHTML = '<div class="cx-grid">' + shown.map(cardHtml).join("") + "</div>";
+  }
+
+  results.addEventListener("click", async function (e) {
+    var btn = e.target.closest("[data-follow]");
+    if (!btn) return;
+    var userId = btn.getAttribute("data-follow");
+    var on = followingSet.has(userId);
+    btn.disabled = true;
+    var res = on ? await unfollow(userId) : await follow(userId);
+    btn.disabled = false;
+    if (res.off || res.error) {
+      btn.textContent = "Try again";
+      return;
+    }
+    if (on) followingSet.delete(userId); else followingSet.add(userId);
+    var nowOn = followingSet.has(userId);
+    btn.textContent = nowOn ? "Following" : "Follow";
+    btn.className = "cx-btn cx-btn-sm" + (nowOn ? " is-on" : "");
+    btn.setAttribute("aria-pressed", nowOn ? "true" : "false");
+  });
+
+  ["q", "f-country", "f-industry", "f-experience", "f-topic"].forEach(function (id) {
+    var el = document.getElementById(id);
+    el.addEventListener("input", render);
+    el.addEventListener("change", render);
+  });
+
+  // ---- Load -------------------------------------------------------------
+
+  (async function init() {
+    me = await requireUser("../login.html");
+    if (!me) return;
+
+    var dir = await listDirectory();
+    if (dir.off) {
+      state("Connect isn't switched on yet", CONNECT_OFF_MESSAGE,
+        '<a class="cx-btn" href="dashboard.html">Back to dashboard</a>');
+      return;
+    }
+    if (dir.error) {
+      state("Couldn't load the directory",
+        "Something went wrong on the way to the server. Refreshing usually sorts it.");
+      return;
+    }
+
+    members = dir.data || [];
+
+    // Nobody has opted in yet — including, most likely, the person reading
+    // this. That's the moment to ask.
+    if (!members.length) {
+      state("Nobody's here yet",
+        "Connect only lists members who've chosen to appear, and so far nobody has. " +
+        "Be the first: switch on <strong>Show me in Connect</strong> on your profile and " +
+        "other members will be able to find you, follow you, and send you a message.",
+        '<a class="cx-btn cx-btn-primary" href="profile.html">Open my profile</a>');
+      return;
+    }
+
+    var act = await getActivityFor(members.map(function (m) { return m.user_id; }));
+    activity = act.data || {};
+    var fol = await myFollowing();
+    followingSet = fol.data;
+
+    buildFilters();
+    render();
+
+    // If the reader isn't in their own directory, say so once, quietly — they
+    // can browse either way, but they can't be found back.
+    var inDirectory = members.some(function (m) { return m.user_id === me.id; });
+    if (!inDirectory) {
+      document.getElementById("self-note").innerHTML =
+        '<div class="cx-status is-info">You\'re not listed here yet. ' +
+        'Switch on <strong>Show me in Connect</strong> on your ' +
+        '<a href="profile.html">profile</a> so other members can find you too.</div>';
+    }
+
+    if (dir.capped) {
+      document.getElementById("self-note").insertAdjacentHTML("beforeend",
+        '<div class="cx-status is-info">Showing the ' + DIRECTORY_CAP +
+        " members who joined most recently. Search and filters apply to those.</div>");
+    }
+  })();
+</script>
+<script src="../script.js"></script>
+</body>
+</html>
