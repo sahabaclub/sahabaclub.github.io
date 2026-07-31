@@ -73,18 +73,57 @@
   .dash-pill.status-active { background: rgba(34,197,94,0.14); color: #4ade80; border: 1px solid rgba(34,197,94,0.4); }
   .dash-pill.status-pending { background: rgba(56,189,248,0.14); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.4); }
 
-  /* ---- Two-way choice (profile intake) ---- */
-  .dash-choice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  @media (max-width: 620px) { .dash-choice-row { grid-template-columns: 1fr; } }
-  .dash-choice {
-    text-align: left; padding: 16px 18px; border-radius: 12px;
-    border: 1px solid var(--glass-border); background: var(--glass);
-    color: var(--text); cursor: pointer; font-family: inherit;
-  }
-  .dash-choice:hover { border-color: var(--cyan); }
-  .dash-choice strong { display: block; margin-bottom: 4px; font-size: 15px; }
-  .dash-choice span { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
   .dash-back { background: none; border: none; color: var(--text-secondary); font-size: 13px; cursor: pointer; padding: 0; margin-bottom: 14px; font-family: inherit; }
+
+  /* ---- Profile card (what we hold about you, as it stands) ----
+     Name and actions on one row. At 375px the actions stay on that row rather
+     than wrapping under the name: they are two 38px targets, which fits beside
+     even a long name once the name is allowed to wrap. */
+  .dash-pc-top { display: flex; align-items: center; gap: 13px; }
+  .dash-pc-avatar {
+    width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--violet), var(--cyan));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700; color: #05070d; overflow: hidden;
+  }
+  .dash-pc-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .dash-pc-id { flex: 1; min-width: 0; }
+  .dash-pc-id h2 { margin: 0; font-size: 17px; word-break: break-word; line-height: 1.3; }
+  /* Full card width, below the avatar row rather than beside it. Sharing the
+     row with the two action buttons squeezed it into a ~180px ribbon that
+     wrapped a normal headline onto five lines, with empty space under the
+     buttons. */
+  .dash-pc-headline { font-size: 13.5px; color: var(--text-secondary); margin: 12px 0 0; line-height: 1.55; }
+  .dash-pc-headline:empty { display: none; }
+  .dash-pc-actions { display: flex; gap: 7px; flex-shrink: 0; }
+  .dash-icon-btn {
+    width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--glass-border); background: var(--glass);
+    color: var(--text-secondary); display: flex; align-items: center;
+    justify-content: center; font-family: inherit; padding: 0;
+  }
+  .dash-icon-btn:hover { border-color: var(--cyan); color: var(--text); }
+
+  .dash-pc-meta { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+  .dash-pc-meta:empty { display: none; }
+  .dash-pc-meta li { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; color: var(--text-secondary); line-height: 1.5; }
+  .dash-pc-meta svg { flex-shrink: 0; margin-top: 2px; color: var(--text-muted); }
+
+  .dash-pc-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .dash-pc-tags:empty { display: none; }
+  .dash-pc-tag {
+    font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+    background: rgba(34,211,238,0.12); border: 1px solid rgba(34,211,238,0.3); color: var(--text-secondary);
+  }
+  .dash-pc-tag.is-more { background: none; border-color: var(--glass-border); color: var(--text-muted); }
+
+  .dash-pc-state {
+    display: flex; gap: 9px; align-items: flex-start; margin-top: 16px;
+    font-size: 13px; line-height: 1.55; padding: 11px 13px; border-radius: 10px;
+  }
+  .dash-pc-state.info { background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.3); color: #7dd3fc; }
+  .dash-pc-state.ok { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: #4ade80; }
+  .dash-pc-state svg { flex-shrink: 0; margin-top: 1px; }
 
   /* ---- Forms ---- */
   .dash-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
@@ -280,35 +319,44 @@
 
     <!-- ---- Profile ---- -->
     <section class="dash-section" id="section-profile" aria-labelledby="dash-greeting">
-      <!-- Shown only while the member is not discoverable. Appearing in Connect
-           is opt-in and needs a profile worth showing, so this says which of the
-           two is still missing rather than a generic nudge. The requirement list
-           mirrors public.profile_is_complete (0018) — if that rule changes, this
-           changes with it. -->
-      <div class="dash-card hidden" id="connect-invite">
-        <h2>Connect</h2>
-        <p id="connect-invite-line"></p>
-        <p class="dash-note" id="connect-invite-need"></p>
+      <!-- The member's profile as it stands. This used to drop straight into an
+           empty-looking form, which gave someone who had already filled it in no
+           way to see what the club actually holds about them. The form is now
+           one of two actions on this card rather than the card itself. -->
+      <div class="dash-card" id="profile-card">
+        <div class="dash-pc-top">
+          <span class="dash-pc-avatar" id="pc-avatar" aria-hidden="true"></span>
+          <div class="dash-pc-id">
+            <h2 id="pc-name">Your profile</h2>
+          </div>
+          <div class="dash-pc-actions">
+            <button type="button" class="dash-icon-btn" id="choice-manual" title="Edit my profile" aria-label="Edit my profile">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+            </button>
+            <button type="button" class="dash-icon-btn" id="choice-ai" title="Build with AI from a CV or LinkedIn PDF" aria-label="Build with AI from a CV or LinkedIn PDF">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3.5l1.7 4.3 4.3 1.7-4.3 1.7L10 15.5 8.3 11.2 4 9.5l4.3-1.7z"/><path d="M17.5 14.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <p class="dash-pc-headline" id="pc-headline"></p>
+        <ul class="dash-pc-meta" id="pc-meta"></ul>
+        <div class="dash-pc-tags" id="pc-tags"></div>
+
+        <!-- What Connect will show, and what it still needs. Never a blocker:
+             since migration 0019 retired the gate trigger there is nothing to
+             fail — an incomplete profile saves fine, it is simply not listed
+             until it has something to list. -->
+        <div class="dash-pc-state info" id="pc-state" role="status">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6v.4"/></svg>
+          <span id="pc-state-text"></span>
+        </div>
+
         <p style="margin-top:14px;">
           <a class="dash-link" href="connect.html">Browse Connect &rarr;</a>
           &nbsp;&middot;&nbsp;
           <a class="dash-link" href="profile.html">Open my full profile &rarr;</a>
         </p>
-      </div>
-
-      <div class="dash-card" id="profile-choice">
-        <h2>Your profile</h2>
-        <p>This is what we use to match you with coaches, events and content. Two ways to fill it in — the fields are the same either way.</p>
-        <div class="dash-choice-row">
-          <button type="button" class="dash-choice" id="choice-ai">
-            <strong>Build with AI</strong>
-            <span>Upload your CV or LinkedIn PDF and we'll read it. You check every field before anything saves.</span>
-          </button>
-          <button type="button" class="dash-choice" id="choice-manual">
-            <strong>Fill it in myself</strong>
-            <span>Go straight to the form. Whatever you've already told us is in there.</span>
-          </button>
-        </div>
       </div>
 
       <div class="dash-card hidden" id="profile-upload">
@@ -338,8 +386,32 @@
             <input type="text" id="f-name" required>
           </div>
           <div class="dash-field">
+            <label for="f-headline">Headline</label>
+            <input type="text" id="f-headline" maxlength="120" placeholder="e.g. Power Platform developer, learning agents">
+          </div>
+          <div class="dash-field">
             <label for="f-bio">Short bio</label>
             <textarea id="f-bio" placeholder="A couple of sentences about your background."></textarea>
+          </div>
+          <div class="dash-row">
+            <div class="dash-field">
+              <label for="f-city">City</label>
+              <input type="text" id="f-city" placeholder="e.g. Dubai">
+            </div>
+            <div class="dash-field">
+              <label for="f-country">Country</label>
+              <select id="f-country"><option value="">Select one</option></select>
+            </div>
+          </div>
+          <div class="dash-row">
+            <div class="dash-field">
+              <label for="f-company">Company</label>
+              <input type="text" id="f-company" placeholder="e.g. Emirates NBD">
+            </div>
+            <div class="dash-field">
+              <label for="f-position">Position</label>
+              <input type="text" id="f-position" placeholder="e.g. Solutions Architect">
+            </div>
           </div>
           <div class="dash-row">
             <div class="dash-field">
@@ -353,32 +425,44 @@
               </select>
             </div>
             <div class="dash-field">
-              <label for="f-industry">Industry</label>
-              <input type="text" id="f-industry" placeholder="e.g. Fintech">
+              <label for="f-years">Years of experience</label>
+              <input type="number" id="f-years" min="0" max="60" inputmode="numeric" placeholder="e.g. 7">
             </div>
           </div>
           <div class="dash-row">
             <div class="dash-field">
+              <label for="f-industry">Industry</label>
+              <input type="text" id="f-industry" placeholder="e.g. Fintech">
+            </div>
+            <div class="dash-field">
               <label for="f-timezone">Timezone</label>
               <input type="text" id="f-timezone" placeholder="e.g. Asia/Dubai">
             </div>
-            <div class="dash-field">
-              <label for="f-language">Preferred language</label>
-              <input type="text" id="f-language" placeholder="e.g. English">
-            </div>
           </div>
           <div class="dash-field">
-            <label for="f-skills">Skills (comma-separated)</label>
-            <input type="text" id="f-skills" placeholder="Power Apps, Copilot Studio, Python">
+            <label for="f-language">Preferred language</label>
+            <input type="text" id="f-language" placeholder="e.g. English">
           </div>
           <div class="dash-field">
-            <label for="f-interests">Interests (comma-separated)</label>
-            <input type="text" id="f-interests" placeholder="Agentic AI, Hackathons, Low-code">
+            <label id="lbl-open-to">Open to</label>
+            <div class="optin-row" id="f-open-to" role="group" aria-labelledby="lbl-open-to"></div>
           </div>
           <div class="dash-field">
-            <label for="f-goals">What you're hoping to get out of Sahaba Club (comma-separated)</label>
-            <input type="text" id="f-goals" placeholder="Break into AI, find a coach, ship a side project">
+            <label for="f-skills-input">Skills</label>
+            <div id="f-skills"></div>
           </div>
+          <div class="dash-field">
+            <label for="f-interests-input">Interests</label>
+            <div id="f-interests"></div>
+          </div>
+          <div class="dash-field">
+            <label for="f-goals-input">What you're hoping to get out of Sahaba Club</label>
+            <div id="f-goals"></div>
+          </div>
+          <label class="dash-check">
+            <input type="checkbox" id="f-discoverable">
+            Show me in Connect, so other members can find me
+          </label>
           <label class="dash-check">
             <input type="checkbox" id="f-newsletter">
             Send me the Sahaba Club newsletter, tailored to my interests
@@ -500,9 +584,16 @@
   import { supabase } from "../lib/supabase-client.js";
   import { getSession, signOut, hasCompletedOnboarding, syncAvatar } from "../lib/auth.js";
   import { recommendEvents } from "../lib/event-social.js";
+  import {
+    loadCountries, loadTagSuggestions, suggestionsFor, fillCountrySelect,
+    createTagPicker, connectHint, mergeExtracted, OPEN_TO,
+    nullIfBlank, intOrNull,
+  } from "../lib/profile-form.js";
 
   var session = null;
   var profileSource = null;   // set only when a document filled the form in
+  var profileRow = {};        // the row as loaded, so we only send columns that exist
+  var pickers = {};
 
   // Which section the URL is asking for. The hash is the single source of
   // truth, so a refresh or a shared link lands in the same place.
@@ -518,10 +609,6 @@
   function showStatus(elId, msg, kind) {
     document.getElementById(elId).innerHTML =
       '<div class="dash-status ' + kind + '">' + msg + "</div>";
-  }
-
-  function splitTags(value) {
-    return value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
   }
 
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -610,6 +697,7 @@
     var { data: profile } = await supabase
       .from("profiles").select("*").eq("user_id", session.user.id).maybeSingle();
 
+    profileRow = profile || {};
     var name = (profile && profile.full_name) || session.user.email || session.user.phone || "there";
     document.getElementById("dash-greeting").textContent = "Welcome, " + name;
 
@@ -617,56 +705,104 @@
       document.getElementById("nav-newsletter-link").hidden = false;
     }
 
-    fillForm(profile || {});
-    showConnectInvite(profile || {});
+    // Advisory lookups: an empty or missing table must not stop anyone
+    // finishing the form, so both fall back to [].
+    var countries = await loadCountries();
+    var tagRows = await loadTagSuggestions();
+    fillCountrySelect(document.getElementById("f-country"), countries, profileRow.country);
+    buildOpenTo();
+    buildPickers(tagRows);
+
+    fillForm(profileRow);
+    renderProfileCard(profileRow);
     loaded.profile = true;
     showSection(currentSection());
     syncAvatar(session).catch(function () {});
   })();
 
-  // ---- Connect invite ---------------------------------------------------
-  // Mirrors public.profile_is_complete: a name, an avatar, a bio OR a headline,
-  // and at least one interest. The database is the authority — this only tells
-  // the member what they still need so the gate isn't a surprise when they flip
-  // the switch on profile.html.
-  function missingForConnect(p) {
-    var need = [];
-    if (!String(p.full_name || "").trim()) need.push("your name");
-    if (!String(p.avatar_url || "").trim()) need.push("a photo");
-    if (!String(p.bio || "").trim() && !String(p.headline || "").trim()) {
-      need.push("a short bio or headline");
+  // ---- The profile card -------------------------------------------------
+  function initialOf(s) {
+    var t = String(s || "").trim();
+    return t ? t.charAt(0).toUpperCase() : "?";
+  }
+
+  function metaRow(icon, text) {
+    return "<li>" + icon + "<span>" + esc(text) + "</span></li>";
+  }
+
+  var ICON_WORK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7.5" width="18" height="12.5" rx="2"/><path d="M8.5 7.5V6a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v1.5"/></svg>';
+  var ICON_PLACE = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s7-5.3 7-11a7 7 0 1 0-14 0c0 5.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+  var ICON_LEVEL = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>';
+  var ICON_OPEN = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-4.4-7-9.5A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 3.5C19 16.6 12 21 12 21z"/></svg>';
+
+  var EXPERIENCE_LABELS = {
+    "student": "Student", "early-career": "Early career",
+    "mid-career": "Mid career", "senior": "Senior / leadership",
+  };
+
+  // Shows the profile as it stands. Every line is omitted when empty rather
+  // than rendered as a blank row — a card of empty labels reads as broken.
+  function renderProfileCard(p) {
+    var avatar = document.getElementById("pc-avatar");
+    avatar.innerHTML = p.avatar_url
+      ? '<img src="' + esc(p.avatar_url) + '" alt="">'
+      : esc(initialOf(p.full_name || session.user.email));
+
+    document.getElementById("pc-name").textContent = p.full_name || "Your profile";
+    document.getElementById("pc-headline").textContent = p.headline || "";
+
+    var rows = [];
+    var work = [p.position, p.company].filter(Boolean).join(" at ");
+    if (work) rows.push(metaRow(ICON_WORK, work));
+
+    var place = [p.city, p.country].filter(Boolean).join(", ");
+    if (place) rows.push(metaRow(ICON_PLACE, place));
+
+    var level = [];
+    if (p.experience_level) level.push(EXPERIENCE_LABELS[p.experience_level] || p.experience_level);
+    if (p.years_experience != null && p.years_experience !== "") {
+      level.push(p.years_experience + (Number(p.years_experience) === 1 ? " year" : " years"));
     }
-    if (!(Array.isArray(p.interests) && p.interests.length)) need.push("at least one interest");
-    return need;
+    if (p.industry) level.push(p.industry);
+    if (level.length) rows.push(metaRow(ICON_LEVEL, level.join(" · ")));
+
+    if (Array.isArray(p.open_to) && p.open_to.length) {
+      var labels = p.open_to.map(function (v) {
+        var found = OPEN_TO.filter(function (o) { return o.value === v; })[0];
+        return found ? found.label : v;
+      });
+      rows.push(metaRow(ICON_OPEN, "Open to " + labels.join(", ").toLowerCase()));
+    }
+    document.getElementById("pc-meta").innerHTML = rows.join("");
+
+    // Interests first — they are what Connect and the newsletter match on.
+    var tags = []
+      .concat(Array.isArray(p.interests) ? p.interests : [])
+      .concat(Array.isArray(p.skills) ? p.skills : []);
+    var shown = tags.slice(0, 8);
+    var html = shown.map(function (t) {
+      return '<span class="dash-pc-tag">' + esc(t) + "</span>";
+    });
+    if (tags.length > shown.length) {
+      html.push('<span class="dash-pc-tag is-more">+' + (tags.length - shown.length) + "</span>");
+    }
+    document.getElementById("pc-tags").innerHTML = html.join("");
+
+    var hint = connectHint(p);
+    var state = document.getElementById("pc-state");
+    state.classList.remove("info", "ok");
+    state.classList.add(hint.kind);
+    document.getElementById("pc-state-text").textContent = hint.text;
   }
 
-  function showConnectInvite(p) {
-    // Already listed: nothing to nudge about.
-    if (p.is_discoverable) return;
-
-    var need = missingForConnect(p);
-    document.getElementById("connect-invite-line").textContent =
-      "Connect is the member directory — other members can find you, follow you " +
-      "and send you a message. You're not in it yet; it's off until you switch it on.";
-    document.getElementById("connect-invite-need").textContent = need.length
-      ? "Before you can join you still need " + joinList(need) + "."
-      : "Your profile is ready. Switch on “Show me in Connect” on your full profile to join.";
-    document.getElementById("connect-invite").classList.remove("hidden");
-  }
-
-  function joinList(items) {
-    if (items.length === 1) return items[0];
-    return items.slice(0, -1).join(", ") + " and " + items[items.length - 1];
-  }
-
-  // ---- Profile ----------------------------------------------------------
-  var choiceCard = document.getElementById("profile-choice");
+  // ---- Profile panels ---------------------------------------------------
+  var cardPanel = document.getElementById("profile-card");
   var uploadCard = document.getElementById("profile-upload");
   var formCard = document.getElementById("profile-form-card");
   var reviewBanner = document.getElementById("review-banner");
 
   function showProfilePanel(el) {
-    [choiceCard, uploadCard, formCard].forEach(function (panel) {
+    [cardPanel, uploadCard, formCard].forEach(function (panel) {
       panel.classList.toggle("hidden", panel !== el);
     });
   }
@@ -678,45 +814,109 @@
     showProfilePanel(uploadCard);
   });
   document.getElementById("back-from-upload").addEventListener("click", function () {
-    showProfilePanel(choiceCard);
+    showProfilePanel(cardPanel);
   });
   document.getElementById("back-from-form").addEventListener("click", function () {
-    showProfilePanel(choiceCard);
+    showProfilePanel(cardPanel);
   });
+
+  // ---- Shared widgets ---------------------------------------------------
+  function buildOpenTo() {
+    document.getElementById("f-open-to").innerHTML = OPEN_TO.map(function (o) {
+      return '<label class="optin-chip"><input type="checkbox" value="' + esc(o.value) + '">' +
+        esc(o.label) + "</label>";
+    }).join("");
+    document.getElementById("f-open-to").addEventListener("change", paintOpenTo);
+  }
+  function paintOpenTo() {
+    Array.prototype.forEach.call(
+      document.getElementById("f-open-to").querySelectorAll(".optin-chip"),
+      function (chip) { chip.classList.toggle("is-on", chip.querySelector("input").checked); }
+    );
+  }
+  function readOpenTo() {
+    return Array.prototype.slice
+      .call(document.getElementById("f-open-to").querySelectorAll("input:checked"))
+      .map(function (i) { return i.value; });
+  }
+  function setOpenTo(values) {
+    var want = Array.isArray(values) ? values : [];
+    Array.prototype.forEach.call(
+      document.getElementById("f-open-to").querySelectorAll("input"),
+      function (i) { i.checked = want.indexOf(i.value) !== -1; }
+    );
+    paintOpenTo();
+  }
+
+  function buildPickers(tagRows) {
+    pickers.skills = createTagPicker({
+      root: document.getElementById("f-skills"), inputId: "f-skills-input",
+      suggestions: suggestionsFor(tagRows, "skill"),
+      placeholder: "Search skills, or type your own",
+    });
+    pickers.interests = createTagPicker({
+      root: document.getElementById("f-interests"), inputId: "f-interests-input",
+      suggestions: suggestionsFor(tagRows, "interest"),
+      placeholder: "Search interests, or type your own",
+    });
+    pickers.goals = createTagPicker({
+      root: document.getElementById("f-goals"), inputId: "f-goals-input",
+      suggestions: [],
+      placeholder: "e.g. Break into AI, find a coach",
+    });
+  }
 
   // A missing row is a setup state, not an error the member can act on —
   // an empty form is the right thing to show either way.
   function fillForm(p) {
     document.getElementById("f-name").value = p.full_name || "";
+    document.getElementById("f-headline").value = p.headline || "";
     document.getElementById("f-bio").value = p.bio || "";
+    document.getElementById("f-city").value = p.city || "";
+    document.getElementById("f-country").value = p.country || "";
+    document.getElementById("f-company").value = p.company || "";
+    document.getElementById("f-position").value = p.position || "";
+    document.getElementById("f-years").value =
+      p.years_experience == null ? "" : p.years_experience;
     document.getElementById("f-experience").value = p.experience_level || "";
     document.getElementById("f-industry").value = p.industry || "";
     document.getElementById("f-timezone").value = p.timezone || "";
     document.getElementById("f-language").value = p.language || "";
-    document.getElementById("f-skills").value = (p.skills || []).join(", ");
-    document.getElementById("f-interests").value = (p.interests || []).join(", ");
-    document.getElementById("f-goals").value = (p.goals || []).join(", ");
+    setOpenTo(p.open_to || []);
+    if (pickers.skills) pickers.skills.set(p.skills || []);
+    if (pickers.interests) pickers.interests.set(p.interests || []);
+    if (pickers.goals) pickers.goals.set(p.goals || []);
     document.getElementById("f-newsletter").checked = Boolean(p.newsletter_opt_in);
-    // Default to shown when the column isn't there yet (migration 0005), which
-    // matches the column's own default rather than implying opted-out.
+    // These three default to their column defaults rather than to "off", so a
+    // member who has never touched them is not shown a false opted-out state.
+    document.getElementById("f-discoverable").checked =
+      p.is_discoverable === undefined || p.is_discoverable === null ? true : Boolean(p.is_discoverable);
     document.getElementById("f-attendees").checked =
-      p.show_in_attendees === undefined ? true : Boolean(p.show_in_attendees);
+      p.show_in_attendees === undefined || p.show_in_attendees === null ? true : Boolean(p.show_in_attendees);
   }
 
   // The inverse of fillForm, in the shape the profiles table takes — used
   // both to save and as the base the document import is layered onto.
   function readForm() {
     return {
-      full_name: document.getElementById("f-name").value.trim(),
-      bio: document.getElementById("f-bio").value.trim(),
-      experience_level: document.getElementById("f-experience").value,
-      industry: document.getElementById("f-industry").value.trim(),
-      timezone: document.getElementById("f-timezone").value.trim(),
-      language: document.getElementById("f-language").value.trim(),
-      skills: splitTags(document.getElementById("f-skills").value),
-      interests: splitTags(document.getElementById("f-interests").value),
-      goals: splitTags(document.getElementById("f-goals").value),
+      full_name: nullIfBlank(document.getElementById("f-name").value),
+      headline: nullIfBlank(document.getElementById("f-headline").value),
+      bio: nullIfBlank(document.getElementById("f-bio").value),
+      city: nullIfBlank(document.getElementById("f-city").value),
+      country: nullIfBlank(document.getElementById("f-country").value),
+      company: nullIfBlank(document.getElementById("f-company").value),
+      position: nullIfBlank(document.getElementById("f-position").value),
+      years_experience: intOrNull(document.getElementById("f-years").value),
+      experience_level: nullIfBlank(document.getElementById("f-experience").value),
+      industry: nullIfBlank(document.getElementById("f-industry").value),
+      timezone: nullIfBlank(document.getElementById("f-timezone").value),
+      language: nullIfBlank(document.getElementById("f-language").value),
+      open_to: readOpenTo(),
+      skills: pickers.skills ? pickers.skills.get() : [],
+      interests: pickers.interests ? pickers.interests.get() : [],
+      goals: pickers.goals ? pickers.goals.get() : [],
       newsletter_opt_in: document.getElementById("f-newsletter").checked,
+      is_discoverable: document.getElementById("f-discoverable").checked,
       show_in_attendees: document.getElementById("f-attendees").checked,
     };
   }
@@ -749,14 +949,14 @@
       // Overlay onto what's already in the form rather than replacing it. A
       // member here usually has a profile already, and a sparse CV shouldn't
       // blank out details they typed in themselves.
-      var merged = readForm();
-      Object.keys(data.profile).forEach(function (k) {
-        var v = data.profile[k];
-        if (v === null || v === undefined || v === "") return;
-        if (Array.isArray(v) && !v.length) return;
-        merged[k] = v;
-      });
-      fillForm(merged);
+      //
+      // mergeExtracted copies every key the extractor returns that the form
+      // knows how to hold, so as parse-profile-document learns to return more
+      // (headline, company, position, years_experience, city, country) those
+      // land here with no change on this side. Keys the form has no home for
+      // are dropped rather than sent on to `profiles`, because an UPDATE
+      // naming a column that does not exist fails the whole save.
+      fillForm(mergeExtracted(readForm(), data.profile));
 
       profileSource = file.name.toLowerCase().indexOf("linkedin") !== -1 ? "linkedin_pdf" : "cv";
       reviewBanner.classList.remove("hidden");
@@ -774,19 +974,34 @@
     saveBtn.disabled = true;
     showStatus("profile-status", "Saving…", "info");
 
-    var patch = readForm();
-    if (profileSource) patch.profile_source = profileSource;
+    // A tag still sitting in a picker's box was meant to be added.
+    Object.keys(pickers).forEach(function (k) { pickers[k].flush(); });
+
+    var values = readForm();
+    if (profileSource) values.profile_source = profileSource;
+
+    // Only send columns the loaded row actually had. An UPDATE naming a column
+    // that does not exist fails the whole statement, taking the unrelated
+    // fields down with it.
+    var patch = {};
+    Object.keys(values).forEach(function (k) {
+      if (Object.prototype.hasOwnProperty.call(profileRow, k)) patch[k] = values[k];
+    });
 
     var { error } = await supabase.from("profiles").update(patch).eq("user_id", session.user.id);
 
     saveBtn.disabled = false;
     if (error) {
-      showStatus("profile-status", "Couldn't save: " + error.message, "err");
+      showStatus("profile-status", "Couldn't save: " + esc(error.message), "err");
       return;
     }
     showStatus("profile-status", "Saved.", "ok");
     reviewBanner.classList.add("hidden");
-    document.getElementById("dash-greeting").textContent = "Welcome, " + (patch.full_name || "there");
+
+    Object.keys(patch).forEach(function (k) { profileRow[k] = patch[k]; });
+    renderProfileCard(profileRow);
+    document.getElementById("dash-greeting").textContent =
+      "Welcome, " + (patch.full_name || "there");
   });
 
   // ---- Membership -------------------------------------------------------
