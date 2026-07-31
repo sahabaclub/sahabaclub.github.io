@@ -2918,3 +2918,70 @@ html.light-mode .ev-rec-reason { color: var(--cyan); }
 .ev-ask-event { font-weight: 700; color: var(--text); }
 .ev-ask-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .ev-ask-actions .btn { flex: 1; min-width: 120px; text-align: center; }
+
+/* ---------------------------------------------------------------------------
+   Tag picker — shared by app/profile.html and the dashboard's Profile section
+   ---------------------------------------------------------------------------
+   Skills and interests are still text[] columns; this is only the input. It
+   lives here rather than in either page's <style> because two copies of a
+   widget is how the two profile forms drifted apart in the first place. */
+.tagpick { position: relative; }
+.tagpick-box {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border); border-radius: 8px;
+  padding: 7px 8px; min-height: 44px;
+}
+html.light-mode .tagpick-box { background: rgba(16, 22, 39, 0.03); }
+.tagpick-box:focus-within { border-color: var(--cyan); }
+.tagpick-chips { display: contents; }
+
+.tagpick-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(34, 211, 238, 0.14); border: 1px solid rgba(34, 211, 238, 0.35);
+  color: var(--text); border-radius: 999px;
+  padding: 4px 6px 4px 11px; font-size: 13px; font-weight: 600;
+  max-width: 100%; word-break: break-word;
+}
+.tagpick-x {
+  background: none; border: none; color: var(--text-secondary);
+  cursor: pointer; font-size: 16px; line-height: 1; padding: 0;
+  /* 24px keeps the tap target usable on a phone without stretching the chip. */
+  width: 24px; height: 24px; border-radius: 999px; flex-shrink: 0;
+}
+.tagpick-x:hover { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+
+.tagpick-input {
+  flex: 1 1 120px; min-width: 100px;
+  background: none; border: none; outline: none;
+  color: var(--text); font-family: inherit; font-size: 14px; padding: 5px 2px;
+}
+.tagpick-input::placeholder { color: var(--text-muted); }
+
+.tagpick-menu {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20;
+  margin: 0; padding: 4px; list-style: none;
+  background: #0b1020; border: 1px solid var(--glass-border);
+  border-radius: 10px; max-height: 220px; overflow-y: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+html.light-mode .tagpick-menu { background: #fff; box-shadow: 0 10px 30px rgba(16, 22, 39, 0.14); }
+.tagpick-opt {
+  padding: 9px 11px; border-radius: 7px; font-size: 14px;
+  color: var(--text-secondary); cursor: pointer;
+}
+.tagpick-opt:hover, .tagpick-opt.is-active { background: var(--glass); color: var(--text); }
+.tagpick-new { color: var(--cyan); font-weight: 600; }
+
+/* "Open to" — a short fixed vocabulary, so buttons rather than a picker. */
+.optin-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.optin-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--glass-border); background: var(--glass);
+  border-radius: 999px; padding: 8px 14px; cursor: pointer;
+  font-size: 13.5px; font-weight: 600; color: var(--text-secondary);
+  font-family: inherit;
+}
+.optin-chip input { width: auto; margin: 0; flex-shrink: 0; }
+.optin-chip:hover { border-color: var(--cyan); color: var(--text); }
+.optin-chip.is-on { border-color: rgba(34, 211, 238, 0.5); background: rgba(34, 211, 238, 0.12); color: var(--text); }
