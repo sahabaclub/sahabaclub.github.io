@@ -12,6 +12,195 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<style>
+  /* Attendee faces became links to app/member.html (see faceHtml in
+     events-ui.js). The anchor has to be the flex item, otherwise .ev-face
+     ends up first-child of its own wrapper and the -8px overlap that makes
+     the row read as a stack is cancelled on every face instead of just the
+     first. Scoped here rather than added to styles.css because events.html
+     is the only page that renders these. */
+  .ev-face-link { display: block; margin-left: -8px; border-radius: 50%; line-height: 0; }
+  .ev-face-link:first-child { margin-left: 0; }
+  .ev-face-link .ev-face { margin-left: 0; display: block; }
+  .ev-face-link:hover .ev-face { border-color: var(--violet); }
+
+  /* ------------------------------------------------------------------
+     Everything below is only ever rendered by events-ui.js on this page,
+     so it lives here rather than in styles.css.
+     ------------------------------------------------------------------ */
+
+  /* Section heading above the search row. */
+  .events-section-title {
+    margin: 10px 0 0;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+
+  /* Recommended block, now above the filters. No vertical padding, so the
+     wrapper collapses to nothing when there is nothing to recommend. */
+  .events-rec-wrap {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  /* The mega cards now point down the page instead of off it, so the
+     chevron should lift toward the list rather than slide sideways. */
+  .featured-card:hover .featured-cta svg { transform: translateY(2px); }
+
+  /* ---- Card date + time row ---- */
+  .ev-when {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px 9px;
+    margin-bottom: 5px;
+  }
+  .ev-when .ev-time { margin-bottom: 0; }
+  .ev-date {
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.015em;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+  .ev-when.is-today .ev-date { color: var(--cyan); }
+
+  /* ---- Tag / format / price chips ---- */
+  .ev-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  .ev-chip {
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.45;
+    padding: 2px 9px;
+    border-radius: 999px;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    /* Chips never break mid-word; the count chip is what absorbs a long
+       tag list, so the row stays at most two lines on a phone. */
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  html.light-mode .ev-chip { background: rgba(0, 0, 0, 0.04); }
+  .ev-chip.is-free {
+    color: #4ade80;
+    border-color: rgba(74, 222, 128, 0.45);
+    background: rgba(34, 197, 94, 0.14);
+  }
+  .ev-chip.is-mode {
+    color: var(--cyan);
+    border-color: rgba(34, 211, 238, 0.35);
+    background: rgba(34, 211, 238, 0.10);
+  }
+  .ev-chip.is-more { color: var(--text-muted); border-style: dashed; }
+
+  /* ---- Where a jump lands ---- */
+  .ev-card.is-flash {
+    border-color: rgba(34, 211, 238, 0.75);
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.16);
+    animation: ev-flash 2.2s ease-out;
+  }
+  @keyframes ev-flash {
+    0% { background: rgba(34, 211, 238, 0.20); }
+    100% { background: var(--glass); }
+  }
+  /* The ring alone still says "here it is" without any movement. */
+  html.reduce-motion .ev-card.is-flash { animation: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .ev-card.is-flash { animation: none; }
+  }
+
+  /* ---- Recommended: a compact suggestion list ----
+     Deliberately unlike both the mega banner and the list cards — one
+     tinted panel holding three tight rows, so it reads as an aside rather
+     than as more of the same catalogue. */
+  .ev-rec-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid rgba(139, 92, 246, 0.30);
+    border-radius: 16px;
+    background: linear-gradient(140deg, rgba(139, 92, 246, 0.11), rgba(34, 211, 238, 0.06));
+  }
+  .ev-rec-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 11px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background: rgba(0, 0, 0, 0.24);
+    transition: border-color 0.2s, background 0.2s;
+  }
+  html.light-mode .ev-rec-card { background: rgba(255, 255, 255, 0.62); }
+  .ev-rec-card:hover { border-color: rgba(139, 92, 246, 0.45); }
+  .ev-rec-thumb {
+    width: 46px; height: 46px;
+    border-radius: 10px;
+    object-fit: cover;
+    display: block;
+    background: var(--glass);
+  }
+  .ev-rec-thumb.is-empty {
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text);
+    background: linear-gradient(140deg, rgba(139, 92, 246, 0.35), rgba(34, 211, 238, 0.20));
+  }
+  .ev-rec-thumb.is-empty svg { width: 18px; height: 18px; }
+  .ev-rec-main { min-width: 0; }
+  .ev-rec-when {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .ev-rec-name { margin: 1px 0 0; font-size: 15px; font-weight: 700; line-height: 1.3; }
+  .ev-rec-link { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Stretches the link over the whole row, so the card is one target. */
+  .ev-rec-link::after { content: ""; position: absolute; inset: 0; border-radius: 12px; }
+  .ev-rec-card:hover .ev-rec-link { color: var(--cyan); }
+  .ev-rec-card .ev-rec-reason { margin-top: 3px; font-size: 11.5px; min-width: 0; }
+  .ev-rec-card .ev-rec-reason svg { flex-shrink: 0; }
+  .ev-rec-card .ev-rec-reason span {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  /* Sits above the stretched link so the heart is still its own button. */
+  .ev-rec-side { position: relative; z-index: 1; display: flex; align-items: center; gap: 4px; }
+  .ev-rec-fav {
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .ev-rec-fav:hover { color: var(--text); border-color: var(--text-muted); }
+  .ev-rec-fav.is-on {
+    color: #fb7185;
+    border-color: rgba(251, 113, 133, 0.5);
+    background: rgba(251, 113, 133, 0.14);
+  }
+  .ev-rec-fav svg { width: 15px; height: 15px; }
+  .ev-rec-go { display: flex; color: var(--text-muted); }
+  .ev-rec-go svg { width: 16px; height: 16px; }
+
+  @media (max-width: 420px) {
+    /* The whole row is already the tap target; the chevron is just decor. */
+    .ev-rec-go { display: none; }
+  }
+  @media (max-width: 720px) {
+    .events-section-title { font-size: 22px; }
+  }
+</style>
 <script>
   // Apply saved theme before first paint so the page never flashes dark.
   try {
@@ -145,10 +334,21 @@
     </div>
   </section>
 
+  <!-- Recommended sits between the mega events and the full list: it is a
+       short answer to "which of these is for me?", and it belongs before
+       the search box rather than buried under it. Filled in only for
+       signed-in members with something to learn from; stays empty
+       otherwise rather than showing a hollow heading. -->
+  <section class="events-rec-wrap" aria-label="Recommended for you">
+    <div id="events-recommended"></div>
+  </section>
+
   <!-- Search + filters. Tag chips are built from the data at runtime, so
        adding an event with a new tag needs no change here. On phones the
        panel below becomes a bottom sheet opened by the Filters button. -->
-  <section class="events-filters" aria-label="Search and filter events">
+  <section class="events-filters" aria-labelledby="all-upcoming-heading">
+    <h2 class="events-section-title glow-text" id="all-upcoming-heading">All Upcoming Events</h2>
+
     <div class="filter-bar">
       <div class="filter-search">
         <svg class="filter-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
@@ -223,10 +423,6 @@
   </section>
 
   <section class="events-list">
-    <!-- Filled in only for signed-in members with something to learn from.
-         Stays empty otherwise rather than showing a hollow heading. -->
-    <div id="events-recommended"></div>
-
     <div class="ev-timeline" id="events-grid"></div>
     <p class="events-empty hidden" id="events-empty">No upcoming events right now &mdash; check back soon, or follow us on social for updates.</p>
     <p class="events-empty hidden" id="events-no-match">No events match your search. Try a different word or clear a filter.</p>
