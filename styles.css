@@ -14,11 +14,27 @@ html.light-mode { color-scheme: light; }
   --gold-light: #f7ecd3;
   --text: #f3f4f8;
   --text-secondary: #a6acc2;
-  --text-muted: #6b7189;
+  /* #6b7189 measured 4.17:1 on the page and 3.47:1 inside a glass chip —
+     both under AA. Lightened just enough to clear 4.5:1 in the worst case. */
+  --text-muted: #838ba4;
   --glass: rgba(255, 255, 255, 0.045);
   --glass-border: rgba(255, 255, 255, 0.09);
   --radius: 16px;
   --max-width: 1080px;
+}
+
+/* Baseline keyboard focus. Individual components override this with their own
+   ring where they need a different offset; this is the floor, so nothing is
+   left relying on the browser default alone. Uses --cyan, so it re-colours
+   with the theme. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
 }
 
 * { box-sizing: border-box; }
@@ -1182,7 +1198,14 @@ body.lightbox-open { overflow: hidden; }
 }
 .signup-form input::placeholder { color: var(--text-muted); }
 .signup-form select { color: rgba(255, 255, 255, 0.85); }
-.signup-form select option { color: #1a1a1a; }
+/* The open list is painted by the browser on its own surface, not on the
+   control. A fixed dark ink here measured 1.55:1 against that surface in dark
+   mode; setting both colours together keeps the list readable in either theme. */
+.signup-form select option,
+.signup-form select optgroup {
+  background-color: var(--bg);
+  color: var(--text);
+}
 .signup-form .btn { margin-top: 4px; border: none; justify-content: center; }
 .form-thanks {
   position: relative;
@@ -2208,7 +2231,8 @@ html.light-mode {
   --bg: #f4f7fc;
   --text: #101627;
   --text-secondary: #4a5570;
-  --text-muted: #646e88;
+  /* #646e88 cleared AA on the page but not inside a chip (4.05:1). */
+  --text-muted: #5c6580;
   --violet: #6d28d9;
   --cyan: #0e7490;
   --gold: #9a6413;
@@ -2299,6 +2323,10 @@ html.light-mode .mobile-switch-track { background: rgba(16, 22, 39, 0.15); }
 html.light-mode .mobile-switch-thumb { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.25); }
 html.light-mode .nav-toggle-bar { background: var(--text); }
 
+/* The credential pill keeps a pale violet ink that only works on a dark
+   page — 1.23:1 against its own light tint. */
+html.light-mode .eyebrow { color: #6d28d9; border-color: rgba(109, 40, 217, 0.35); }
+
 /* Forms */
 html.light-mode .signup-form input,
 html.light-mode .signup-form select,
@@ -2328,6 +2356,23 @@ html.light-mode .event-tag-badge.tag-startups { --tag-color: #be123c; --tag-bg: 
 html.light-mode .event-tag-badge.tag-investors { --tag-color: #a16207; --tag-bg: rgba(217, 119, 6, 0.14); --tag-border: rgba(161, 98, 7, 0.32); }
 html.light-mode .event-tag-badge.tag-hackathon { --tag-color: #a21caf; --tag-bg: rgba(217, 70, 239, 0.12); --tag-border: rgba(162, 28, 175, 0.32); }
 html.light-mode .event-desc-toggle { color: #0e7490; }
+
+/* The featured card turns white in light mode but its accent stays a
+   dark-theme hue, so the date, scale pill and CTA measured 1.66–3.05:1.
+   Each accent swaps to the light-mode counterpart already used above. */
+html.light-mode .featured-card.accent-violet { --accent: #6d28d9; }
+html.light-mode .featured-card.accent-cyan   { --accent: #0e7490; }
+html.light-mode .featured-card.accent-gold   { --accent: #9a6413; }
+
+/* Event status pills — same story, dark-theme ink on a light card. */
+html.light-mode .ev-status.is-going      { color: #15803d; background: rgba(34, 197, 94, 0.13); }
+html.light-mode .ev-status.is-interested { color: #92620a; background: rgba(251, 191, 36, 0.15); }
+html.light-mode .ev-status.is-premium    { color: #7a5210; background: rgba(224, 168, 62, 0.16); }
+
+/* The scale pill tints its own background with the accent, which drags the
+   ink back under AA (3.59:1 gold). On a light card the card itself is
+   contrast enough — the accent stays in the text and border. */
+html.light-mode .featured-scale { background: #fff; }
 html.light-mode .event-ms-placeholder {
   background: linear-gradient(135deg, rgba(109, 40, 217, 0.07), rgba(14, 116, 144, 0.06));
 }
