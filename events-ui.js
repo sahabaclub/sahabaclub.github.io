@@ -42,7 +42,9 @@
   }
 
   var pin = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>';
-  var arrow = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>';
+  // Points down, because the card now takes you to the same event further
+  // down the page rather than off to the organiser's site.
+  var arrowDown = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v13M6 13l6 6 6-6"/></svg>';
 
   // The Machines Can Think mark: a chip with an eye, and a wordmark whose
   // last verb cycles. Drawn in markup so it stays crisp and recolourable
@@ -102,9 +104,19 @@
     var a = document.createElement("a");
     a.className = "featured-card accent-" + (f.accent || "violet") +
       " tile-" + (f.tile === "light" ? "light" : "dark");
-    a.href = f.link;
-    a.target = "_blank";
-    a.rel = "noopener";
+
+    // The card is a signpost into the list below, not a way out to the
+    // organiser. The href is the heading it lands on, so the card still
+    // does something sensible without JS or when opened in a new tab; the
+    // click handler upgrades that to "scroll to this exact event".
+    a.href = "#all-upcoming-heading";
+    a.setAttribute("data-mega", f.name);
+    a.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      document.dispatchEvent(new CustomEvent("sc:mega-jump", {
+        detail: { name: f.name }
+      }));
+    });
 
     // --- logo panel: left side on desktop, a bar across the top on phones ---
     var media = document.createElement("div");
@@ -194,7 +206,7 @@
 
     var cta = document.createElement("span");
     cta.className = "featured-cta";
-    cta.innerHTML = "Event details " + arrow;
+    cta.innerHTML = "See it in the list " + arrowDown;
     body.appendChild(cta);
 
     a.appendChild(body);
@@ -440,6 +452,7 @@
   var heartIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 22l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>';
   var heartFilled = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.8 5.6a5.5 5.5 0 0 0-7.8 0L12 6.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 22l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg>';
   var sparkIcon = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.2 6.1L20 10l-5.8 1.9L12 18l-2.2-6.1L4 10l5.8-1.9z"/></svg>';
+  var goIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>';
 
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   var WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -462,26 +475,83 @@
     return { label: label, weekday: WEEKDAYS[d.getUTCDay()], isToday: iso === todayIso };
   }
 
+  // The day header above a card can scroll out of view, and a recommended
+  // card has no header at all, so every card carries its own date. Short
+  // weekday + day + month, with the year only when it isn't this one —
+  // "Fri 12 Sep" reads better than "Fri 12 Sep 2026" for the common case.
+  function cardDate(iso) {
+    if (!iso) return "";
+    var p = iso.split("-");
+    var d = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+    if (isNaN(d.getTime())) return "";
+    var text = WEEKDAYS[d.getUTCDay()].slice(0, 3) + " " +
+      d.getUTCDate() + " " + MONTHS[d.getUTCMonth()];
+    if (d.getUTCFullYear() !== new Date().getFullYear()) text += " " + d.getUTCFullYear();
+    var parts = dayParts(iso);
+    if (parts.label === "Today" || parts.label === "Tomorrow") {
+      text = parts.label + " · " + text;
+    }
+    return text;
+  }
+
+  // Free is the one label people scan for, so it leads. After that comes the
+  // format, then topics — and the row is capped, because eight tags on a
+  // 375px card is a wall of pills rather than information. Whatever doesn't
+  // fit rolls into a single "+3".
+  var CHIP_BUDGET = 4;
+
+  function chipsHtml(e) {
+    var chips = [];
+    if (e.price && /free/i.test(e.price) && !/paid/i.test(e.price)) {
+      chips.push({ cls: " is-free", text: "Free" });
+    }
+    if (e.mode) chips.push({ cls: " is-mode", text: e.mode });
+
+    var tags = (e.tags || []).filter(Boolean).map(String);
+    var room = Math.max(0, CHIP_BUDGET - chips.length);
+    tags.slice(0, room).forEach(function (t) { chips.push({ cls: "", text: t }); });
+
+    var html = chips.map(function (c) {
+      return '<span class="ev-chip' + c.cls + '">' + escapeHtml(c.text) + '</span>';
+    }).join("");
+
+    var rest = tags.length - Math.min(room, tags.length);
+    if (rest > 0) {
+      html += '<span class="ev-chip is-more" title="' +
+        escapeHtml(tags.slice(room).join(", ")) + '">+' + rest + '</span>';
+    }
+    return html ? '<div class="ev-chips">' + html + '</div>' : "";
+  }
+
+  // "Who else is going" is more useful if it leads somewhere, so each face
+  // links to that member's Connect profile. This exposes nothing extra:
+  // app/member.html reads member_directory, which contains only members who
+  // opted in, so a face belonging to someone who hasn't opted in lands on the
+  // same "isn't discoverable" page a stranger's id would.
+  function faceHtml(p) {
+    var inner = p.avatar
+      ? '<img class="ev-face" src="' + escapeHtml(p.avatar) + '" alt="' + escapeHtml(p.name) + '" loading="lazy">'
+      : '<span class="ev-face ev-face-initial" title="' + escapeHtml(p.name) + '">' +
+        escapeHtml(String(p.name || "?").trim().charAt(0).toUpperCase()) + '</span>';
+    if (!p.id) return inner;
+    return '<a class="ev-face-link" href="app/member.html?u=' + encodeURIComponent(p.id) +
+      '" title="' + escapeHtml(p.name) + '" aria-label="' + escapeHtml(p.name) +
+      '&#39;s profile">' + inner + '</a>';
+  }
+
   function facesHtml(list) {
     if (!list || !list.length) return "";
     var shown = list.slice(0, 4);
     var rest = list.length - shown.length;
     var html = '<span class="ev-faces">';
-    shown.forEach(function (p) {
-      if (p.avatar) {
-        html += '<img class="ev-face" src="' + escapeHtml(p.avatar) + '" alt="' + escapeHtml(p.name) + '" loading="lazy">';
-      } else {
-        html += '<span class="ev-face ev-face-initial" title="' + escapeHtml(p.name) + '">' +
-          escapeHtml(String(p.name || "?").trim().charAt(0).toUpperCase()) + '</span>';
-      }
-    });
+    shown.forEach(function (p) { html += faceHtml(p); });
     html += '</span><span class="ev-face-more">' +
       (rest > 0 ? "+" + rest + " going" : (list.length === 1 ? "1 going" : list.length + " going")) +
       '</span>';
     return html;
   }
 
-  function buildCard(e, reason) {
+  function buildCard(e) {
     var locked = e.tierRequired === "premium" && ACCESS.tier !== "premium";
     var status = myRegistrations[e.id];
     var isFav = favourites.has(e.id);
@@ -489,6 +559,8 @@
     var card = document.createElement("article");
     card.className = "ev-card" + (locked ? " is-locked" : "");
     card.setAttribute("data-event", e.id);
+    // A stable target for the carousel and the recommended list to scroll to.
+    card.id = "ev-" + e.id;
 
     var thumbHtml = e.image
       ? '<img class="ev-thumb" src="' + escapeHtml(e.image) + '" alt="" loading="lazy">'
@@ -519,12 +591,18 @@
         (isFav ? heartFilled : heartIcon) + '</button>'
       : "";
 
+    var when = cardDate(e.date);
+    var isToday = !!(e.date && dayParts(e.date).isToday);
+
     card.innerHTML =
       '<div>' +
-        (e.time ? '<div class="ev-time">' + escapeHtml(e.time) + '</div>' : "") +
+        '<div class="ev-when' + (isToday ? " is-today" : "") + '">' +
+          (when ? '<span class="ev-date">' + escapeHtml(when) + '</span>' : "") +
+          (e.time ? '<span class="ev-time">' + escapeHtml(e.time) + '</span>' : "") +
+        '</div>' +
         '<h3 class="ev-title">' + escapeHtml(e.title) + '</h3>' +
         (where ? '<div class="ev-meta">' + pinIcon + '<span>' + escapeHtml(where) + '</span></div>' : "") +
-        (reason ? '<div class="ev-rec-reason">' + sparkIcon + '<span>Because you like ' + escapeHtml(reason) + '</span></div>' : "") +
+        chipsHtml(e) +
         '<div class="ev-foot">' + foot.join("") + '</div>' +
       '</div>' +
       '<div>' + thumbHtml + '</div>' +
@@ -543,6 +621,158 @@
 
     return card;
   }
+
+  // ---- recommended cards ------------------------------------------------
+  // Deliberately not the same card as the list. These are suggestions, not
+  // listings: a tight row you can read in a glance, with the reason attached.
+  // Acting on one means going to the real entry below, where registering,
+  // the premium lock and the attendee faces all already live — so there is
+  // one place per event that owns those, not two that can disagree.
+
+  // The scorer hands back a phrase like "AI and Coding, in UAE". It can also
+  // be just "in UAE", which would read as "you like in UAE" — so a bare
+  // place gets the missing noun put back.
+  function whyLine(why) {
+    if (!why) return "";
+    if (/^in\s/i.test(why)) return "Because you like events " + why;
+    return "Because you like " + why;
+  }
+
+  function buildRecCard(e, why) {
+    var card = document.createElement("article");
+    card.className = "ev-rec-card";
+    card.setAttribute("data-rec-event", e.id);
+
+    var thumbHtml = e.image
+      ? '<img class="ev-rec-thumb" src="' + escapeHtml(e.image) + '" alt="" loading="lazy">'
+      : '<div class="ev-rec-thumb is-empty">' + sparkIcon + '</div>';
+
+    var bits = [];
+    var when = cardDate(e.date);
+    if (when) bits.push(when);
+    var where = e.mode === "Online" ? "Online" : (e.location || e.country || "");
+    if (where) bits.push(where);
+    if (e.tierRequired === "premium") bits.push("Premium");
+
+    var isFav = favourites.has(e.id);
+    var favBtn = signedIn
+      ? '<button type="button" class="ev-rec-fav' + (isFav ? " is-on" : "") +
+        '" data-fav="' + escapeHtml(e.id) + '" aria-pressed="' + (isFav ? "true" : "false") +
+        '" aria-label="' + (isFav ? "Remove from favourites" : "Save to favourites") + '">' +
+        (isFav ? heartFilled : heartIcon) + '</button>'
+      : "";
+
+    card.innerHTML =
+      thumbHtml +
+      '<div class="ev-rec-main">' +
+        '<div class="ev-rec-when">' + escapeHtml(bits.join(" · ")) + '</div>' +
+        '<h3 class="ev-rec-name">' +
+          '<a class="ev-rec-link" href="#ev-' + escapeHtml(e.id) +
+          '" data-rec-jump="' + escapeHtml(e.id) + '">' + escapeHtml(e.title) + '</a>' +
+        '</h3>' +
+        (why ? '<div class="ev-rec-reason">' + sparkIcon +
+          '<span>' + escapeHtml(whyLine(why)) + '</span></div>' : "") +
+      '</div>' +
+      '<div class="ev-rec-side">' + favBtn +
+        '<span class="ev-rec-go" aria-hidden="true">' + goIcon + '</span>' +
+      '</div>';
+
+    var img = card.querySelector("img.ev-rec-thumb");
+    if (img) {
+      img.addEventListener("error", function () {
+        var ph = document.createElement("div");
+        ph.className = "ev-rec-thumb is-empty";
+        ph.innerHTML = sparkIcon;
+        img.replaceWith(ph);
+      });
+    }
+
+    return card;
+  }
+
+  // ---- jumping to an event in the list ----------------------------------
+  // Both the mega carousel and the recommended rows point down here instead
+  // of opening anything. The rule is that the jump must always land on a
+  // real card: if filters have hidden the target, they come off first.
+  var FLASH_MS = 2200;
+
+  function norm(s) {
+    return String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9]+/g, "");
+  }
+
+  // The carousel is driven by featured-events.js, the list by the database,
+  // and the only thing they share is the name. Exact match first, then a
+  // containment match for "GITEX GLOBAL" against "GITEX GLOBAL 2026" — with
+  // a length floor, so a two-letter title can't swallow the whole list.
+  function findEventByName(name) {
+    var key = norm(name);
+    if (key.length < 4) return null;
+    var exact = null;
+    var loose = null;
+    EVENTS_ALL.forEach(function (e) {
+      var t = norm(e.title);
+      if (!t) return;
+      if (t === key) { if (!exact) exact = e; return; }
+      if (loose) return;
+      if (t.indexOf(key) !== -1 || (t.length >= 4 && key.indexOf(t) !== -1)) loose = e;
+    });
+    return exact || loose;
+  }
+
+  function cardFor(id) {
+    // JSON.stringify gives a correctly quoted and escaped CSS string, so an
+    // id with an odd character can't break out of the selector.
+    return grid.querySelector("[data-event=" + JSON.stringify(String(id)) + "]");
+  }
+
+  function scrollToEl(el) {
+    try { el.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    catch (err) { el.scrollIntoView(); }
+  }
+
+  function flash(el) {
+    el.classList.remove("is-flash");
+    void el.offsetWidth; // restart the animation on a second click
+    el.classList.add("is-flash");
+    window.setTimeout(function () { el.classList.remove("is-flash"); }, FLASH_MS);
+  }
+
+  function headingEl() { return document.getElementById("all-upcoming-heading"); }
+
+  function jumpToEvent(id) {
+    if (!id) return;
+    var card = cardFor(id);
+    if (!card) {
+      // Hidden by a search term or a filter. Clearing them is the only way
+      // the card can exist to be scrolled to.
+      resetAll();
+      card = cardFor(id);
+    }
+    if (!card) {
+      // Not in the list at all — a mega event with no database entry yet.
+      // Land on the heading rather than scrolling to nothing.
+      var head = headingEl();
+      if (head) scrollToEl(head);
+      return;
+    }
+    scrollToEl(card);
+    flash(card);
+  }
+
+  document.addEventListener("sc:mega-jump", function (ev) {
+    var name = ev.detail && ev.detail.name;
+    var match = findEventByName(name);
+    if (match) { jumpToEvent(match.id); return; }
+    var head = headingEl();
+    if (head) scrollToEl(head);
+  });
+
+  document.addEventListener("click", function (ev) {
+    var link = ev.target.closest ? ev.target.closest("[data-rec-jump]") : null;
+    if (!link) return;
+    ev.preventDefault();
+    jumpToEvent(link.getAttribute("data-rec-jump"));
+  });
 
   var state = { q: "", when: "all", mode: "all", price: "all", tags: [] };
   var filtered = [];
@@ -642,7 +872,10 @@
     if (!host) return;
     if (!signedIn || !social) { host.innerHTML = ""; return; }
 
-    var rec = social.recommendEvents(EVENTS_ALL, favourites, myRegistrations, viewCounts, 4);
+    // Three. A short, confident list beats a long hedged one, and the
+    // scorer already refuses to pad — if only two events genuinely match,
+    // two is what shows.
+    var rec = social.recommendEvents(EVENTS_ALL, favourites, myRegistrations, viewCounts, 3);
 
     if (rec.needsSignal) {
       host.innerHTML =
@@ -661,12 +894,12 @@
           '<h2 class="glow-text">Recommended for you</h2>' +
           '<span class="ev-recommend-why">from what you save and attend</span>' +
         '</div>' +
-        '<div class="ev-rec-grid" id="ev-rec-grid"></div>' +
+        '<div class="ev-rec-list" id="ev-rec-list"></div>' +
       '</div>';
 
-    var recGrid = document.getElementById("ev-rec-grid");
-    rec.items.forEach(function (item) {
-      recGrid.appendChild(buildCard(item.event, item.why));
+    var recList = document.getElementById("ev-rec-list");
+    rec.items.slice(0, 3).forEach(function (item) {
+      recList.appendChild(buildRecCard(item.event, item.why));
     });
   }
 
