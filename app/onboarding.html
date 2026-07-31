@@ -51,6 +51,10 @@
   .onb-status.ok { background: rgba(34,197,94,0.14); border: 1px solid rgba(34,197,94,0.4); color: #4ade80; }
   .onb-status.err { background: rgba(239,68,68,0.14); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
   .onb-status.info { background: rgba(56,189,248,0.14); border: 1px solid rgba(56,189,248,0.4); color: #7dd3fc; }
+  /* Dark-theme status ink is unreadable on the light card. */
+  html.light-mode .onb-status.ok { color: #166534; }
+  html.light-mode .onb-status.err { color: #b91c1c; }
+  html.light-mode .onb-status.info { color: #155e75; }
   .onb-note { font-size: 12.5px; color: var(--text-muted); margin-top: 14px; line-height: 1.6; }
   .onb-back { background: none; border: none; color: var(--text-secondary); font-size: 13px; cursor: pointer; padding: 0; margin-bottom: 14px; }
   .onb-future { border: 1px dashed var(--glass-border); border-radius: 10px; padding: 12px 14px; font-size: 12.5px; color: var(--text-muted); margin-bottom: 18px; }
