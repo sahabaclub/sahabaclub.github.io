@@ -147,6 +147,9 @@
     background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
     font-weight: 700; border-radius: 999px; cursor: pointer; padding: 11px 22px; font-size: 14.5px; font-family: inherit;
   }
+  /* Same measured fix as .dash-pc-avatar above: the light theme's darker
+     --violet/--cyan take the near-black label to 2.83:1. White is 5.36:1. */
+  html.light-mode .dash-btn-primary { color: #fff; }
   .dash-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .dash-btn-secondary { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text); border-radius: 999px; cursor: pointer; padding: 10px 20px; font-size: 13.5px; font-family: inherit; }
   .dash-status { font-size: 13px; padding: 10px 12px; border-radius: 8px; margin-top: 14px; }

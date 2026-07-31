@@ -2531,6 +2531,12 @@ html.light-mode .admin-event-row { background: #fff; }
   box-shadow: 0 10px 30px rgba(34, 211, 238, 0.4);
   transition: transform 0.2s;
 }
+/* The play triangle is an SVG filled with currentColor, so this is the ink
+   that paints it. Same light-theme problem as .av-shot: --violet/--cyan drop
+   to #6d28d9/#0e7490, taking the near-black glyph to 2.83:1 — under even the
+   3:1 that 1.4.11 asks of a non-text control. White measures 5.36:1 at the
+   worst (cyan) stop. */
+html.light-mode .pod-play-core { color: #fff; }
 .pod-play:hover .pod-play-core { transform: scale(1.08); }
 .pod-play:focus-visible { outline: 2px solid var(--cyan); outline-offset: 6px; border-radius: 50%; }
 .pod-play-core svg { width: 30px; height: 30px; margin-left: 3px; }
@@ -2690,6 +2696,9 @@ html.light-mode .pod-num { color: #fff; }
   transition: opacity 0.28s, transform 0.28s;
   pointer-events: none;
 }
+/* Revealed on card hover/focus, so it is a visible control and the same
+   light-theme gradient fix applies. */
+html.light-mode .pod-card-play { color: #fff; }
 .pod-card-play svg { width: 22px; height: 22px; margin-left: 2px; }
 .pod-card:hover .pod-card-play,
 .pod-card-media:focus-visible .pod-card-play {
@@ -2896,6 +2905,9 @@ html.reduce-motion .pod-play-ring { animation: none; }
   background: linear-gradient(135deg, var(--violet), var(--cyan));
   color: #05070d; text-decoration: none; border: none;
 }
+/* The event card's primary action. Near-black on the light theme's darker
+   gradient is 2.83:1; white is 5.36:1 at the worst stop. */
+html.light-mode .ev-register { color: #fff; }
 
 /* Faces of members who confirmed. Overlapped, newest at the front. */
 .ev-faces { display: flex; align-items: center; }
@@ -2905,11 +2917,18 @@ html.reduce-motion .pod-play-ring { animation: none; }
   object-fit: cover; background: var(--glass);
 }
 .ev-face:first-child { margin-left: 0; }
+/* var(--text) was exactly backwards here: it tracks the PAGE, but this tile is
+   filled with the brand gradient, which runs opposite to the page in both
+   themes. Near-white on the dark theme's bright gradient measured 1.64:1, and
+   near-black on the light theme's dark gradient 2.53:1 — the initial failed in
+   both. Pinned to the gradient instead, like .av-shot: 4.76:1 dark, 5.36:1
+   light at the worst stop. */
 .ev-face-initial {
   display: flex; align-items: center; justify-content: center;
-  font-size: 10.5px; font-weight: 700; color: var(--text);
+  font-size: 10.5px; font-weight: 700; color: #05070d;
   background: linear-gradient(140deg, var(--violet), var(--cyan));
 }
+html.light-mode .ev-face-initial { color: #fff; }
 .ev-face-more {
   font-size: 11.5px; color: var(--text-muted); margin-left: 7px;
   font-variant-numeric: tabular-nums;
