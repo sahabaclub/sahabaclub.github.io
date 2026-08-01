@@ -1,0 +1,12 @@
+# Seed data containing real people's personal details.
+#
+# This repository is PUBLIC. These files carry ~2,200 personal email
+# addresses, ~960 phone numbers and ~380 dates of birth belonging to event
+# attendees and hackathon participants, none of whom agreed to have them
+# published. Committing them once puts them in the git history permanently —
+# deleting the file later does not remove them.
+#
+# The files live in the working copy and are applied to the database directly.
+# They must never be tracked here.
+supabase/seed/*.sql
+supabase/seed/hackathons/*.sql
