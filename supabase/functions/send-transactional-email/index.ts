@@ -14,9 +14,51 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Sahaba Club <membership@sahabaclub.com>";
 
-type TemplateName = "welcome" | "ms365_credential";
+type TemplateName = "welcome" | "ms365_credential" | "ms365_reset_request";
+
+// The ms365_reset_request template interpolates a member's own name and the
+// free-text "how did you hear about us" they typed on a form years ago —
+// values this codebase did not generate. Escaping them keeps a stray angle
+// bracket from breaking the mail, and keeps anything worse out of Ahmed's
+// inbox. The two older templates render system-generated values only.
+function esc(v: unknown) {
+  return String(v ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!)
+  );
+}
+
+function orUnknown(v: unknown) {
+  const s = String(v ?? "").trim();
+  return s ? esc(s) : "<em>not on record</em>";
+}
 
 function renderTemplate(template: TemplateName, data: Record<string, unknown>) {
+  if (template === "ms365_reset_request") {
+    // Sent to staff, not to the member — it is a work item, so it reads as
+    // one: who, how to reach them, and why we believe the mailbox is theirs.
+    const mailbox = esc(data.mailbox);
+    return {
+      subject: `Microsoft 365 password reset requested — ${mailbox}`,
+      html: `
+        <p><strong>${orUnknown(data.fullName)}</strong> has signed up on sahabaclub.ai and
+           recognised their Sahaba Club Microsoft 365 mailbox, but does not know the
+           password. They are asking you to reset it.</p>
+        <table cellpadding="4" style="border-collapse:collapse;font-family:sans-serif;font-size:14px">
+          <tr><td><strong>Mailbox</strong></td><td>${mailbox}</td></tr>
+          <tr><td><strong>Name</strong></td><td>${orUnknown(data.fullName)}</td></tr>
+          <tr><td><strong>Personal email</strong></td><td>${orUnknown(data.personalEmail)}</td></tr>
+          <tr><td><strong>Mobile</strong></td><td>${orUnknown(data.phone)}</td></tr>
+          <tr><td><strong>With the club since</strong></td><td>${orUnknown(data.memberSince)}</td></tr>
+          <tr><td><strong>Where they came from</strong></td><td>${orUnknown(data.contactSource)}</td></tr>
+        </table>
+        <p style="color:#555;font-size:13px">Matched because that personal email is already
+           on record against this mailbox. They were not asked to type it, and they were
+           never shown any mailbox other than their own.</p>
+        <p style="color:#555;font-size:13px">Request id: ${esc(data.requestId)}</p>
+      `,
+    };
+  }
+
   if (template === "ms365_credential") {
     const mailbox = String(data.mailbox ?? "");
     const tempPassword = String(data.tempPassword ?? "");

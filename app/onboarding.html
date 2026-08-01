@@ -37,6 +37,31 @@
   .onb-choice:hover { background: rgba(255,255,255,0.07); }
   .onb-choice strong { display: block; margin-bottom: 4px; font-size: 15px; }
   .onb-choice span { font-size: 13px; color: var(--text-secondary); }
+  /* The mailbox we found for them. Deliberately the loudest thing on the
+     step — it is the one piece of information the whole screen exists to
+     deliver, and they need to recognise it at a glance. */
+  .onb-mailbox {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    border-radius: 12px;
+    background: rgba(34, 211, 238, 0.08);
+  }
+  .onb-mailbox-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .onb-mailbox strong {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.35;
+    word-break: break-all;
+  }
   .onb-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
   .onb-field label { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
   .onb-field input, .onb-field select, .onb-field textarea {
@@ -90,34 +115,47 @@
     <span class="onb-step-dot" id="dot-2"></span>
   </div>
 
-  <!-- Step 1: Microsoft 365 -->
+  <!-- Step 1: Microsoft 365
+       ------------------------------------------------------------
+       The member is never asked to type a mailbox. Most people who
+       already have an @sahabaclub.com account will sign up here with
+       Gmail, LinkedIn or a personal address, and we already hold the
+       join between that address and their mailbox — so we tell them
+       what their mailbox is rather than asking them to prove it.
+
+       That is also what makes this safe. The old version had an input
+       box whose value went straight to provision-ms365's `reset`
+       branch, which resets whatever mailbox it is handed. Nothing on
+       this page sends a mailbox to the server any more. -->
   <section class="onb-card" id="step-ms365">
     <h2>Your free Microsoft 365 account</h2>
-    <p class="onb-sub">Every Standard member gets Microsoft 365 free for 3 months. Have you had a Sahaba Club Microsoft 365 account before?</p>
+    <p class="onb-sub" id="ms365-sub">Checking whether you already have one&hellip;</p>
 
-    <div class="onb-choice-row" id="ms365-choice">
-      <button type="button" class="onb-choice" id="choice-existing">
-        <strong>Yes, I've had one before</strong>
-        <span>Reclaim your existing @sahabaclub.com mailbox with a new password</span>
-      </button>
-      <button type="button" class="onb-choice" id="choice-new">
-        <strong>No, this is my first time</strong>
-        <span>We'll create a brand new @sahabaclub.com mailbox for you</span>
-      </button>
-    </div>
-
-    <div class="onb-hidden" id="ms365-existing-form" style="margin-top:18px;">
-      <button type="button" class="onb-back" id="back-from-existing">&larr; Back</button>
-      <div class="onb-field">
-        <label for="existing-mailbox">Your existing @sahabaclub.com address</label>
-        <input type="email" id="existing-mailbox" placeholder="you@sahabaclub.com">
+    <!-- A: we recognise them -->
+    <div class="onb-hidden" id="ms365-found">
+      <div class="onb-mailbox">
+        <span class="onb-mailbox-label">Your Sahaba Club Microsoft 365 account</span>
+        <strong id="ms365-mailbox"></strong>
       </div>
-      <button type="button" class="onb-btn-primary" id="btn-reset-mailbox">Reset my password &amp; continue</button>
+      <p style="font-size:15px; margin:16px 0 12px;">Do you know the password for it?</p>
+      <div class="onb-choice-row">
+        <button type="button" class="onb-choice" id="choice-know-password">
+          <strong>Yes, I know it</strong>
+          <span>Link it to your Sahaba Club account and carry on</span>
+        </button>
+        <button type="button" class="onb-choice" id="choice-forgot-password">
+          <strong>No, please reset it</strong>
+          <span>We'll ask Ahmed to reset it and email you</span>
+        </button>
+      </div>
     </div>
 
-    <div class="onb-hidden" id="ms365-new-confirm" style="margin-top:18px;">
-      <button type="button" class="onb-back" id="back-from-new">&larr; Back</button>
-      <p style="font-size:14px; color:var(--text-secondary);">We'll generate your new mailbox from your name, and email you a sign-in link once it's ready.</p>
+    <!-- B: no mailbox on record for this address -->
+    <div class="onb-hidden" id="ms365-none">
+      <p style="font-size:14px; color:var(--text-secondary); margin-bottom:14px;">
+        Every Standard member gets Microsoft 365 free for 3 months. We'll generate your
+        mailbox from your name and email you a sign-in link once it's ready.
+      </p>
       <button type="button" class="onb-btn-primary" id="btn-create-mailbox">Create my Microsoft 365 account</button>
     </div>
 
@@ -254,34 +292,90 @@
   }
 
   // ---- Step 1: Microsoft 365 ----
-  var choiceRow = document.getElementById("ms365-choice");
-  var existingForm = document.getElementById("ms365-existing-form");
-  var newConfirm = document.getElementById("ms365-new-confirm");
+  var foundBox = document.getElementById("ms365-found");
+  var noneBox = document.getElementById("ms365-none");
+  var subLine = document.getElementById("ms365-sub");
 
-  document.getElementById("choice-existing").addEventListener("click", function () {
-    choiceRow.classList.add("onb-hidden");
-    existingForm.classList.remove("onb-hidden");
-  });
-  document.getElementById("choice-new").addEventListener("click", function () {
-    choiceRow.classList.add("onb-hidden");
-    newConfirm.classList.remove("onb-hidden");
-  });
-  document.getElementById("back-from-existing").addEventListener("click", function () {
-    existingForm.classList.add("onb-hidden");
-    choiceRow.classList.remove("onb-hidden");
-  });
-  document.getElementById("back-from-new").addEventListener("click", function () {
-    newConfirm.classList.add("onb-hidden");
-    choiceRow.classList.remove("onb-hidden");
+  // Ask the database whether it already knows a mailbox for whoever is
+  // signed in. my_ms365_match() takes NO arguments on purpose — the lookup
+  // key is the caller's own confirmed email, read server-side. A version
+  // that accepted an address would let anyone ask "does this person have a
+  // Sahaba mailbox, and what is it?" for any address they cared to try.
+  function showNoMatch(sub) {
+    subLine.textContent = sub;
+    noneBox.classList.remove("onb-hidden");
+  }
+
+  (async function detectMailbox() {
+    var res = await supabase.rpc("my_ms365_match");
+    if (res.error) {
+      // Most likely migration 0021 hasn't been applied yet. Falling back to
+      // "create a new one" is the safe direction: it never reveals a
+      // mailbox, and the member can still finish onboarding.
+      console.error("my_ms365_match:", res.error);
+      showNoMatch("Every Standard member gets Microsoft 365 free for 3 months.");
+      return;
+    }
+
+    var match = (res.data || [])[0];
+    if (!match) {
+      showNoMatch("Every Standard member gets Microsoft 365 free for 3 months.");
+      return;
+    }
+    if (match.already_linked) {
+      // Nothing to decide — they're already set up.
+      goToProfileStep();
+      return;
+    }
+
+    document.getElementById("ms365-mailbox").textContent = match.mailbox;
+    subLine.textContent =
+      "Good news — you already have one. We matched it to the email address you signed in with.";
+    foundBox.classList.remove("onb-hidden");
+  })();
+
+  document.getElementById("choice-know-password").addEventListener("click", async function () {
+    showStatus("ms365-status", "Linking your accounts…", "info");
+    // Sends no mailbox: link_my_ms365_mailbox() re-runs the match and links
+    // whatever that returns, so nothing here can substitute an address.
+    var { error } = await supabase.rpc("link_my_ms365_mailbox");
+    if (error) {
+      showStatus("ms365-status", "We couldn't link it just now. Your Sahaba Club account is fine — carry on below.", "err");
+      return;
+    }
+    showStatus("ms365-status", "Linked. Sign in to Microsoft 365 with the password you already use. Continuing…", "ok");
+    setTimeout(goToProfileStep, 1200);
   });
 
-  // Both buttons call the same Edge Function — it's one action
-  // ("provision"), the difference is just whether a mailbox already
-  // exists. See supabase/functions/provision-ms365.
-  async function callProvision(action, mailbox) {
+  document.getElementById("choice-forgot-password").addEventListener("click", async function () {
+    showStatus("ms365-status", "Sending your request…", "info");
+
+    // The request row is the durable part and is written first. Emailing
+    // Ahmed is a convenience on top — if notify-ms365-reset isn't deployed
+    // the request still exists and still shows up in admin, so the member
+    // is told it was received either way rather than being sent round again.
+    var { error } = await supabase.rpc("request_ms365_password_reset");
+    if (error) {
+      showStatus("ms365-status", "We couldn't send that request just now. Email info@sahabaclub.com and we'll sort it out.", "err");
+      return;
+    }
+    try { await supabase.functions.invoke("notify-ms365-reset"); } catch (e) {}
+
+    showStatus(
+      "ms365-status",
+      "Done — we've asked Ahmed to reset it. You'll get an email at this address once it's ready. " +
+      "Carry on with your profile below.",
+      "ok"
+    );
+    setTimeout(goToProfileStep, 2600);
+  });
+
+  // Creating a brand new mailbox is still provision-ms365's job. The
+  // `reset` branch is deliberately no longer reachable from this page.
+  async function callProvision(action) {
     showStatus("ms365-status", "Working on it…", "info");
-    var { data, error } = await supabase.functions.invoke("provision-ms365", {
-      body: { action: action, mailbox: mailbox || null },
+    var { error } = await supabase.functions.invoke("provision-ms365", {
+      body: { action: action },
     });
     if (error) {
       // Most likely the provision-ms365 function isn't deployed yet — the
@@ -301,11 +395,6 @@
 
   document.getElementById("skip-ms365").addEventListener("click", goToProfileStep);
 
-  document.getElementById("btn-reset-mailbox").addEventListener("click", function () {
-    var mailbox = document.getElementById("existing-mailbox").value.trim();
-    if (!mailbox) { showStatus("ms365-status", "Enter your existing mailbox address first.", "err"); return; }
-    callProvision("reset", mailbox);
-  });
   document.getElementById("btn-create-mailbox").addEventListener("click", function () {
     callProvision("create");
   });
