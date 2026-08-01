@@ -7,12 +7,12 @@
 //
 // Secrets this function needs (see SETUP.md):
 //   RESEND_API_KEY
-//   RESEND_FROM   — e.g. "Sahaba Club <membership@sahabaclub.com>"
+//   RESEND_FROM   — e.g. "Sahaba Club <members@sahabaclub.com>"
 import { corsHeaders } from "../_shared/cors.ts";
 
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Sahaba Club <membership@sahabaclub.com>";
+const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Sahaba Club <members@sahabaclub.com>";
 
 type TemplateName = "welcome" | "ms365_credential" | "ms365_reset_request";
 
