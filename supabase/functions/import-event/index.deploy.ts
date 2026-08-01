@@ -1,3 +1,6 @@
+// ⚠ GENERATED — do not edit. Deploy-time twin of index.ts with ../_shared/*
+// inlined, because the Supabase dashboard editor cannot resolve relative
+// imports outside the function directory. Edit index.ts and regenerate.
 // import-event
 // ------------------------------------------------------------
 // Turns an event link into a draft event for the admin to review. Never
@@ -25,14 +28,7 @@
 //   OPENAI_MODEL        — optional, defaults below
 //   OPENAI_IMAGE_MODEL  — optional, defaults below
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// Inlined rather than imported from ../_shared/cors.ts: the dashboard editor
-// deploys one function directory at a time, so a shared parent file is not
-// reachable there. Keep in sync with supabase/functions/_shared/cors.ts.
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const corsHeaders = {  "Access-Control-Allow-Origin": "*",  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",};
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -151,6 +147,25 @@ Deno.serve(async (req) => {
 
     const evt = await extractEvent(context);
     if ("error" in evt) return json({ error: evt.error }, 502);
+
+    // Judge by the result, not the source. Live testing put both LinkedIn
+    // events through here: the login page carries plenty of text, so the
+    // length check passed, the model correctly refused to invent anything,
+    // and the admin got a blank form with no explanation. An empty title
+    // means the fetch found no event, whatever the byte count said — and
+    // that is exactly the case the paste path exists for.
+    //
+    // A missing *date* is not enough to bail on: the AWS pages give a real
+    // title and a real picture and only hide the date, which is worth
+    // keeping and flagging rather than throwing away.
+    if (!evt.title.trim() && !pastedText) {
+      return json({
+        needsPaste: true,
+        reason: "That page loaded, but there was no event in what came back — most likely a sign-in wall.",
+        hint: "Open the event, select all the page text, copy it, and paste it below. Everything else works the same.",
+        ogImage,
+      });
+    }
 
     // Prefer the event's own artwork. It is accurate, it is what the organiser
     // chose, and it costs nothing — a generated picture of a Microsoft event is
