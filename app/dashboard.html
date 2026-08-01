@@ -1095,7 +1095,7 @@
   // ---- Microsoft 365 ----------------------------------------------------
   async function loadMs365() {
     var acctRes = await supabase.from("ms365_accounts")
-      .select("mailbox, status, plan, license_expires_at, grace_ends_at")
+      .select("mailbox, status, plan, license_expires_at, grace_ends_at, licence_exempt")
       .eq("user_id", session.user.id).maybeSingle();
 
     renderMs365(acctRes.error ? null : acctRes.data);
@@ -1140,9 +1140,22 @@
       return;
     }
 
+    // Staff have taken this account off the clock. There is no countdown to
+    // show and no deadline to warn about — saying so is the whole message.
+    if (acct.licence_exempt) {
+      note.textContent = "Your Microsoft 365 access has no expiry date — it stays active "
+        + "until a Sahaba Club administrator changes it.";
+      return;
+    }
+
     var end = acct.license_expires_at;
     if (!end) {
-      note.textContent = "Your free 3 months start as soon as the account is ready.";
+      // Only genuinely true before the mailbox exists. Once an account is
+      // active the clock is set on the day it was linked or created, so this
+      // used to be shown to members whose mailbox had been ready for years.
+      note.textContent = acct.status === "active"
+        ? "Your free 3 months are being set up — check back shortly."
+        : "Your free 3 months start as soon as the account is ready.";
       return;
     }
 

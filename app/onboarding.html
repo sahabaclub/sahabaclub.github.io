@@ -252,6 +252,9 @@
         Send me the Sahaba Club newsletter, tailored to my interests
       </label>
       <button type="submit" class="onb-btn-primary" id="btn-save-profile">Finish &amp; go to my dashboard</button>
+      <p style="margin:14px 0 0; font-size:13px;">
+        <button type="button" class="onb-back" id="skip-profile" style="margin:0;">I&rsquo;ll do this later &rarr;</button>
+      </p>
       <div id="profile-status"></div>
     </form>
   </section>
@@ -343,8 +346,13 @@
       showStatus("ms365-status", "We couldn't link it just now. Your Sahaba Club account is fine — carry on below.", "err");
       return;
     }
-    showStatus("ms365-status", "Linked. Sign in to Microsoft 365 with the password you already use. Continuing…", "ok");
-    setTimeout(goToProfileStep, 1200);
+    // Someone linking an existing mailbox is not a new member being set up —
+    // they already have a history with the club. Marching them into "build
+    // your profile" treats them like a stranger. The dashboard is where the
+    // thing they just linked actually lives, so that is where they go; the
+    // profile is a link away and no longer a gate.
+    showStatus("ms365-status", "Linked. Sign in to Microsoft 365 with the password you already use. Taking you to your dashboard…", "ok");
+    setTimeout(function () { window.location.href = "dashboard.html#ms365"; }, 1400);
   });
 
   document.getElementById("choice-forgot-password").addEventListener("click", async function () {
@@ -394,6 +402,13 @@
   }
 
   document.getElementById("skip-ms365").addEventListener("click", goToProfileStep);
+
+  // The profile is worth having but it is not a toll gate. Someone who wants
+  // to look around first should be able to, and come back to it from their
+  // dashboard whenever they like.
+  document.getElementById("skip-profile").addEventListener("click", function () {
+    window.location.href = "dashboard.html";
+  });
 
   document.getElementById("btn-create-mailbox").addEventListener("click", function () {
     callProvision("create");
