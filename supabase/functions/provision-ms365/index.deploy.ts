@@ -303,6 +303,25 @@ Deno.serve(async (req) => {
     let preExisting: boolean;
 
     if (action === "create") {
+      // Refuse if this member already has a mailbox on record. Without this,
+      // a second click mints a brand new mailbox from their name and the
+      // upsert below overwrites the row pointing at the old one — so the
+      // member silently loses the account they already had, and the tenant
+      // keeps an orphan nobody is tracking. Someone who already has one wants
+      // the linking flow, not a second address.
+      const { data: already } = await admin
+        .from("ms365_accounts")
+        .select("mailbox")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (already?.mailbox) {
+        return json({
+          error: "You already have a Microsoft 365 account on record.",
+          mailbox: already.mailbox,
+          code: "already_provisioned",
+        }, 409);
+      }
+
       const mailbox = await findAvailableMailbox(displayName);
       const created = await createMailbox(mailbox, displayName);
       result = { mailbox: created.mailbox, tempPassword: created.tempPassword };
