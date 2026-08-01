@@ -18,7 +18,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Sahaba Club <hello@sahabaclub.com>";
+const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Sahaba Club <members@sahabaclub.com>";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
