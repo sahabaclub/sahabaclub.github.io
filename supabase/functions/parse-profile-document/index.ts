@@ -133,16 +133,43 @@ Deno.serve(async (req) => {
       return json({ error: "fileBase64 is required" }, 400);
     }
 
-    // PDFs go in as a file part; plain text is decoded and sent as text.
-    // Word documents have to be saved as PDF first — the onboarding page says
-    // so before upload rather than letting someone pick a .docx and hit this.
-    const documentPart = mediaType === "text/plain"
-      ? { type: "input_text", text: atob(fileBase64) }
-      : {
-          type: "input_file",
-          filename: "profile.pdf",
-          file_data: "data:application/pdf;base64," + fileBase64,
-        };
+    // Base64 is ~4/3 of the bytes, so this is roughly an 8 MB file. Without a
+    // cap any signed-in member can post an arbitrarily large body straight
+    // into a paid API call.
+    if (fileBase64.length > 11_000_000) {
+      return json({ error: "That file is too big — please upload one under 8 MB." }, 413);
+    }
+
+    const type = String(mediaType || "").toLowerCase();
+    const isImage = type.startsWith("image/");
+    const isText = type === "text/plain";
+
+    // Three shapes, and the media type decides which. This used to hardcode
+    // `data:application/pdf` for anything that was not plain text, so a photo
+    // of a CV was handed to the model labelled as a PDF and rejected outright.
+    let documentPart: Record<string, unknown>;
+    if (isText) {
+      let decoded: string;
+      try {
+        // atob throws on malformed base64; that is a bad request, not a 500.
+        decoded = new TextDecoder().decode(
+          Uint8Array.from(atob(fileBase64), (c) => c.charCodeAt(0)),
+        );
+      } catch {
+        return json({ error: "That file couldn't be read. Try a PDF or a photo instead." }, 400);
+      }
+      documentPart = { type: "input_text", text: decoded };
+    } else if (isImage) {
+      // A photo or screenshot of a CV — the model reads it directly, so a
+      // member with their CV on paper or in an image can still use this.
+      documentPart = { type: "input_image", image_url: `data:${type};base64,${fileBase64}` };
+    } else {
+      documentPart = {
+        type: "input_file",
+        filename: "profile.pdf",
+        file_data: `data:${type || "application/pdf"};base64,${fileBase64}`,
+      };
+    }
 
     const { countries, tags } = await loadVocabularies(admin);
 
@@ -155,7 +182,18 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: MODEL,
         instructions: buildInstructions(countries, tags),
-        max_output_tokens: 4000,
+        // Reasoning tokens are spent from the SAME budget as the output, so
+        // 4000 shared between them starved the JSON and returned
+        // status:"incomplete" — surfaced to the member as "that document was
+        // too long", which sent them looking for a shorter CV when the length
+        // was never the problem. Measured: a 2,000-character CV took 30s.
+        //
+        // Extracting fields off a CV is not a problem that needs deep
+        // reasoning, so effort is capped and the ceiling raised. Both matter:
+        // low effort brings the latency down, the higher ceiling stops a
+        // long CV truncating.
+        reasoning: { effort: "low" },
+        max_output_tokens: 8000,
         input: [
           {
             role: "user",
