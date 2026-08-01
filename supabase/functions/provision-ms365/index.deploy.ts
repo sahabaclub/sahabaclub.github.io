@@ -74,26 +74,83 @@ function randomTempPassword(): string {
   return `Sc-${b64.slice(0, 14)}!1`;
 }
 
-// Turns "Ahmed Abdel Razek" into a candidate mailbox local-part, then
-// appends a numeric suffix if that's already taken.
-async function findAvailableMailbox(fullName: string): Promise<string> {
-  const base = (fullName || "member")
+// "Ahmed Abdel Razek" -> "ahmedabdelrazek". Letters and digits only: no dots,
+// no spaces, no separators of any kind, per the club's naming rule. Accents
+// are folded rather than dropped, so "José" becomes "jose" and not "jos".
+function mailboxLocalPart(fullName: string): string {
+  return (fullName || "")
     .toLowerCase()
     .normalize("NFKD")
-    .replace(/[^a-z0-9\s]/g, "")
-    .trim()
-    .split(/\s+/)
-    .join(".") || "member";
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "") || "member";
+}
 
+// OData string literals escape a quote by doubling it. The local part is
+// already restricted to [a-z0-9] so nothing can get through, but the domain
+// comes from an env var and this keeps the query well-formed regardless.
+function odata(s: string) {
+  return s.replace(/'/g, "''");
+}
+
+// Is this address claimed by ANYTHING in the directory?
+//
+// Checking /users alone is not enough, and that is what broke provisioning:
+// a *group* holding the address lets user creation succeed (the UPN is free)
+// and then makes assignLicense fail, because licensing provisions an Exchange
+// mailbox which tries to claim the SMTP address and collides with the group.
+// The error surfaces on the licence call and reads as a licensing problem
+// when it is really a naming collision.
+//
+// proxyAddresses matters too: an address can be a secondary alias on some
+// other object without being its primary `mail`.
+async function addressInUse(mailbox: string, nickname: string): Promise<boolean> {
+  const m = odata(mailbox);
+  const n = odata(nickname);
+
+  const users = await graphFetch(
+    `/users?$filter=userPrincipalName eq '${m}' or mail eq '${m}' or mailNickname eq '${n}'&$select=id&$top=1`,
+  );
+  if (users.value?.length) return true;
+
+  // Groups and alias lookups need Group.Read.All (or Directory.Read.All) and
+  // the advanced-query header. If that consent has not been granted these
+  // calls 403 — which must not block provisioning, because the
+  // create-then-verify path below still catches the collision. Treated as
+  // "unknown, carry on" and logged loudly enough to be actionable.
+  const advanced = { headers: { ConsistencyLevel: "eventual" } };
+  const alias = `$filter=proxyAddresses/any(p:p eq 'SMTP:${m}')&$count=true&$top=1&$select=id`;
+  for (const path of [`/groups?$filter=mail eq '${m}' or mailNickname eq '${n}'&$select=id&$top=1`,
+                      `/groups?${alias}`, `/users?${alias}`]) {
+    try {
+      const res = await graphFetch(path, advanced);
+      if (res.value?.length) return true;
+    } catch (err) {
+      console.warn(
+        `directory lookup ${path.split("?")[0]} failed — grant Group.Read.All ` +
+        `to check group and alias collisions up front: ${err}`,
+      );
+    }
+  }
+  return false;
+}
+
+// Turns a name into a free mailbox address, appending 1, 2, 3… until one is
+// actually unclaimed.
+async function findAvailableMailbox(fullName: string): Promise<string> {
+  const base = mailboxLocalPart(fullName);
   for (let suffix = 0; suffix < 50; suffix++) {
     const candidate = suffix === 0 ? base : `${base}${suffix}`;
     const mailbox = `${candidate}@${MS365_DOMAIN}`;
-    const existing = await graphFetch(
-      `/users?$filter=mail eq '${mailbox}' or userPrincipalName eq '${mailbox}'&$select=id`,
-    );
-    if (!existing.value || existing.value.length === 0) return mailbox;
+    if (!(await addressInUse(mailbox, candidate))) return mailbox;
   }
   throw new Error("Could not find an available mailbox after 50 attempts");
+}
+
+// True when Graph is telling us the address is taken by something else,
+// rather than that licensing itself went wrong.
+function isAddressConflict(err: unknown): boolean {
+  const s = String(err);
+  return /proxyAddresses already exists|ObjectConflict|ConflictingObjects|already exist/i.test(s);
 }
 
 // Where the club is based. Graph needs a country for licensing regardless of
@@ -130,9 +187,59 @@ async function createMailbox(
     }),
   });
   if (LICENSE_SKU_ID) {
-    await assignLicense(user.id);
+    try {
+      await assignLicense(user.id);
+    } catch (err) {
+      // The account exists at this point. If licensing fails we must not
+      // leave it behind: an unlicensed user with no ms365_accounts row is
+      // invisible to the club, unusable by the member, and still occupies
+      // the name — so the next attempt collides with our own wreckage.
+      try {
+        await deleteAccount(user.id);
+      } catch (cleanupErr) {
+        console.error(
+          `ORPHAN: created ${mailbox} (${user.id}) but could not license or ` +
+          `delete it. Remove it by hand in Entra. ${cleanupErr}`,
+        );
+      }
+      throw err;
+    }
   }
   return { userId: user.id, mailbox, tempPassword };
+}
+
+// Create a licensed mailbox, stepping to the next candidate name whenever the
+// directory says the address is taken.
+//
+// The up-front lookup cannot be trusted on its own: it needs Group.Read.All to
+// see group and alias collisions, and that consent may not be granted. So the
+// authoritative test is the attempt itself — Graph rejects the licence with an
+// ObjectConflict, createMailbox removes the account it just made, and we try
+// the next name. That makes provisioning correct with or without the extra
+// permission, which is what stops this being a support ticket every time
+// somebody's name happens to match an old distribution list.
+async function provisionMailbox(fullName: string, displayName: string) {
+  const base = mailboxLocalPart(fullName || displayName);
+  let lastErr: unknown = null;
+
+  for (let suffix = 0; suffix < 20; suffix++) {
+    const candidate = suffix === 0 ? base : `${base}${suffix}`;
+    const mailbox = `${candidate}@${MS365_DOMAIN}`;
+
+    if (await addressInUse(mailbox, candidate)) continue;
+
+    try {
+      return await createMailbox(mailbox, displayName);
+    } catch (err) {
+      if (!isAddressConflict(err)) throw err;
+      lastErr = err;
+      console.warn(`${mailbox} is claimed elsewhere in the directory — trying the next name`);
+    }
+  }
+  throw new Error(
+    `Could not find a free mailbox name for "${displayName}" after 20 attempts. ` +
+    `Last conflict: ${lastErr}`,
+  );
 }
 
 async function resetMailboxPassword(mailbox: string) {
@@ -322,8 +429,7 @@ Deno.serve(async (req) => {
         }, 409);
       }
 
-      const mailbox = await findAvailableMailbox(displayName);
-      const created = await createMailbox(mailbox, displayName);
+      const created = await provisionMailbox(displayName, displayName);
       result = { mailbox: created.mailbox, tempPassword: created.tempPassword };
       preExisting = false;
     } else {

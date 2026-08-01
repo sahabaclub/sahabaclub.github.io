@@ -19,9 +19,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import {
-  createMailbox,
-  findAvailableMailbox,
   graphDiagnostics,
+  provisionMailbox,
   resetMailboxPassword,
 } from "../_shared/graph.ts";
 
@@ -108,8 +107,7 @@ Deno.serve(async (req) => {
         }, 409);
       }
 
-      const mailbox = await findAvailableMailbox(displayName);
-      const created = await createMailbox(mailbox, displayName);
+      const created = await provisionMailbox(displayName, displayName);
       result = { mailbox: created.mailbox, tempPassword: created.tempPassword };
       preExisting = false;
     } else {
