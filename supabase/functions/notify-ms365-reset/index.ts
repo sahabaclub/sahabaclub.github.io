@@ -20,6 +20,7 @@
 //
 // Secrets this function needs (see SETUP.md):
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
+//   MS365_OPS_EMAIL                          — optional, defaults below
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -30,10 +31,11 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-// Where reset requests go. Deliberately a constant: this address is the
-// destination for a message about somebody else's account, so it is not
-// something a caller gets to influence.
-const OPS_EMAIL = "ahmed@sahabaclub.com";
+// Where reset requests go. Read from the environment so the destination can
+// move without a redeploy, but never from the request: this is a message
+// about somebody else's account, so a caller must not be able to influence
+// where it lands.
+const OPS_EMAIL = Deno.env.get("MS365_OPS_EMAIL") ?? "members@sahabaclub.com";
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
