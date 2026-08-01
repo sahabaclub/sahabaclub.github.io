@@ -688,32 +688,6 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
   line-height: 1.55;
   font-weight: 500;
 }
-.video-card {
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  aspect-ratio: 16 / 9;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  position: relative;
-  transition: border-color 0.25s, box-shadow 0.25s;
-}
-.video-card:hover { border-color: rgba(139, 92, 246, 0.4); box-shadow: 0 0 30px rgba(139, 92, 246, 0.15); }
-.play-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--violet), var(--cyan));
-  color: #05070d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  box-shadow: 0 0 24px rgba(139, 92, 246, 0.45);
-}
 .video-label { font-size: 13px; color: var(--text-secondary); }
 .video-embed {
   background: var(--glass);
