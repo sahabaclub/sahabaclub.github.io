@@ -99,3 +99,16 @@ as $fn$
     else (p_expires - current_date)
   end;
 $fn$;
+
+-- Verification:
+--
+--   select plan, count(*) from public.ms365_accounts group by plan;
+--
+--   select policyname, cmd from pg_policies
+--   where schemaname = 'public' and tablename = 'ms365_accounts'
+--   order by policyname;
+--
+--   -- expect zero rows: members must not be able to write these
+--   select column_name from information_schema.column_privileges
+--   where table_schema = 'public' and table_name = 'ms365_accounts'
+--     and privilege_type = 'UPDATE' and grantee = 'anon';

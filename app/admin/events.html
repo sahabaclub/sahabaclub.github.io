@@ -83,9 +83,9 @@
       <div id="src-link-panel" class="ad-hidden" style="margin-top:18px;">
         <div class="ad-field">
           <label for="f-url">Event link</label>
-          <input type="url" id="f-url" placeholder="https://www.meetup.com/... or luma.com/...">
+          <input type="url" id="f-url" placeholder="https://www.meetup.com/… or luma.com/…">
           <span class="ad-hint">Meetup and Luma read cleanly. LinkedIn, Microsoft Events, AWS and Kaggle
-            hide their details from anything that is not a logged-in browser &mdash; for those you will be asked
+            hide their details from anything that isn't a logged-in browser — for those you'll be asked
             to paste the page, which takes about ten seconds.</span>
         </div>
 
@@ -388,7 +388,7 @@
     }
 
     btn.disabled = true;
-    showMessage("src-msg", pageText ? "Reading what you pasted..." : "Reading the event page...", "info");
+    showMessage("src-msg", pageText ? "Reading what you pasted…" : "Reading the event page…", "info");
 
     var res;
     try {
@@ -412,7 +412,7 @@
       return;
     }
 
-    // The site gave the server nothing worth reading - ask for the page text
+    // The site gave the server nothing worth reading — ask for the page text
     // rather than handing a model a login screen and letting it invent.
     if (data.needsPaste) {
       pastePanel.classList.remove("ad-hidden");
@@ -431,14 +431,14 @@
 
     var notes = [];
     if (data.confidence === "low") {
-      notes.push("Some details were missing from the page - check the date and title before publishing.");
+      notes.push("Some details were missing from the page — check the date and title before publishing.");
     } else if (data.confidence === "medium") {
       notes.push("Most of it came through; give it a quick read.");
     }
     notes.push(data.imageOrigin === "source"
       ? "Picture taken from the event page."
       : data.imageOrigin === "generated"
-        ? "No picture on the page, so this one was generated - abstract artwork, no logos."
+        ? "No picture on the page, so this one was generated — abstract artwork, no logos."
         : "No picture found or generated.");
 
     showMessage("ad-form-msg", notes.join(" "), data.confidence === "low" ? "err" : "info");
@@ -529,7 +529,7 @@
     if (error) {
       showMessage("ad-form-msg", "Couldn't delete: " + error.message, "err");
       return;
-                           }
+    }
     closeEditor();
     showMessage("ad-msg", "Event deleted.", "ok");
     loadEvents();

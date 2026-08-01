@@ -37,7 +37,7 @@
   .auth-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
   .auth-divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: var(--text-muted); font-size: 12px; }
   .auth-divider::before, .auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--glass-border); }
-  /* Secondary actions inside the email panel - a link in everything but the
+  /* Secondary actions inside the email panel — a link in everything but the
      element, since they belong in the tab order as real buttons. */
   .auth-link-btn {
     background: none; border: none; padding: 0; cursor: pointer;
@@ -211,7 +211,7 @@
 
   // Only offer what the project actually has switched on. A disabled provider
   // is rejected at Supabase's authorize endpoint, which answers with raw JSON
-  // instead of redirecting back here - so no amount of error handling on this
+  // instead of redirecting back here — so no amount of error handling on this
   // page can rescue it. Better not to show the button at all.
   (async function hideDisabledProviders() {
     var on = await enabledProviders();
@@ -278,7 +278,7 @@
     // A brand-new account has no session until the confirmation link is
     // clicked, so saying "signed in" here would be a lie.
     if (creating && !res.data.session) {
-      showStatus("Check your inbox - we've sent a link to confirm your email. "
+      showStatus("Check your inbox — we've sent a link to confirm your email. "
         + "You can sign in once you've clicked it.", "info");
       return;
     }
@@ -301,12 +301,28 @@
   });
 
   function friendlyAuthError(error) {
-    var m = String(error.message || "");
+    // Supabase does not always give us a message. When the confirmation email
+    // times out the whole signup returns a 504 whose body isn't JSON, and what
+    // arrives here is an empty object — which the old code happily rendered as
+    // a red box containing "{}". Useless to a member and useless to us.
+    var m = String((error && error.message) || "");
+    if (!m || m === "{}" || m === "[object Object]") {
+      var status = error && (error.status || error.code);
+      if (status === 504 || status === 502 || status === 503) {
+        return "We couldn't send the confirmation email just now — that's our end, not yours. "
+          + "Please try again in a few minutes, or use Google, Microsoft or LinkedIn.";
+      }
+      return "Something went wrong at our end. Please try again, or use Google, Microsoft or LinkedIn.";
+    }
+    if (/sending confirmation email|error sending/i.test(m)) {
+      return "Your account was created, but we couldn't send the confirmation email. "
+        + "Try the 'Forgot password?' link in a few minutes to confirm your address.";
+    }
     if (/Invalid login credentials/i.test(m)) {
       return "That email and password don't match. If you first joined with Google or LinkedIn, use that button instead.";
     }
     if (/Email not confirmed/i.test(m)) {
-      return "Almost there - click the confirmation link we emailed you, then sign in.";
+      return "Almost there — click the confirmation link we emailed you, then sign in.";
     }
     if (/User already registered/i.test(m)) {
       return "There's already an account with that email. Try signing in, or reset your password.";
