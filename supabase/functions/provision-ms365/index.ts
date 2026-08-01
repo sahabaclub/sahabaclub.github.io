@@ -18,7 +18,12 @@
 //   RESEND_API_KEY, RESEND_FROM               — for the credential email
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
-import { createMailbox, findAvailableMailbox, resetMailboxPassword } from "../_shared/graph.ts";
+import {
+  createMailbox,
+  findAvailableMailbox,
+  graphDiagnostics,
+  resetMailboxPassword,
+} from "../_shared/graph.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -44,8 +49,33 @@ Deno.serve(async (req) => {
     const user = userData.user;
 
     const { action, mailbox: existingMailbox } = await req.json();
-    if (action !== "create" && action !== "reset") {
-      return json({ error: "action must be 'create' or 'reset'" }, 400);
+    if (action !== "create" && action !== "reset" && action !== "diagnose") {
+      return json({ error: "action must be 'create', 'reset' or 'diagnose'" }, 400);
+    }
+
+    // ---- action = "diagnose" : STAFF ONLY, read-only ----
+    //
+    // Answers "are the Graph credentials right, and are there licence seats
+    // left?" without creating, changing or deleting anything. Worth having as
+    // its own action: the alternative way to find out is to run a real
+    // provisioning attempt, which creates a mailbox in the tenant and burns a
+    // seat just to discover a secret is wrong.
+    if (action === "diagnose") {
+      const { data: diagProfile } = await admin
+        .from("profiles")
+        .select("role")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (diagProfile?.role !== "staff" && diagProfile?.role !== "admin") {
+        return json({ error: "Not allowed" }, 403);
+      }
+      try {
+        return json({ ok: true, diagnostics: await graphDiagnostics() });
+      } catch (graphError) {
+        // The AADSTS code is the whole point of this call, so it is returned
+        // rather than swallowed into a generic 500.
+        return json({ ok: false, error: String(graphError) }, 200);
+      }
     }
 
     const { data: profile } = await admin
