@@ -1,25 +1,6 @@
 // ⚠ GENERATED — do not edit. Deploy-time twin of index.ts with ../_shared/*
 // inlined, because the Supabase dashboard editor cannot resolve relative
 // imports outside the function directory. Edit index.ts and regenerate.
-// provision-ms365
-// ------------------------------------------------------------
-// Called once, from app/onboarding.html, right after someone answers
-// "do you already have a @sahabaclub.com account?".
-//
-//   { action: "create" }                       — first-timer, no mailbox yet
-//   { action: "reset", mailbox: "x@sahabaclub.com" } — reclaiming an old one
-//
-// Either way this ends with: a mailbox that exists and is licensed, a
-// fresh temporary credential (never returned to the browser — only
-// emailed), and an `ms365_accounts` row the rest of the app can read.
-//
-// Secrets this function needs (see SETUP.md):
-//   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — to write ms365_accounts
-//   MS_GRAPH_TENANT_ID, MS_GRAPH_CLIENT_ID, MS_GRAPH_CLIENT_SECRET
-//   MS_GRAPH_LICENSE_SKU_ID                  — which M365 SKU to assign
-//   MS365_DOMAIN                              — defaults to sahabaclub.com
-//   RESEND_API_KEY, RESEND_FROM               — for the credential email
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -179,6 +160,44 @@ async function assignLicense(userId: string) {
   });
 }
 
+// Read-only health check. Proves the app registration, tenant id and client
+// SECRET are all good, and reports how many licence seats are actually free —
+// assignLicense returns 400 when a SKU has no free units, and that failure
+// lands after the mailbox has already been created, so knowing the seat count
+// in advance is worth a call of its own.
+async function graphDiagnostics(licenseSkuId = LICENSE_SKU_ID) {
+  await getGraphToken(); // throws with the AADSTS code if credentials are wrong
+  const org = await graphFetch("/organization?$select=id,displayName,verifiedDomains");
+  const skus = await graphFetch(
+    "/subscribedSkus?$select=skuId,skuPartNumber,prepaidUnits,consumedUnits",
+  );
+  const all = (skus.value ?? []).map((s: {
+    skuId: string;
+    skuPartNumber: string;
+    prepaidUnits: { enabled: number };
+    consumedUnits: number;
+  }) => ({
+    skuId: s.skuId,
+    name: s.skuPartNumber,
+    enabled: s.prepaidUnits?.enabled ?? 0,
+    consumed: s.consumedUnits ?? 0,
+    free: (s.prepaidUnits?.enabled ?? 0) - (s.consumedUnits ?? 0),
+    isConfigured: s.skuId === licenseSkuId,
+  }));
+  const configured = all.find((s: { isConfigured: boolean }) => s.isConfigured) ?? null;
+  return {
+    tokenOk: true,
+    tenant: org.value?.[0]?.displayName ?? null,
+    domains: (org.value?.[0]?.verifiedDomains ?? [])
+      .map((d: { name: string }) => d.name),
+    configuredSkuId: licenseSkuId || null,
+    configuredSku: configured,
+    // Named so a missing configured SKU is obvious rather than silently null.
+    configuredSkuFound: !!configured,
+    allSkus: all,
+  };
+}
+
 async function removeAllLicenses(userId: string) {
   const user = await graphFetch(`/users/${userId}?$select=assignedLicenses`);
   const skuIds = (user.assignedLicenses ?? []).map((l: { skuId: string }) => l.skuId);
@@ -244,8 +263,33 @@ Deno.serve(async (req) => {
     const user = userData.user;
 
     const { action, mailbox: existingMailbox } = await req.json();
-    if (action !== "create" && action !== "reset") {
-      return json({ error: "action must be 'create' or 'reset'" }, 400);
+    if (action !== "create" && action !== "reset" && action !== "diagnose") {
+      return json({ error: "action must be 'create', 'reset' or 'diagnose'" }, 400);
+    }
+
+    // ---- action = "diagnose" : STAFF ONLY, read-only ----
+    //
+    // Answers "are the Graph credentials right, and are there licence seats
+    // left?" without creating, changing or deleting anything. Worth having as
+    // its own action: the alternative way to find out is to run a real
+    // provisioning attempt, which creates a mailbox in the tenant and burns a
+    // seat just to discover a secret is wrong.
+    if (action === "diagnose") {
+      const { data: diagProfile } = await admin
+        .from("profiles")
+        .select("role")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (diagProfile?.role !== "staff" && diagProfile?.role !== "admin") {
+        return json({ error: "Not allowed" }, 403);
+      }
+      try {
+        return json({ ok: true, diagnostics: await graphDiagnostics() });
+      } catch (graphError) {
+        // The AADSTS code is the whole point of this call, so it is returned
+        // rather than swallowed into a generic 500.
+        return json({ ok: false, error: String(graphError) }, 200);
+      }
     }
 
     const { data: profile } = await admin

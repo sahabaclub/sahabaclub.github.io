@@ -152,6 +152,44 @@ export async function assignLicense(userId: string) {
   });
 }
 
+// Read-only health check. Proves the app registration, tenant id and client
+// SECRET are all good, and reports how many licence seats are actually free —
+// assignLicense returns 400 when a SKU has no free units, and that failure
+// lands after the mailbox has already been created, so knowing the seat count
+// in advance is worth a call of its own.
+export async function graphDiagnostics(licenseSkuId = LICENSE_SKU_ID) {
+  await getGraphToken(); // throws with the AADSTS code if credentials are wrong
+  const org = await graphFetch("/organization?$select=id,displayName,verifiedDomains");
+  const skus = await graphFetch(
+    "/subscribedSkus?$select=skuId,skuPartNumber,prepaidUnits,consumedUnits",
+  );
+  const all = (skus.value ?? []).map((s: {
+    skuId: string;
+    skuPartNumber: string;
+    prepaidUnits: { enabled: number };
+    consumedUnits: number;
+  }) => ({
+    skuId: s.skuId,
+    name: s.skuPartNumber,
+    enabled: s.prepaidUnits?.enabled ?? 0,
+    consumed: s.consumedUnits ?? 0,
+    free: (s.prepaidUnits?.enabled ?? 0) - (s.consumedUnits ?? 0),
+    isConfigured: s.skuId === licenseSkuId,
+  }));
+  const configured = all.find((s: { isConfigured: boolean }) => s.isConfigured) ?? null;
+  return {
+    tokenOk: true,
+    tenant: org.value?.[0]?.displayName ?? null,
+    domains: (org.value?.[0]?.verifiedDomains ?? [])
+      .map((d: { name: string }) => d.name),
+    configuredSkuId: licenseSkuId || null,
+    configuredSku: configured,
+    // Named so a missing configured SKU is obvious rather than silently null.
+    configuredSkuFound: !!configured,
+    allSkus: all,
+  };
+}
+
 export async function removeAllLicenses(userId: string) {
   const user = await graphFetch(`/users/${userId}?$select=assignedLicenses`);
   const skuIds = (user.assignedLicenses ?? []).map((l: { skuId: string }) => l.skuId);
