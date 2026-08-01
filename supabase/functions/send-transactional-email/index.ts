@@ -7,11 +7,12 @@
 //
 // Secrets this function needs (see SETUP.md):
 //   RESEND_API_KEY
-//   RESEND_FROM   — e.g. "Sahaba Club <hello@sahabaclub.com>"
+//   RESEND_FROM   — e.g. "Sahaba Club <membership@sahabaclub.com>"
 import { corsHeaders } from "../_shared/cors.ts";
 
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Sahaba Club <hello@sahabaclub.com>";
+const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Sahaba Club <membership@sahabaclub.com>";
 
 type TemplateName = "welcome" | "ms365_credential";
 
@@ -54,6 +55,21 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Server-to-server only. This function takes an arbitrary `to` address and
+    // sends from a domain we have spent DNS records establishing as genuinely
+    // ours — so without this check, any signed-in member could use it to mail
+    // anyone as Sahaba Club. That is an open relay, and the cost of it being
+    // found is sahabaclub.com landing on a blocklist and *all* our mail, human
+    // included, stopping.
+    //
+    // The only caller is provision-ms365, which invokes it with the service
+    // role key. Nothing legitimate reaches this from a browser.
+    const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    if (!SERVICE_ROLE_KEY || bearer !== SERVICE_ROLE_KEY) {
+      console.error("send-transactional-email called without the service role key");
+      return json({ error: "Not allowed" }, 403);
+    }
+
     const { to, template, data } = await req.json();
     if (!to || !template) {
       return json({ error: "to and template are required" }, 400);

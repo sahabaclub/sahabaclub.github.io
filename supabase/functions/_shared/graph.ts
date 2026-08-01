@@ -88,7 +88,15 @@ export async function findAvailableMailbox(fullName: string): Promise<string> {
   throw new Error("Could not find an available mailbox after 50 attempts");
 }
 
-export async function createMailbox(mailbox: string, displayName: string) {
+// Where the club is based. Graph needs a country for licensing regardless of
+// where the member actually lives, and the licences come from a UAE tenant.
+const DEFAULT_USAGE_LOCATION = Deno.env.get("MS_GRAPH_USAGE_LOCATION") ?? "AE";
+
+export async function createMailbox(
+  mailbox: string,
+  displayName: string,
+  usageLocation: string = DEFAULT_USAGE_LOCATION,
+) {
   const tempPassword = randomTempPassword();
   const localPart = mailbox.split("@")[0];
   const user = await graphFetch("/users", {
@@ -98,6 +106,15 @@ export async function createMailbox(mailbox: string, displayName: string) {
       displayName: displayName || localPart,
       mailNickname: localPart,
       userPrincipalName: mailbox,
+      // Not optional, despite Graph accepting the user without it. A licence
+      // cannot be assigned to a user whose usageLocation is unset — Graph
+      // rejects the assignLicense call with "Licence assignment failed because
+      // the user's usage location is not set". Because that failure lands on
+      // the NEXT call, the account is created first and then provisioning
+      // dies, leaving an unlicensed orphan in the tenant and no
+      // ms365_accounts row. Setting it here is what makes the pair atomic in
+      // practice.
+      usageLocation,
       passwordProfile: {
         password: tempPassword,
         forceChangePasswordNextSignIn: true,
