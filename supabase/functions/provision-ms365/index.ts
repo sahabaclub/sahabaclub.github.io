@@ -22,6 +22,7 @@ import { createMailbox, findAvailableMailbox, resetMailboxPassword } from "../_s
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const MS365_DOMAIN = Deno.env.get("MS365_DOMAIN") ?? "sahabaclub.com";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -63,8 +64,36 @@ Deno.serve(async (req) => {
       result = { mailbox: created.mailbox, tempPassword: created.tempPassword };
       preExisting = false;
     } else {
+      // ---- action = "reset" : STAFF ONLY ----
+      //
+      // This branch resets the password of whatever mailbox it is handed and
+      // emails the new one to the caller. Without the check below, any signed-in
+      // member could reset the tenant Global Admin and receive the password —
+      // `mailbox` comes from the request body and proves nothing about who owns it.
+      //
+      // Members do not reach this any more. A member who has lost their password
+      // uses the flow in migration 0021: the site shows them their own mailbox,
+      // they ask for a reset, and a human does it. That was a deliberate design
+      // decision, not a limitation — a password reset on a real tenant mailbox
+      // should have a person behind it.
+      const { data: prof } = await admin
+        .from("profiles")
+        .select("role")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (prof?.role !== "staff" && prof?.role !== "admin") {
+        console.error(`non-staff user ${user.id} attempted action=reset`);
+        return json({ error: "Not allowed" }, 403);
+      }
+
       if (!existingMailbox) return json({ error: "mailbox is required for action=reset" }, 400);
-      result = await resetMailboxPassword(existingMailbox);
+      // Second line of defence: never touch an address outside our own tenant,
+      // whatever a caller asks for.
+      if (!String(existingMailbox).toLowerCase().trim().endsWith(`@${MS365_DOMAIN.toLowerCase()}`)) {
+        return json({ error: `mailbox must be on ${MS365_DOMAIN}` }, 400);
+      }
+
+      result = await resetMailboxPassword(String(existingMailbox).trim());
       preExisting = true;
     }
 
