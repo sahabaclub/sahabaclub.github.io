@@ -45,6 +45,10 @@
     background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
     font-weight: 700; border-radius: 999px; cursor: pointer; padding: 11px 22px; font-size: 14.5px; font-family: inherit;
   }
+  /* The light theme swaps --violet/--cyan for #6d28d9/#0e7490, so the
+     near-black label on this gradient falls to 2.83:1. White is 5.36:1 at
+     the worst (cyan) stop. */
+  html.light-mode .nl-btn-primary { color: #fff; }
   .nl-btn-secondary { background: var(--glass); border: 1px solid var(--glass-border); color: var(--text); border-radius: 999px; cursor: pointer; padding: 10px 20px; font-size: 14px; font-family: inherit; }
   .nl-btn-primary:disabled, .nl-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
   .nl-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }

@@ -62,6 +62,10 @@
     background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
     font-weight: 700; border-radius: 999px; cursor: pointer; padding: 11px 22px; font-size: 14.5px; font-family: inherit;
   }
+  /* Same measured fix as .av-shot in styles.css. The light theme swaps
+     --violet/--cyan for #6d28d9/#0e7490, so the near-black label on this
+     gradient falls to 2.83:1. White is 5.36:1 at the worst (cyan) stop. */
+  html.light-mode .prof-btn-primary { color: #fff; }
   .prof-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
   .prof-note { font-size: 12.5px; color: var(--text-muted); margin-top: 12px; line-height: 1.6; }
 
@@ -126,6 +130,14 @@
 
   <div class="prof-card">
     <form id="profile-form">
+
+      <!-- First, because it is the one requirement that used to have no
+           control anywhere in the app, and the Connect line below links
+           straight here. -->
+      <div class="prof-group">
+        <p class="prof-group-title">Your photo</p>
+        <div id="f-avatar"></div>
+      </div>
 
       <div class="prof-group">
         <p class="prof-group-title">Who you are</p>
@@ -305,17 +317,18 @@
 
 <script type="module">
   import { supabase } from "../lib/supabase-client.js";
-  import { getSession } from "../lib/auth.js";
+  import { getSession, sessionPhotoProviders } from "../lib/auth.js";
   import { safeUrl } from "../lib/connect.js";
   import {
     loadCountries, loadTagSuggestions, suggestionsFor, fillCountrySelect,
-    createTagPicker, connectHint, OPEN_TO, nullIfBlank, intOrNull, escapeHtml,
-    isMissingSchema,
+    createTagPicker, connectHint, onConnectHintJump, createAvatarControl,
+    OPEN_TO, nullIfBlank, intOrNull, escapeHtml, isMissingSchema,
   } from "../lib/profile-form.js";
 
   var session;
   var loaded = {};        // the row as it came back, so we only send columns that exist
   var pickers = {};
+  var avatar = null;
 
   function el(id) { return document.getElementById(id); }
 
@@ -367,7 +380,10 @@
     var box = el("connect-state");
     box.classList.remove("info", "ok");
     box.classList.add(hint.kind);
-    el("connect-state-text").textContent = hint.text;
+    // innerHTML, not textContent: connectHint turns the requirements that can
+    // be acted on into buttons. Everything in `html` is escaped by
+    // profile-form.js — the only markup is the buttons it adds itself.
+    el("connect-state-text").innerHTML = hint.html;
 
     var listed = view.is_discoverable && hint.kind === "ok";
     el("connect-links").hidden = !listed;
@@ -380,6 +396,11 @@
     el(id).addEventListener("input", refreshConnectState);
   });
   el("f-discoverable").addEventListener("change", refreshConnectState);
+
+  // "…once you add a photo." — the word is the way to the control.
+  onConnectHintJump(el("connect-state"), function (what) {
+    if (what === "photo" && avatar) avatar.focus();
+  });
 
   // ---- Boot -------------------------------------------------------------
   (async function init() {
@@ -405,6 +426,22 @@
     var tags = await loadTagSuggestions();
 
     fillCountrySelect(el("f-country"), countries, data.country);
+
+    // Saves itself the moment a photo is chosen rather than waiting for the
+    // form's Save button — the avatar is stored by generate-avatar (or, for
+    // the initials tile, written directly), so there is nothing for the form
+    // submit to carry. `loaded.avatar_url` is kept in step so the Connect
+    // line re-reads correctly without a round trip.
+    avatar = createAvatarControl({
+      root: el("f-avatar"),
+      session: session,
+      profile: data,
+      providers: sessionPhotoProviders(session),
+      onChange: function (url) {
+        loaded.avatar_url = url;
+        refreshConnectState();
+      },
+    });
 
     pickers.skills = createTagPicker({
       root: el("f-skills"), inputId: "f-skills-input",

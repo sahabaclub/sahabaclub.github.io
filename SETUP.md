@@ -61,21 +61,33 @@ real mailboxes.
 
 Using the [Supabase CLI](https://supabase.com/docs/guides/cli):
 
+Do **not** add `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` here. The CLI rejects the
+reserved `SUPABASE_` prefix, and because every variable goes in one command, adding them
+means *none* of the others get set either. Both are injected into every Edge Function
+automatically, so they are not needed.
+
 ```bash
 supabase functions secrets set \
   MS_GRAPH_TENANT_ID=... \
   MS_GRAPH_CLIENT_ID=... \
   MS_GRAPH_CLIENT_SECRET=... \
   MS_GRAPH_LICENSE_SKU_ID=... \
+  MS_GRAPH_USAGE_LOCATION=AE \
   MS365_DOMAIN=sahabaclub.com \
+  MS365_OPS_EMAIL=members@sahabaclub.com \
   RESEND_API_KEY=... \
-  RESEND_FROM="Sahaba Club <hello@sahabaclub.com>" \
-  SUPABASE_URL=https://YOUR-PROJECT-REF.supabase.co \
-  SUPABASE_SERVICE_ROLE_KEY=...
+  RESEND_FROM="Sahaba Club <members@sahabaclub.com>"
 
 supabase functions deploy provision-ms365
 supabase functions deploy send-transactional-email
+supabase functions deploy notify-ms365-reset
 ```
+
+`MS_GRAPH_USAGE_LOCATION` defaults to `AE` in code. Microsoft Graph refuses to assign a
+licence to a user with no usage location, so it has to be set to something.
+
+`MS365_OPS_EMAIL` is where a member's "I've forgotten my mailbox password" request is sent.
+It defaults to `members@sahabaclub.com`.
 
 `SUPABASE_SERVICE_ROLE_KEY` is in Project Settings → API — it's the
 "secret" key, never the anon one. It's what lets `provision-ms365` write
@@ -92,6 +104,42 @@ supabase functions secrets set ANTHROPIC_API_KEY=...
 supabase functions deploy parse-profile-document
 supabase functions deploy send-newsletter
 ```
+
+**Avatars.** `generate-avatar` turns a member's photo into an illustrated
+club-style portrait and then discards the photo. It needs an OpenAI key,
+because it is the one function that generates images:
+
+```bash
+supabase functions secrets set OPENAI_API_KEY=...
+# Optional. Defaults to gpt-image-1; set it if your account uses another
+# image model, so a rename is a dashboard edit rather than a redeploy.
+supabase functions secrets set OPENAI_IMAGE_MODEL=gpt-image-1
+
+supabase functions deploy generate-avatar
+supabase functions deploy refresh-avatars
+```
+
+If you are deploying from the **dashboard editor** rather than the CLI,
+deploy `supabase/functions/generate-avatar/index.deploy.ts` instead of
+`index.ts`. It is the same function with `_shared/cors.ts` and
+`_shared/avatar-art.ts` pasted inline, because the editor deploys one
+function directory at a time and cannot reach a shared parent file —
+the same arrangement `parse-profile-document` already uses. Keep the two
+in sync.
+
+Check it landed:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  https://<project>.supabase.co/functions/v1/generate-avatar
+# 401 = deployed (it wants a signed-in caller). 404 = not deployed.
+```
+
+Until it is deployed, the avatar control still works: "Skip — use a tile
+with my initials" draws the themed fallback in the browser and uploads it
+to the `avatars` bucket, so members can complete their profile and appear
+in Connect without any OpenAI call. The two photo routes report that the
+service isn't switched on yet rather than failing silently.
 
 **Make yourself an admin.** The newsletter page is gated on
 `profiles.role = 'admin'`, and members can't change their own role — the
