@@ -143,6 +143,23 @@
   @media (max-width: 620px) { .dash-row { grid-template-columns: 1fr; } }
   .dash-check { display: flex; align-items: flex-start; gap: 9px; font-size: 13.5px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.5; }
   .dash-check input { width: auto; margin-top: 3px; flex-shrink: 0; }
+
+  /* The "Open to" chips live inside a .dash-field, and the rule above sets
+     `.dash-field input { width: 100% }`. That is the same specificity as
+     styles.css's `.optin-chip input { width: auto }` but comes later, so it
+     won — the checkbox stretched to fill its pill and pushed the label out
+     past the border. Specificity, not source order, is what settles it. */
+  .dash-field .optin-chip input { width: auto; margin: 0; flex-shrink: 0; }
+
+  /* Six options ragged-wrapped left an awkward orphan on most widths. A grid
+     keeps them in even columns — two on a phone, three or four on a desktop —
+     and every pill the same width, which is much easier to scan. */
+  .dash-field .optin-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 8px;
+  }
+  .dash-field .optin-chip { width: 100%; justify-content: flex-start; }
   .dash-btn-primary {
     background: linear-gradient(135deg, var(--violet), var(--cyan)); border: none; color: #05070d;
     font-weight: 700; border-radius: 999px; cursor: pointer; padding: 11px 22px; font-size: 14.5px; font-family: inherit;
@@ -1068,13 +1085,18 @@
       showStatus("profile-status", "Couldn't save: " + esc(error.message), "err");
       return;
     }
-    showStatus("profile-status", "Saved.", "ok");
+    showStatus("profile-status", "Saved. Taking you back to your dashboard…", "ok");
     reviewBanner.classList.add("hidden");
 
     Object.keys(patch).forEach(function (k) { profileRow[k] = patch[k]; });
     renderProfileCard(profileRow);
     document.getElementById("dash-greeting").textContent =
       "Welcome, " + (patch.full_name || "there");
+
+    // Saving is the end of the task, so it should end somewhere — leaving the
+    // member sitting in the form they just finished makes them wonder whether
+    // it took. Long enough to read "Saved.", short enough not to feel stuck.
+    setTimeout(function () { showSection("overview"); }, 1200);
   });
 
   // ---- Membership -------------------------------------------------------
