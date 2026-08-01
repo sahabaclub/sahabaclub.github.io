@@ -390,6 +390,12 @@
   // Creating a brand new mailbox is still provision-ms365's job. The
   // `reset` branch is deliberately no longer reachable from this page.
   async function callProvision(action) {
+    // Each press creates a real mailbox in the Microsoft tenant. Two presses
+    // race past the "do you already have one" check — both read no row, both
+    // create an account — and one of them ends up an orphan holding a licence
+    // seat. Disabling for the duration is the cheap half of the fix.
+    var createBtn = document.getElementById("btn-create-mailbox");
+    createBtn.disabled = true;
     showStatus("ms365-status", "Working on it…", "info");
     var latin = (document.getElementById("ms365-latin-name").value || "").trim();
     var res = await supabase.functions.invoke("provision-ms365", {
@@ -406,6 +412,7 @@
         document.getElementById("ms365-latin-name-field").classList.remove("onb-hidden");
         document.getElementById("ms365-latin-name").focus();
         showStatus("ms365-status", body.error, "err");
+        createBtn.disabled = false;
         return;
       }
       if (body && body.code === "already_provisioned") {
@@ -426,10 +433,25 @@
         "account is fine — carry on below and we'll sort the mailbox out separately.",
         "err"
       );
+      createBtn.disabled = false;
       return;
     }
-    showStatus("ms365-status", "Done — check your email for your Microsoft 365 sign-in link. Continuing…", "ok");
-    setTimeout(goToProfileStep, 900);
+
+    // The mailbox is made either way. Only claim an email is coming if the
+    // server actually got one accepted — telling someone to check their inbox
+    // for a message that was never sent leaves them locked out of a real
+    // account with no idea why.
+    var mailbox = (res.data && res.data.mailbox) || "your new mailbox";
+    if (res.data && res.data.credentialSent === false) {
+      showStatus("ms365-status",
+        mailbox + " is ready, but we couldn't email you the sign-in details just now. "
+        + "Contact members@sahabaclub.com and we'll send them over. Continuing…", "err");
+      setTimeout(goToProfileStep, 3200);
+      return;
+    }
+    showStatus("ms365-status",
+      mailbox + " is ready — check your email for the sign-in details. Continuing…", "ok");
+    setTimeout(goToProfileStep, 1400);
   }
 
   document.getElementById("skip-ms365").addEventListener("click", goToProfileStep);

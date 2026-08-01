@@ -19,6 +19,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import {
+  deleteAccount,
   graphDiagnostics,
   isUsableMailboxName,
   provisionMailbox,
@@ -94,6 +95,9 @@ Deno.serve(async (req) => {
 
     let result: { mailbox: string; tempPassword: string };
     let preExisting: boolean;
+    // Kept so the database write below can undo the Graph account it belongs
+    // to. Null on `reset`, where the account is not ours to remove.
+    let createdUserId: string | null = null;
 
     if (action === "create") {
       // Refuse if this member already has a mailbox on record. Without this,
@@ -129,6 +133,7 @@ Deno.serve(async (req) => {
 
       const created = await provisionMailbox(displayName, displayName);
       result = { mailbox: created.mailbox, tempPassword: created.tempPassword };
+      createdUserId = created.userId;
       preExisting = false;
     } else {
       // ---- action = "reset" : STAFF ONLY ----
@@ -174,26 +179,62 @@ Deno.serve(async (req) => {
       pre_existing: preExisting,
       license_expires_at: licenseExpiresAt.toISOString().slice(0, 10),
       grace_ends_at: null,
-      credential_sent_at: new Date().toISOString(),
+      // NOT set here. It used to be, which asserted the credential had been
+      // sent before anything had tried to send it — so a failed send left a
+      // row claiming the member had been told their password. Written below,
+      // only once Resend has actually accepted it.
+      credential_sent_at: null,
     });
-    if (upsertError) throw upsertError;
 
-    // Best-effort: a delivery failure here shouldn't undo the mailbox
-    // that was just created — log it and let the member request a resend
-    // from their dashboard later (that resend endpoint is a Phase 2 item).
+    if (upsertError) {
+      // The mailbox exists in the tenant at this point. Leaving it behind
+      // means a licensed account with no database row: invisible to the club,
+      // unreachable by the member, and still holding the name — so the retry
+      // collides with our own wreckage and issues them a "…1" address.
+      if (createdUserId) {
+        try {
+          await deleteAccount(createdUserId);
+          console.error(`rolled back ${result.mailbox} after ms365_accounts write failed`);
+        } catch (cleanupErr) {
+          console.error(
+            `ORPHAN: ${result.mailbox} (${createdUserId}) exists in the tenant but has ` +
+            `no ms365_accounts row and could not be deleted. Remove it by hand. ${cleanupErr}`,
+          );
+        }
+      }
+      throw upsertError;
+    }
+
+    // functions.invoke() resolves with { error } on a non-2xx — it does not
+    // throw — so the result has to be read. A try/catch alone only sees
+    // network failures, which is how a 403 from a rotated service-role key, or
+    // a Resend rejection, used to vanish silently and leave the member with a
+    // mailbox whose password existed nowhere but a discarded variable.
+    let credentialSent = false;
     try {
-      await admin.functions.invoke("send-transactional-email", {
+      const { error: mailError } = await admin.functions.invoke("send-transactional-email", {
         body: {
           to: user.email,
           template: "ms365_credential",
           data: { mailbox: result.mailbox, tempPassword: result.tempPassword, preExisting },
         },
       });
+      if (mailError) {
+        console.error(`send-transactional-email failed for ${result.mailbox}:`, mailError);
+      } else {
+        credentialSent = true;
+        await admin.from("ms365_accounts")
+          .update({ credential_sent_at: new Date().toISOString() })
+          .eq("user_id", user.id);
+      }
     } catch (emailError) {
-      console.error("send-transactional-email failed:", emailError);
+      console.error(`send-transactional-email threw for ${result.mailbox}:`, emailError);
     }
 
-    return json({ ok: true, mailbox: result.mailbox });
+    // The mailbox is real either way, so this is a success — but the client is
+    // told whether the email actually went, so it can say so rather than
+    // implying an email is on its way that never left.
+    return json({ ok: true, mailbox: result.mailbox, credentialSent });
   } catch (err) {
     console.error(err);
     return json({ error: String(err) }, 500);
