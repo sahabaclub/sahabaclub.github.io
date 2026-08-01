@@ -156,6 +156,15 @@
         Every Standard member gets Microsoft 365 free for 3 months. We'll generate your
         mailbox from your name and email you a sign-in link once it's ready.
       </p>
+      <!-- Only shown when the profile name has no Latin letters to build an
+           address from. Asked for rather than guessed at. -->
+      <div class="onb-field onb-hidden" id="ms365-latin-name-field">
+        <label for="ms365-latin-name">Your name in English letters</label>
+        <input type="text" id="ms365-latin-name" placeholder="e.g. Ahmed Abdel Razek" autocomplete="name">
+        <p style="margin:0; font-size:12.5px; color:var(--text-muted);">
+          Your @sahabaclub.com address is built from this &mdash; first and last name, no spaces.
+        </p>
+      </div>
       <button type="button" class="onb-btn-primary" id="btn-create-mailbox">Create my Microsoft 365 account</button>
     </div>
 
@@ -382,9 +391,31 @@
   // `reset` branch is deliberately no longer reachable from this page.
   async function callProvision(action) {
     showStatus("ms365-status", "Working on it…", "info");
-    var { error } = await supabase.functions.invoke("provision-ms365", {
-      body: { action: action },
+    var latin = (document.getElementById("ms365-latin-name").value || "").trim();
+    var res = await supabase.functions.invoke("provision-ms365", {
+      body: { action: action, fullName: latin || null },
     });
+    var error = res.error;
+
+    // functions.invoke() surfaces a non-2xx as a generic FunctionsHttpError,
+    // so the useful body has to be read off the response explicitly.
+    if (error && error.context && typeof error.context.json === "function") {
+      var body = null;
+      try { body = await error.context.json(); } catch (e) {}
+      if (body && body.code === "name_not_latin") {
+        document.getElementById("ms365-latin-name-field").classList.remove("onb-hidden");
+        document.getElementById("ms365-latin-name").focus();
+        showStatus("ms365-status", body.error, "err");
+        return;
+      }
+      if (body && body.code === "already_provisioned") {
+        showStatus("ms365-status",
+          "You already have " + body.mailbox + " — taking you to your dashboard…", "ok");
+        setTimeout(function () { window.location.href = "dashboard.html#ms365"; }, 1600);
+        return;
+      }
+    }
+
     if (error) {
       // Most likely the provision-ms365 function isn't deployed yet — the
       // rest of onboarding doesn't depend on it, so say so and let them

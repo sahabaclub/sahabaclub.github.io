@@ -69,12 +69,24 @@ export function randomTempPassword(): string {
 // "Ahmed Abdel Razek" -> "ahmedabdelrazek". Letters and digits only: no dots,
 // no spaces, no separators of any kind, per the club's naming rule. Accents
 // are folded rather than dropped, so "José" becomes "jose" and not "jos".
+//
+// Returns "" when the name yields nothing usable — an Arabic-script name has
+// no Latin characters to keep. That case is refused upstream rather than
+// substituted: falling back to a generic word produced member@, member1@,
+// member2@ … which are unique, meaningless, and impossible for the member or
+// for staff to recognise later.
 export function mailboxLocalPart(fullName: string): string {
   return (fullName || "")
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "") || "member";
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+// A mailbox name has to be recognisably this person. Two characters is the
+// floor — a single initial is not a name.
+export function isUsableMailboxName(fullName: string): boolean {
+  return mailboxLocalPart(fullName).length >= 2;
 }
 
 // OData string literals escape a quote by doubling it. The local part is
@@ -212,6 +224,10 @@ export async function createMailbox(
 // somebody's name happens to match an old distribution list.
 export async function provisionMailbox(fullName: string, displayName: string) {
   const base = mailboxLocalPart(fullName || displayName);
+  if (base.length < 2) {
+    // Refused, not substituted. See mailboxLocalPart.
+    throw new Error("NAME_NOT_LATIN");
+  }
   let lastErr: unknown = null;
 
   for (let suffix = 0; suffix < 20; suffix++) {
