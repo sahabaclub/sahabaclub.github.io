@@ -44,6 +44,18 @@
   }
   html.light-mode .prof-field input, html.light-mode .prof-field select,
   html.light-mode .prof-field textarea { background: rgba(16,22,39,0.03); }
+
+  /* Same collision as in dashboard.html: the rule above is `.prof-field input`
+     with `width: 100%`, which matches styles.css's `.optin-chip input`
+     specificity but is declared later and therefore wins — so the checkbox
+     filled its pill and pushed the label outside the border. */
+  .prof-field .optin-chip input { width: auto; margin: 0; flex-shrink: 0; }
+  .prof-field .optin-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+    gap: 8px;
+  }
+  .prof-field .optin-chip { width: 100%; justify-content: flex-start; }
   .prof-field textarea { min-height: 70px; resize: vertical; }
   .prof-hint { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
   .prof-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
