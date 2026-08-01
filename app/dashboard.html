@@ -576,6 +576,18 @@
           <p><a href="onboarding.html" class="btn btn-glow">Set up my account</a></p>
         </div>
         <p id="ms365-upgrade-line" hidden style="margin-top:12px;"><a class="dash-link" href="../membership.html">Keep it beyond the trial &rarr;</a></p>
+
+        <!-- Forgotten the Microsoft password. This does not reset anything: it
+             raises a request for a human. A self-service reset on a real
+             tenant mailbox is exactly the hole that was closed in
+             provision-ms365, and it is not being reopened from here. -->
+        <div id="ms365-reset-wrap" hidden style="margin-top:14px; padding-top:14px; border-top:1px solid var(--glass-border);">
+          <button type="button" class="dash-link" id="ms365-reset-btn"
+                  style="background:none; border:0; padding:0; cursor:pointer; font:inherit;">
+            Forgotten your Microsoft 365 password? Ask us to reset it &rarr;
+          </button>
+          <p id="ms365-reset-status" style="margin-top:8px; font-size:13px;"></p>
+        </div>
       </div>
 
       <div class="dash-card">
@@ -1128,6 +1140,8 @@
       var mb = document.getElementById("ms365-mailbox");
       mb.textContent = acct.mailbox;
       mb.hidden = false;
+      // Only offered once there is a real mailbox to reset.
+      document.getElementById("ms365-reset-wrap").hidden = false;
     }
 
     // Mirrors public.ms365_days_left: only a trial with an end date counts
@@ -1191,6 +1205,30 @@
         : "Your free period has ended. Upgrade to restore access.";
     }
   }
+
+  // Raises a reset request for staff. Same pair as the onboarding flow: the
+  // row is written first and is the durable record, the email to staff is a
+  // convenience on top — so if notify-ms365-reset is not deployed or Resend
+  // fails, the request still exists and still shows up in admin, and the
+  // member is never told to ask again.
+  document.getElementById("ms365-reset-btn").addEventListener("click", async function () {
+    var btn = this;
+    var out = document.getElementById("ms365-reset-status");
+    btn.disabled = true;
+    out.textContent = "Sending your request…";
+
+    var rpc = await supabase.rpc("request_ms365_password_reset");
+    if (rpc.error) {
+      out.textContent = "We couldn't send that just now. Email members@sahabaclub.com and we'll sort it out.";
+      btn.disabled = false;
+      return;
+    }
+    try { await supabase.functions.invoke("notify-ms365-reset"); } catch (e) {}
+
+    btn.hidden = true;
+    out.textContent = "Done — we've asked the team to reset it. You'll get an email at your "
+      + "sign-in address once it's been done.";
+  });
 
   // The offer list comes from the catalogue table so a new Microsoft service
   // shows up here without a code change. Staff-only entries are excluded —

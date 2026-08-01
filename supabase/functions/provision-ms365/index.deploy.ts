@@ -77,12 +77,24 @@ function randomTempPassword(): string {
 // "Ahmed Abdel Razek" -> "ahmedabdelrazek". Letters and digits only: no dots,
 // no spaces, no separators of any kind, per the club's naming rule. Accents
 // are folded rather than dropped, so "José" becomes "jose" and not "jos".
+//
+// Returns "" when the name yields nothing usable — an Arabic-script name has
+// no Latin characters to keep. That case is refused upstream rather than
+// substituted: falling back to a generic word produced member@, member1@,
+// member2@ … which are unique, meaningless, and impossible for the member or
+// for staff to recognise later.
 function mailboxLocalPart(fullName: string): string {
   return (fullName || "")
     .toLowerCase()
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "") || "member";
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+// A mailbox name has to be recognisably this person. Two characters is the
+// floor — a single initial is not a name.
+function isUsableMailboxName(fullName: string): boolean {
+  return mailboxLocalPart(fullName).length >= 2;
 }
 
 // OData string literals escape a quote by doubling it. The local part is
@@ -220,6 +232,10 @@ async function createMailbox(
 // somebody's name happens to match an old distribution list.
 async function provisionMailbox(fullName: string, displayName: string) {
   const base = mailboxLocalPart(fullName || displayName);
+  if (base.length < 2) {
+    // Refused, not substituted. See mailboxLocalPart.
+    throw new Error("NAME_NOT_LATIN");
+  }
   let lastErr: unknown = null;
 
   for (let suffix = 0; suffix < 20; suffix++) {
@@ -369,7 +385,7 @@ Deno.serve(async (req) => {
     }
     const user = userData.user;
 
-    const { action, mailbox: existingMailbox } = await req.json();
+    const { action, mailbox: existingMailbox, fullName: requestedName } = await req.json();
     if (action !== "create" && action !== "reset" && action !== "diagnose") {
       return json({ error: "action must be 'create', 'reset' or 'diagnose'" }, 400);
     }
@@ -404,7 +420,14 @@ Deno.serve(async (req) => {
       .select("full_name")
       .eq("user_id", user.id)
       .maybeSingle();
-    const displayName = profile?.full_name || user.email || "Sahaba Club member";
+
+    // The member may supply a Latin spelling of their name for the mailbox.
+    // It is only ever used as a name — mailboxLocalPart strips it to [a-z0-9]
+    // before it reaches Graph — so there is nothing here to inject with.
+    const suppliedName = typeof requestedName === "string"
+      ? requestedName.trim().slice(0, 80)
+      : "";
+    const displayName = suppliedName || profile?.full_name || "";
 
     let result: { mailbox: string; tempPassword: string };
     let preExisting: boolean;
@@ -427,6 +450,18 @@ Deno.serve(async (req) => {
           mailbox: already.mailbox,
           code: "already_provisioned",
         }, 409);
+      }
+
+      // A @sahabaclub.com address has to be typeable and recognisable, so the
+      // name behind it must be Latin script. An Arabic-script name leaves
+      // nothing to build from — that is asked for, not guessed at, and never
+      // filled in from the email address, which produces things like
+      // ahmedrazeknhgmailcom@sahabaclub.com.
+      if (!isUsableMailboxName(displayName)) {
+        return json({
+          error: "We need your name in English letters to build your @sahabaclub.com address.",
+          code: "name_not_latin",
+        }, 400);
       }
 
       const created = await provisionMailbox(displayName, displayName);

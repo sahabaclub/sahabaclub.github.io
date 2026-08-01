@@ -20,6 +20,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import {
   graphDiagnostics,
+  isUsableMailboxName,
   provisionMailbox,
   resetMailboxPassword,
 } from "../_shared/graph.ts";
@@ -47,7 +48,7 @@ Deno.serve(async (req) => {
     }
     const user = userData.user;
 
-    const { action, mailbox: existingMailbox } = await req.json();
+    const { action, mailbox: existingMailbox, fullName: requestedName } = await req.json();
     if (action !== "create" && action !== "reset" && action !== "diagnose") {
       return json({ error: "action must be 'create', 'reset' or 'diagnose'" }, 400);
     }
@@ -82,7 +83,14 @@ Deno.serve(async (req) => {
       .select("full_name")
       .eq("user_id", user.id)
       .maybeSingle();
-    const displayName = profile?.full_name || user.email || "Sahaba Club member";
+
+    // The member may supply a Latin spelling of their name for the mailbox.
+    // It is only ever used as a name — mailboxLocalPart strips it to [a-z0-9]
+    // before it reaches Graph — so there is nothing here to inject with.
+    const suppliedName = typeof requestedName === "string"
+      ? requestedName.trim().slice(0, 80)
+      : "";
+    const displayName = suppliedName || profile?.full_name || "";
 
     let result: { mailbox: string; tempPassword: string };
     let preExisting: boolean;
@@ -105,6 +113,18 @@ Deno.serve(async (req) => {
           mailbox: already.mailbox,
           code: "already_provisioned",
         }, 409);
+      }
+
+      // A @sahabaclub.com address has to be typeable and recognisable, so the
+      // name behind it must be Latin script. An Arabic-script name leaves
+      // nothing to build from — that is asked for, not guessed at, and never
+      // filled in from the email address, which produces things like
+      // ahmedrazeknhgmailcom@sahabaclub.com.
+      if (!isUsableMailboxName(displayName)) {
+        return json({
+          error: "We need your name in English letters to build your @sahabaclub.com address.",
+          code: "name_not_latin",
+        }, 400);
       }
 
       const created = await provisionMailbox(displayName, displayName);
