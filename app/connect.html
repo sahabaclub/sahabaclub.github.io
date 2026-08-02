@@ -44,16 +44,23 @@
 <main class="cx-wrap cx-wrap-wide">
   <div class="cx-hero">
     <h1 class="glow-text">Connect</h1>
-    <p>The members who've chosen to be found. Search for someone, or see who keeps
-       turning up to the same things you do.</p>
+    <p>The members who've chosen to be found, and the people from EduHackAI whose
+       history the club has kept for them. Nearest to you first: teammates, then the
+       rounds you shared, then what you have in common.</p>
   </div>
 
   <div id="self-note"></div>
 
   <div class="cx-filters" id="filters" hidden>
-    <label class="sr-only" for="q">Search members</label>
+    <label class="sr-only" for="q">Search people</label>
     <input class="cx-input" type="search" id="q" placeholder="Search name, headline, or skill" autocomplete="off">
     <div class="cx-select-row">
+      <label class="sr-only" for="f-kind">Members or not yet joined</label>
+      <select class="cx-select" id="f-kind">
+        <option value="">Everyone</option>
+        <option value="member">Members</option>
+        <option value="prospect">Not joined yet</option>
+      </select>
       <label class="sr-only" for="f-country">Country</label>
       <select class="cx-select" id="f-country"><option value="">Any country</option></select>
       <label class="sr-only" for="f-industry">Industry</label>
@@ -73,8 +80,9 @@
 
 <script type="module">
   import {
-    requireUser, listDirectory, getActivityFor, myFollowing, follow, unfollow,
-    shortSummary, escapeHtml, initialOf, placeOf, experienceLabel, joinWords,
+    requireUser, listConnect, getActivityFor, myFollowing, follow, unfollow,
+    shortSummary, escapeHtml, initialOf, placeOf, experienceLabel,
+    subjectHref, relevanceLabel,
     CONNECT_OFF_MESSAGE, DIRECTORY_CAP,
   } from "../lib/connect.js";
 
@@ -82,9 +90,15 @@
   var countEl = document.getElementById("count");
   var filtersEl = document.getElementById("filters");
   var me = null;
-  var members = [];
+  // Everyone on the page, members and prospects alike, in one array of one
+  // shape. 0027 gives the two views the same aggregate shape on purpose and
+  // 0028 unions them, so branching per row belongs in the few places where a
+  // prospect genuinely has no equivalent — a follow button, a message, an
+  // event history — and nowhere else.
+  var people = [];
   var activity = {};
   var followingSet = new Set();
+  var ranked = false;
 
   function state(title, text, actionsHtml) {
     results.innerHTML =
@@ -111,12 +125,13 @@
   // filter that returns nothing.
   function buildFilters() {
     var countries = {}, industries = {}, levels = {}, topics = {};
-    members.forEach(function (m) {
+    people.forEach(function (m) {
       if (m.country) countries[m.country] = true;
       if (m.industry) industries[m.industry] = true;
       if (m.experience_level) levels[m.experience_level] = true;
-      var act = activity[m.user_id];
-      ((act && act.top_topics) || []).forEach(function (t) { if (t) topics[t] = true; });
+      ((activityOf(m) && activityOf(m).top_topics) || []).forEach(function (t) {
+        if (t) topics[t] = true;
+      });
     });
     var plain = function (o) {
       return Object.keys(o).sort(function (a, b) { return a.localeCompare(b); })
@@ -134,17 +149,21 @@
 
   function matches(m) {
     var q = document.getElementById("q").value.trim().toLowerCase();
+    var kind = document.getElementById("f-kind").value;
     var country = document.getElementById("f-country").value;
     var industry = document.getElementById("f-industry").value;
     var level = document.getElementById("f-experience").value;
     var topic = document.getElementById("f-topic").value;
 
+    if (kind === "member" && !m.is_member) return false;
+    if (kind === "prospect" && m.is_member) return false;
     if (country && m.country !== country) return false;
     if (industry && m.industry !== industry) return false;
     if (level && m.experience_level !== level) return false;
     if (topic) {
-      var act = activity[m.user_id];
-      var list = (act && act.top_topics) || [];
+      // Topics come from attended events, so a prospect can never match one —
+      // they have no account to have attended anything with.
+      var list = (activityOf(m) && activityOf(m).top_topics) || [];
       if (list.indexOf(topic) === -1) return false;
     }
     if (!q) return true;
@@ -168,32 +187,52 @@
            escapeHtml(initialOf(m.full_name)) + "</span>";
   }
 
+  // A prospect has no account, so nothing that needs one is drawn for them:
+  // no Follow, no Message, no follower counts, no "accepts messages". Those
+  // all resolve to a `user_id` that does not exist, and a greyed-out Follow
+  // button would read as a member who has blocked you rather than as a person
+  // who has not arrived. What they get instead is the plain fact, said once.
   function cardHtml(m) {
-    var act = activity[m.user_id];
+    var act = activityOf(m);
     var topics = (act && act.top_topics) || [];
     var place = placeOf(m);
-    var sub = [shortSummary(m, act), place].filter(Boolean).join(" · ");
-    var isMe = me && m.user_id === me.id;
-    var href = "member.html?u=" + encodeURIComponent(m.user_id);
+    var sub = m.is_member
+      ? [shortSummary(m, act), place].filter(Boolean).join(" · ")
+      : place;
+    var isMe = me && m.is_member && m.member_user_id === me.id;
+    var href = subjectHref(m);
+    var rel = relevanceLabel(m.relevance);
 
-    return '<article class="cx-member">' +
+    // Their own skills stand in for the topic chips a prospect cannot have.
+    // Plain tags, not the accent the topic chips use — that accent means
+    // "derived from events they actually turned up to", which this is not.
+    var chips = m.is_member
+      ? topics.slice(0, 3).map(function (t) {
+          return '<span class="cx-tag cx-tag-topic">' + escapeHtml(t) + "</span>";
+        })
+      : (m.skills || []).filter(Boolean).slice(0, 3).map(function (t) {
+          return '<span class="cx-tag">' + escapeHtml(t) + "</span>";
+        });
+
+    var flags = "";
+    if (rel) flags += '<span class="cx-rel">' + escapeHtml(rel) + "</span>";
+    if (!m.is_member) flags += '<span class="cx-notyet">Hasn’t joined yet</span>';
+
+    return '<article class="cx-member' + (m.is_member ? "" : " is-notyet") + '">' +
       '<a class="cx-member-link" href="' + href + '">' +
         avatarHtml(m) +
         '<div class="cx-member-body">' +
-          '<p class="cx-member-name">' + escapeHtml(m.full_name || "Member") +
+          '<p class="cx-member-name">' + escapeHtml(m.full_name || (m.is_member ? "Member" : "Someone from EduHackAI")) +
             (isMe ? " (you)" : "") + "</p>" +
           (m.headline ? '<p class="cx-member-headline">' + escapeHtml(m.headline) + "</p>" : "") +
           (sub ? '<p class="cx-member-sub">' + escapeHtml(sub) + "</p>" : "") +
         "</div>" +
       "</a>" +
-      (topics.length
-        ? '<div class="cx-tags">' + topics.slice(0, 3).map(function (t) {
-            return '<span class="cx-tag cx-tag-topic">' + escapeHtml(t) + "</span>";
-          }).join("") + "</div>"
-        : "") +
+      (flags ? '<div class="cx-flags">' + flags + "</div>" : "") +
+      (chips.length ? '<div class="cx-tags">' + chips.join("") + "</div>" : "") +
       '<div class="cx-member-foot">' +
         '<a class="cx-btn cx-btn-sm" href="' + href + '">View profile</a>' +
-        (isMe ? "" : followButtonHtml(m.user_id)) +
+        (m.is_member && !isMe ? followButtonHtml(m.member_user_id) : "") +
       "</div>" +
     "</article>";
   }
@@ -205,12 +244,21 @@
       '">' + (on ? "Following" : "Follow") + "</button>";
   }
 
+  function countText(shown) {
+    var noun = shown === 1 ? " person" : " people";
+    var head = shown === people.length
+      ? people.length + noun
+      : shown + " of " + people.length + " people";
+    // Only claim an order when there is one. Without 0028 the list is the old
+    // newest-first, and captioning that as "closest to you first" would be a
+    // straightforwardly false statement about what the reader is looking at.
+    return ranked ? head + " · closest to you first" : head;
+  }
+
   function render() {
-    var shown = members.filter(matches);
+    var shown = people.filter(matches);
     countEl.hidden = false;
-    countEl.textContent = shown.length === members.length
-      ? members.length + (members.length === 1 ? " member" : " members")
-      : shown.length + " of " + members.length + " members";
+    countEl.textContent = countText(shown.length);
 
     if (!shown.length) {
       state("Nobody matches that",
@@ -219,9 +267,7 @@
       var clear = document.getElementById("btn-clear");
       if (clear) clear.addEventListener("click", function () {
         document.getElementById("q").value = "";
-        ["f-country", "f-industry", "f-experience", "f-topic"].forEach(function (id) {
-          document.getElementById(id).value = "";
-        });
+        FILTER_IDS.forEach(function (id) { document.getElementById(id).value = ""; });
         render();
       });
       return;
@@ -248,7 +294,9 @@
     btn.setAttribute("aria-pressed", nowOn ? "true" : "false");
   });
 
-  ["q", "f-country", "f-industry", "f-experience", "f-topic"].forEach(function (id) {
+  var FILTER_IDS = ["f-kind", "f-country", "f-industry", "f-experience", "f-topic"];
+
+  ["q"].concat(FILTER_IDS).forEach(function (id) {
     var el = document.getElementById(id);
     el.addEventListener("input", render);
     el.addEventListener("change", render);
@@ -256,11 +304,17 @@
 
   // ---- Load -------------------------------------------------------------
 
+  // Event history is keyed on user_id and a prospect has none, so this is the
+  // one lookup that has to know which kind of row it was handed.
+  function activityOf(m) {
+    return m && m.is_member ? activity[m.member_user_id] : null;
+  }
+
   (async function init() {
     me = await requireUser("../login.html");
     if (!me) return;
 
-    var dir = await listDirectory();
+    var dir = await listConnect();
     if (dir.off) {
       state("Connect isn't switched on yet", CONNECT_OFF_MESSAGE,
         '<a class="cx-btn" href="dashboard.html">Back to dashboard</a>');
@@ -272,11 +326,12 @@
       return;
     }
 
-    members = dir.data || [];
+    people = dir.data || [];
+    ranked = dir.ranked === true;
 
     // Nobody has opted in yet — including, most likely, the person reading
     // this. That's the moment to ask.
-    if (!members.length) {
+    if (!people.length) {
       state("Nobody's here yet",
         "Connect only lists members who've chosen to appear, and so far nobody has. " +
         "Be the first: switch on <strong>Show me in Connect</strong> on your profile and " +
@@ -285,7 +340,10 @@
       return;
     }
 
-    var act = await getActivityFor(members.map(function (m) { return m.user_id; }));
+    var act = await getActivityFor(
+      people.filter(function (m) { return m.is_member; })
+            .map(function (m) { return m.member_user_id; })
+    );
     activity = act.data || {};
     var fol = await myFollowing();
     followingSet = fol.data;
@@ -295,7 +353,9 @@
 
     // If the reader isn't in their own directory, say so once, quietly — they
     // can browse either way, but they can't be found back.
-    var inDirectory = members.some(function (m) { return m.user_id === me.id; });
+    var inDirectory = people.some(function (m) {
+      return m.is_member && m.member_user_id === me.id;
+    });
     if (!inDirectory) {
       document.getElementById("self-note").innerHTML =
         '<div class="cx-status is-info">You\'re not listed here yet. ' +
@@ -305,8 +365,8 @@
 
     if (dir.capped) {
       document.getElementById("self-note").insertAdjacentHTML("beforeend",
-        '<div class="cx-status is-info">Showing the ' + DIRECTORY_CAP +
-        " members who joined most recently. Search and filters apply to those.</div>");
+        '<div class="cx-status is-info">Showing the first ' + DIRECTORY_CAP +
+        " people. Search and filters apply to those.</div>");
     }
   })();
 </script>

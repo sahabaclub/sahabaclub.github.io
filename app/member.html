@@ -54,14 +54,24 @@
 
 <script type="module">
   import {
-    requireUser, getMember, getActivity, myFollowing, follow, unfollow,
-    summarise, escapeHtml, initialOf, linkList, placeOf, experienceLabel,
-    monthYear, joinWords, CONNECT_OFF_MESSAGE,
+    requireUser, getMember, getProspect, getActivity, myFollowing, follow, unfollow,
+    roundsWithPlacings, summarise, escapeHtml, initialOf, linkList, placeOf,
+    experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
   } from "../lib/connect.js";
 
   var root = document.getElementById("member-root");
   var me = null;
-  var targetId = new URLSearchParams(window.location.search).get("u");
+
+  // Two kinds of subject, two parameters, and they are not interchangeable.
+  // `?u=` is a `user_id` and only a member has one; `?p=` is a
+  // `prospect_profiles.id` (0027) and belongs to somebody with no account at
+  // all. Nothing below may fall back from one to the other: reading a prospect
+  // id as a user id would query `member_directory` for a key that cannot exist
+  // there and quietly report "not discoverable" about a person who never had
+  // the choice.
+  var params = new URLSearchParams(window.location.search);
+  var targetId = params.get("u");
+  var prospectId = params.get("p");
   var following = false;
 
   function state(title, text, actionsHtml) {
@@ -94,6 +104,20 @@
     );
   }
 
+  // The prospect equivalent. Worded differently on purpose: a prospect row
+  // that isn't there was never a choice somebody made about being visible —
+  // it was never published, or it has already been claimed and the person is
+  // a member now. Reusing the "isn't discoverable" wording would put a
+  // decision in their mouth that they never made.
+  function noProspect() {
+    state(
+      "This profile isn't available",
+      "It may have been claimed by the person it belongs to — in which case they're " +
+      "a member now and you'll find them in Connect under their own profile.",
+      '<a class="cx-btn" href="connect.html">Browse Connect</a>'
+    );
+  }
+
   function tagsHtml(list, extraClass) {
     var items = (list || []).filter(Boolean);
     if (!items.length) return "";
@@ -111,21 +135,250 @@
            escapeHtml(initialOf(member.full_name)) + "</span>";
   }
 
-  function render(member, activity) {
-    var name = member.full_name || "Member";
+  // ---- Reading jsonb safely ---------------------------------------------
+
+  // `work_history` and `hackathons` are jsonb. They arrive as whatever was
+  // stored, so nothing below assumes an array, an object per entry, or a
+  // string in any given field — and every string that survives is still
+  // escaped, because all of it is member-authored or harvested from
+  // SharePoint.
+  function jsonList(value) {
+    return Array.isArray(value)
+      ? value.filter(function (row) { return row && typeof row === "object"; })
+      : [];
+  }
+
+  // Only a string or a number is renderable text. An object, an array or a
+  // null becomes "" rather than the word "[object Object]".
+  function text(value) {
+    if (typeof value === "string") return value.trim();
+    if (typeof value === "number" && isFinite(value)) return String(value);
+    return "";
+  }
+
+  // A work_history "2021-03" and a date column's "2025-05-24" are both parsed
+  // as UTC by Date, so west of Greenwich monthYear() would name the month
+  // before the one that was written down. Pin the value to local midnight
+  // first. Timestamps carry their own offset and are passed straight through.
+  // hackathons-ui.js sidesteps the same hazard by slicing the string.
+  function localDay(value) {
+    var s = text(value);
+    var m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(s);
+    return m ? m[1] + "-" + m[2] + "-" + (m[3] || "01") + "T00:00:00" : s;
+  }
+
+  function asMonth(value) {
+    return monthYear(localDay(value));
+  }
+
+  // ---- Work history -----------------------------------------------------
+
+  // The stored order is the rendered order: 0023 defines the array as
+  // newest-first, and re-sorting here would only scramble the entries with no
+  // start date into a sequence nobody wrote.
+
+  // "Current" means what the timeline says: still there. A row flagged
+  // is_current that also carries an end date contradicts itself, and the end
+  // date is the more specific claim — so neither the badge nor the word
+  // "present" overrides a date somebody actually wrote down.
+  function isCurrentRole(job) {
+    return job.is_current === true && !text(job.end);
+  }
+
+  function roleWhen(job) {
+    var start = asMonth(job.start);
+    var end = asMonth(job.end);
+    if (isCurrentRole(job)) return start ? start + " – present" : "Current role";
+    if (start && end) return start + " – " + end;
+    // No end date and not marked current. "Mar 2021 – " would trail off into
+    // an implied "still there" that the data doesn't claim.
+    if (start) return "From " + start;
+    if (end) return "Until " + end;
+    return "";
+  }
+
+  function workHistoryHtml(list) {
+    var jobs = jsonList(list);
+    // Nothing recorded means no heading either. An empty "Work history" panel
+    // reads as a gap in the person rather than a gap in the data.
+    if (!jobs.length) return "";
+
+    return '<div class="cx-section"><p class="cx-section-title">Work history</p>' +
+      '<div class="cx-card"><ol class="cx-timeline">' +
+      jobs.map(function (job) {
+        var position = escapeHtml(text(job.position));
+        var company = escapeHtml(text(job.company));
+        var when = roleWhen(job);
+        var summary = text(job.summary);
+        var current = isCurrentRole(job);
+
+        var heading = position && company
+          ? position + '<span class="cx-tl-at"> at </span>' + company
+          : (position || company || '<span class="cx-tl-at">Role not recorded</span>');
+
+        return '<li class="cx-tl-item' + (current ? " is-current" : "") + '">' +
+            '<p class="cx-tl-role">' + heading +
+              (current ? '<span class="cx-tl-now">Current</span>' : "") + "</p>" +
+            (when ? '<p class="cx-tl-when">' + escapeHtml(when) + "</p>" : "") +
+            (summary ? '<p class="cx-tl-summary">' + escapeHtml(summary) + "</p>" : "") +
+          "</li>";
+      }).join("") +
+      "</ol></div></div>";
+  }
+
+  // ---- EduHackAI --------------------------------------------------------
+
+  var MEDAL_ICON = '<svg class="cx-award-icon" viewBox="0 0 24 24" fill="none" ' +
+    'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" ' +
+    'stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="15" r="6"/>' +
+    '<path d="M8.2 9.5 5.5 3h5l2 4M15.8 9.5 18.5 3h-5"/></svg>';
+
+  var ORDINAL = { 1: "1st", 2: "2nd", 3: "3rd" };
+
+  // A podium finish, or a win recorded without one. `is_winner` outside the
+  // top three still counts as an award, it just has no placing to state.
+  function awardOf(entry) {
+    var rank = Number(entry.rank);
+    var podium = rank === 1 || rank === 2 || rank === 3;
+    if (podium) return { key: String(rank), label: ORDINAL[rank] + " place" };
+    if (entry.is_winner === true) {
+      return { key: "win", label: rank > 3 ? rank + "th place" : "Winner" };
+    }
+    return null;
+  }
+
+  // `role` is the participant's own multi-choice answer at registration,
+  // stored verbatim in its comma-joined form. Splitting it is presentation and
+  // nothing more: as hackathons-ui.js puts it, "AI Coach" turning up in here
+  // does not make somebody a coach — is_mentor is the only thing that does.
+  function roleChipsHtml(role) {
+    var chips = text(role).split(",").map(function (r) { return r.trim(); }).filter(Boolean);
+    if (!chips.length) return "";
+    return '<div class="cx-roles">' + chips.map(function (r) {
+      return '<span class="cx-role">' + escapeHtml(r) + "</span>";
+    }).join("") + "</div>";
+  }
+
+  function hackathonHtml(entry, placings) {
+    var award = awardOf(entry);
+    var isMentor = entry.is_mentor === true;
+    var isJudge = entry.is_judge === true;
+    var team = text(entry.team);
+    var round = text(entry.round);
+    var name = text(entry.name) || "EduHackAI";
+    var when = asMonth(entry.starts_on);
+
+    var flags = "";
+    if (award) {
+      flags += '<span class="cx-award cx-award-' + award.key + '">' + MEDAL_ICON +
+        "<span>" + escapeHtml(award.label) + "</span></span>";
+    }
+    if (isMentor) flags += '<span class="cx-badge is-coach">Coach</span>';
+    if (isJudge) flags += '<span class="cx-badge is-judge">Judge</span>';
+
+    // What they did. A coach or a judge is never described as competing, even
+    // where a team is recorded against them: round 2 links two coaches to team
+    // "Reham", which the seed README flags as a probable data-entry artefact,
+    // and hackathons-ui.js keeps them out of that team's roster for exactly
+    // this reason.
+    var what;
+    if (isMentor && isJudge) what = "Coached and judged this round.";
+    else if (isMentor) what = "Coached this round.";
+    else if (isJudge) what = "Judged this round.";
+    else if (team) what = "Competed with <strong>" + escapeHtml(team) + "</strong>";
+    else what = "Took part — no team was recorded.";
+
+    var did = '<p class="cx-hack-what">' + what + "</p>" +
+      (isMentor || isJudge ? "" : roleChipsHtml(entry.role));
+
+    // A missing rank is ambiguous on a profile: the team may not have made the
+    // podium, or the round's placings may never have been written down at all.
+    // Rounds 3 and 4 are the second case, and calling that "no placing" would
+    // be a claim the source does not support. So the wording follows
+    // hackathons.html: unknown, not "nobody placed".
+    var note = "";
+    if (!award && !isMentor && !isJudge) {
+      var recorded = placings ? placings.get(text(entry.slug)) : undefined;
+      if (recorded === false) {
+        note = '<p class="cx-no-placing">Placings for this round were never recorded in ' +
+          "the source, so none are shown here. That means <em>unknown</em>, not that no " +
+          "team placed.</p>";
+      } else if (recorded !== true) {
+        // We couldn't establish it either way — say only that much.
+        note = '<p class="cx-no-placing">No placing is recorded for this round. That ' +
+          "means <em>unknown</em>, not that they didn't place.</p>";
+      }
+      // recorded === true: this round's placings are on record and this team
+      // is not among them. There is nothing to add, and a line about it would
+      // be precisely the implication this page is careful not to make.
+    }
+
+    return '<article class="cx-hack' + (award ? " is-award" : "") + '">' +
+        '<div class="cx-hack-head">' +
+          (round ? '<span class="cx-hack-round">Round ' + escapeHtml(round) + "</span>" : "") +
+          '<h3 class="cx-hack-name">' + escapeHtml(name) + "</h3>" +
+        "</div>" +
+        (flags ? '<div class="cx-hack-flags">' + flags + "</div>" : "") +
+        did +
+        (when ? '<p class="cx-hack-when">' + escapeHtml(when) + "</p>" : "") +
+        note +
+      "</article>";
+  }
+
+  // Newest round first, which is the order 0023 aggregates them in.
+  function hackathonsHtml(list, placings) {
+    var rounds = jsonList(list);
+    if (!rounds.length) return "";
+    return '<div class="cx-section"><p class="cx-section-title">EduHackAI involvement</p>' +
+      '<div class="cx-hacks">' +
+      rounds.map(function (r) { return hackathonHtml(r, placings); }).join("") +
+      "</div></div>";
+  }
+
+  // The panel that keeps a prospect honest. It replaces the follow and message
+  // buttons rather than sitting beside them: the point is that there is
+  // nothing to press, and saying so plainly is better than a disabled control
+  // that looks like a member who has switched you off.
+  //
+  // It is also the invitation. These pages get screenshotted and sent to the
+  // person they describe, so this is the paragraph they read first — which is
+  // why it says where the profile came from before it says what to do about it.
+  function notYetPanel(name) {
+    return '<div class="cx-notyet-panel">' +
+      '<p class="cx-notyet-title">' + escapeHtml(name) + ' hasn’t joined yet</p>' +
+      '<p class="cx-notyet-text">This is the history the club already has on record — ' +
+        "from the EduHackAI rounds they took part in, and from what they'd made public " +
+        "themselves. There's no account behind it yet, so there's nobody to follow and " +
+        "nowhere for a message to arrive.</p>" +
+      '<p class="cx-notyet-text"><strong>If this is you:</strong> sign up with the address ' +
+        "the club has for you and all of this attaches to your own profile automatically. " +
+        "None of it appears in Connect under your name until you've seen it and chosen to " +
+        "be listed.</p>" +
+      '<div class="cx-state-actions">' +
+        '<a class="cx-btn cx-btn-primary" href="../login.html">Create an account</a>' +
+        '<a class="cx-btn" href="connect.html">Browse Connect</a>' +
+      "</div></div>";
+  }
+
+  function render(member, activity, placings) {
+    // A prospect (0027) publishes `is_member` as false. Absent — an older
+    // `member_directory` row — means member, which is the safe reading: it can
+    // only ever add affordances for somebody who really does have an account.
+    var isProspect = member.is_member === false;
+    var name = member.full_name || (isProspect ? "Someone from EduHackAI" : "Member");
     var place = placeOf(member);
     var experience = experienceLabel(member.experience_level);
     var links = linkList(member.links);
     var topics = (activity && activity.top_topics) || [];
     var attended = Number((activity && activity.events_attended) || 0);
     var upcoming = Number((activity && activity.events_upcoming) || 0);
-    var isMe = me && member.user_id === me.id;
+    var isMe = !isProspect && me && member.user_id === me.id;
 
     var meta = [];
     if (place) meta.push("<span>" + escapeHtml(place) + "</span>");
     if (experience) meta.push("<span>" + escapeHtml(experience) + "</span>");
     if (member.industry) meta.push("<span>" + escapeHtml(member.industry) + "</span>");
-    if (member.member_since) meta.push("<span>Member since " + escapeHtml(monthYear(member.member_since)) + "</span>");
+    if (member.member_since) meta.push("<span>Member since " + escapeHtml(asMonth(member.member_since)) + "</span>");
 
     var html =
       '<div class="cx-card">' +
@@ -137,11 +390,17 @@
             (meta.length ? '<div class="cx-meta">' + meta.join("") + "</div>" : "") +
           "</div>" +
         "</div>" +
-        '<p class="cx-summary">' + escapeHtml(summarise(member, activity)) + "</p>";
+        // `summarise` counts events and a membership date, and a prospect has
+        // neither — it would answer "New here — nothing to go on yet." about
+        // somebody who has been to four hackathons.
+        (isProspect ? "" :
+          '<p class="cx-summary">' + escapeHtml(summarise(member, activity)) + "</p>");
 
     // Actions. Following yourself is blocked by the database anyway; showing
     // the button would just be a trap.
-    if (isMe) {
+    if (isProspect) {
+      html += notYetPanel(name);
+    } else if (isMe) {
       html += '<div class="cx-actions">' +
         '<a class="cx-btn" href="profile.html">Edit my profile</a></div>' +
         '<p class="cx-note">This is your profile exactly as other members see it.</p>';
@@ -156,12 +415,28 @@
         (member.accepts_messages ? "" :
           '<p class="cx-note">This member has messages switched off. You can still follow them.</p>');
     }
+
+    // 0023 made `member_since` the date the club created their Microsoft 365
+    // account rather than the date they first signed in here, so for anyone
+    // who has been in the tenant a while the two are years apart. That is the
+    // intended answer, not a bug — saying both out loud stops the older date
+    // looking like one.
+    var clubSince = asMonth(member.member_since);
+    var siteSince = asMonth(member.joined_site_at);
+    if (clubSince && siteSince && clubSince !== siteSince) {
+      html += '<p class="cx-note">&ldquo;Member since&rdquo; is when the club set up their ' +
+        "account. They started using this site in " + escapeHtml(siteSince) + ".</p>";
+    }
     html += "</div>";
 
     // The numbers. Follower counts come from the directory view; event counts
     // from member_activity, which only counts published events the member
     // chose to appear in.
-    html +=
+    //
+    // None of the four exists for a prospect, and four zeroes would not read
+    // as "no account" — they would read as nobody follows them and they go to
+    // nothing. Better to show no numbers than four wrong ones.
+    if (!isProspect) html +=
       '<div class="cx-stats">' +
         '<div class="cx-stat"><span class="cx-stat-num">' + attended +
           '</span><span class="cx-stat-label">events attended</span></div>' +
@@ -174,8 +449,13 @@
       "</div>";
 
     // The live half. This is the part that stays true after someone stops
-    // editing their profile, so it goes above the typed-in fields.
-    if (topics.length || attended > 0 || upcoming > 0) {
+    // editing their profile, so it goes above the typed-in fields. A prospect
+    // has no account, so they cannot have attended anything and the empty
+    // version of this section — "once they attend an event" — would be a
+    // promise about somebody who has no way to keep it.
+    if (isProspect) {
+      // Nothing.
+    } else if (topics.length || attended > 0 || upcoming > 0) {
       html += '<div class="cx-section"><p class="cx-section-title">From the events they turn up to</p>' +
         '<div class="cx-card">';
       if (topics.length) {
@@ -196,6 +476,33 @@
         '<div class="cx-card"><p class="cx-topic-line">Nothing yet. Once they attend an event, ' +
         "what they keep coming back for shows up here on its own.</p></div></div>";
     }
+
+    // What they did in EduHackAI, then where they've worked. Both are records
+    // of things that happened rather than things they typed today, so they sit
+    // above the skills and interests they chose for themselves — and the
+    // awards, which are the reason anyone screenshots one of these pages, come
+    // first.
+    html += hackathonsHtml(member.hackathons, placings);
+
+    // Their own paragraph, between the awards and the timeline. For a prospect
+    // this is not their own paragraph at all — 0027 is explicit that these are
+    // written by a model from harvested material and then shown to the person
+    // they describe — so it says whose words they are. Presenting an AI's
+    // summary of somebody as if it were their own bio is exactly the false
+    // claim that migration spends its header refusing to make.
+    var bio = text(member.bio);
+    if (bio) {
+      html += '<div class="cx-section"><p class="cx-section-title">About</p>' +
+        '<div class="cx-card"><p class="cx-bio">' + escapeHtml(bio) + "</p>" +
+        (isProspect
+          ? '<p class="cx-note">Written by the club from EduHackAI records and what they had ' +
+            "made public, not by them. If it gets anything wrong, claiming the profile " +
+            "replaces it with their own words.</p>"
+          : "") +
+        "</div></div>";
+    }
+
+    html += workHistoryHtml(member.work_history);
 
     if ((member.skills || []).length) {
       html += '<div class="cx-section"><p class="cx-section-title">Skills</p>' +
@@ -250,16 +557,53 @@
     });
   }
 
+  // Whether a round's placings were ever written down, for the rounds this
+  // profile mentions. Shared by both kinds of subject because the aggregate is
+  // the same shape either way — that is the whole reason 0027 built it to
+  // match 0023 rather than inventing its own.
+  async function placingsFor(subject) {
+    var rounds = jsonList(subject.hackathons);
+    if (!rounds.length) return null;
+    var res = await roundsWithPlacings(rounds.map(function (r) { return text(r.slug); }));
+    return res.data;
+  }
+
+  // Somebody with no account. No activity lookup and no follow state: both are
+  // keyed on a user_id that does not exist, and asking for one with a prospect
+  // id in it would be a query about the wrong person or nobody at all.
+  async function showProspect() {
+    var res = await getProspect(prospectId);
+    if (res.off) {
+      state("This part of Connect isn't switched on yet",
+        "Profiles for people who haven't joined need a database update that hasn't been " +
+        "applied yet. Nothing is broken on your side.",
+        '<a class="cx-btn" href="connect.html">Browse Connect</a>');
+      return;
+    }
+    if (res.error) {
+      state("Couldn't load this profile",
+        "Something went wrong on the way to the server. Refreshing usually sorts it.",
+        '<a class="cx-btn" href="connect.html">Browse Connect</a>');
+      return;
+    }
+    if (!res.data) { noProspect(); return; }
+    render(res.data, null, await placingsFor(res.data));
+  }
+
   (async function init() {
     me = await requireUser("../login.html");
     if (!me) return;
 
-    if (!targetId) {
+    if (!targetId && !prospectId) {
       state("No member selected",
         "This page needs to know whose profile to show.",
         '<a class="cx-btn cx-btn-primary" href="connect.html">Browse Connect</a>');
       return;
     }
+
+    // `?p=` wins if both are somehow present, and there is no falling back
+    // between them — see the note where they're read.
+    if (prospectId) { await showProspect(); return; }
 
     var memberRes = await getMember(targetId);
     if (memberRes.off) {
@@ -281,7 +625,10 @@
     var followRes = await myFollowing();
     following = followRes.data.has(targetId);
 
-    render(memberRes.data, activityRes.data || null);
+    // Only asked for when there is something to ask about, and only ever used
+    // to decide how to word a missing placing. `null` means "we don't know",
+    // which is also what an unapplied 0020 or a failed lookup leaves behind.
+    render(memberRes.data, activityRes.data || null, await placingsFor(memberRes.data));
   })();
 </script>
 <script src="../script.js"></script>
