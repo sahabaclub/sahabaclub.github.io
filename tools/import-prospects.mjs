@@ -279,7 +279,15 @@ const REMEDY = {
   model_refused:
     "The model declined this person's text. Not transient: look at what they wrote.",
   output_truncated:
-    "The composition hit its output ceiling for this person. A bug in build-prospect-profile, not a hiccup.",
+    "The model ran out of output tokens before finishing, and already retried once at a higher ceiling. " +
+    "This is a config value, not this person's data: on the Responses API the reasoning tokens come out of " +
+    "the SAME max_output_tokens budget as the answer, so the ceiling is mostly spent before any JSON is " +
+    "written. Raise MAX_OUTPUT_TOKENS_RETRY in supabase/functions/build-prospect-profile (and redeploy), or " +
+    "lower REASONING_EFFORT there. Re-running at the same settings will only sometimes help — the spend " +
+    "varies per call, which is why it fails for different people each run.",
+  content_filtered:
+    "The model's own filter stopped it partway through. Not a token ceiling and not transient: " +
+    "look at what this person wrote.",
   upstream_rejected_request:
     "OpenAI rejected the request the function sent. A bug in build-prospect-profile.",
   sources_audit_failed:
