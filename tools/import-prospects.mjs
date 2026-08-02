@@ -93,6 +93,9 @@ Options:
   --only <mailbox>   restrict to one person. Repeatable.
   --limit <n>        process at most n people this run.
   --concurrency <n>  parallel builds, 1-4. Default 1.
+  --pace <ms>        wait this long between builds, from the start. Default 0.
+                     The run raises this on its own when it is rate-limited;
+                     set it if you already know the account is tight.
   --show-text        print the composed headline and bio for review.
                      Off by default so a dry run does not fill a terminal
                      with other people's text.
@@ -110,6 +113,7 @@ const flags = {
   showText: has("--show-text"),
   limit: Number(takeValue("--limit") ?? "0") || 0,
   concurrency: Math.min(Math.max(Number(takeValue("--concurrency") ?? "1") || 1, 1), 4),
+  pace: Math.max(Number(takeValue("--pace") ?? "0") || 0, 0),
   only: takeAll("--only").map((s) => s.toLowerCase()),
   help: has("--help") || has("-h"),
 };
@@ -188,6 +192,152 @@ const FINGERPRINTED = [
 const TOOL_ID = "tools/import-prospects.mjs@1";
 
 // ============================================================
+// Pacing, and knowing when to stop
+// ============================================================
+//
+// Everything in this section is declared here rather than down in "Pieces",
+// for the same reason `sleep` is a function declaration: the very next thing
+// this file does is a top-level `await selectExisting()`, whose retry path
+// calls `backoffDelayMs`, which reads these constants. A `const` at the bottom
+// of the file would still be in its temporal dead zone at that moment, and the
+// first network hiccup of the run would raise a ReferenceError instead of
+// retrying — which is the exact bug the `sleep` comment was written about.
+//
+// ---- The retry budget ----
+//
+// Deliberately much larger than the function's own. `build-prospect-profile`
+// retries inside one invocation and so is bounded by an Edge Function's wall
+// clock — seconds. This script is a local process with 29 people to get
+// through and nothing waiting on it, so it can afford minutes, and a rate
+// limit that outlives the function's budget arrives here as a 429 with
+// `Retry-After` precisely so that this layer can wait it out.
+const RETRY_MAX_ATTEMPTS = 5;
+const RETRY_BASE_MS = 2_000;
+const RETRY_CAP_MS = 60_000;
+const PERSON_DEADLINE_MS = 240_000;
+const PERSON_RESERVE_MS = 30_000;
+
+// ---- Adaptive pacing ----
+//
+// The run that prompted all this failed 29 of 87 and then, on a second run,
+// 29 again — a different 29. Nothing was wrong with the data. The account's
+// rate limit was simply lower than the speed this script asks for, and the
+// script's only response was to hammer, fail, and report a number.
+//
+// So a rate limit now slows the whole run, not just the person who hit it:
+//
+//   * `cooldownUntil` is shared. When OpenAI says "wait 20 seconds", every
+//     worker waits, because the limit is per account, not per request. One
+//     worker sleeping while three others keep firing is the same limit hit
+//     three more times.
+//   * `delayMs` ratchets up on each rate limit and decays only after a run of
+//     clean successes, so the run settles at a speed the account tolerates
+//     instead of oscillating between too fast and stopped.
+const PACE_STEP_MS = 1_500;
+const PACE_MAX_MS = 30_000;
+const PACE_DECAY = 0.8;
+const PACE_CLEAN_RUN = 5; // consecutive successes before easing off again
+
+// Codes that mean every remaining person fails identically. All of them are one
+// operator action away from fixed, and none of them is fixed by waiting.
+const FATAL_CODES = new Set([
+  "quota_exhausted",
+  "ai_credentials",
+  "ai_unconfigured",
+  "model_not_configured",
+  "not_configured",
+  "not_allowed",
+  "not_signed_in",
+]);
+
+// One line per cause saying what to actually do. Written here rather than in
+// the function because these are instructions to whoever is running this
+// script, and the function's `error` is written for the person the profile
+// describes.
+const REMEDY = {
+  rate_limited: () =>
+    `OpenAI is throttling this account, not rejecting the data. Re-run — it resumes at exactly these people. ` +
+    `Slower helps: --concurrency 1 --pace ${Math.max(pacer.delayMs, 5000)}.`,
+  quota_exhausted:
+    "The OpenAI account is out of credit. Top it up; nothing will succeed until then.",
+  ai_credentials:
+    "OPENAI_API_KEY in the Supabase Edge Function secrets is wrong or revoked. Re-running will not help.",
+  ai_unconfigured:
+    "OPENAI_API_KEY is not set in the Supabase Edge Function secrets.",
+  model_not_configured:
+    "OPENAI_MODEL names a model this account cannot use. Set it to one it can.",
+  not_configured:
+    "The function has no SUPABASE_SERVICE_ROLE_KEY of its own — check its secrets.",
+  not_allowed:
+    "The function refused this caller. Check SUPABASE_SERVICE_ROLE_KEY in this shell matches the project.",
+  not_signed_in:
+    "The function did not accept the bearer token. Check SUPABASE_SERVICE_ROLE_KEY in this shell.",
+  upstream_error: "OpenAI failed to answer. Transient — re-run.",
+  upstream_timeout: "OpenAI took too long. Transient — re-run.",
+  upstream_unreachable: "The function could not reach OpenAI. Transient — re-run.",
+  upstream_bad_response: "OpenAI answered with nothing usable. Transient — re-run.",
+  model_refused:
+    "The model declined this person's text. Not transient: look at what they wrote.",
+  output_truncated:
+    "The composition hit its output ceiling for this person. A bug in build-prospect-profile, not a hiccup.",
+  upstream_rejected_request:
+    "OpenAI rejected the request the function sent. A bug in build-prospect-profile.",
+  sources_audit_failed:
+    "The function composed a field it could not attribute and refused to return it. A bug — do not re-run until it is understood.",
+  internal_error: "An unhandled error inside build-prospect-profile. A bug.",
+  http_error:
+    "The function answered with a status but no `code`, so this script could not classify it — " +
+    "an older deployment of build-prospect-profile, or a platform error page in front of it.",
+  network_error: "The request never completed. Check the network and the project URL.",
+  upsert_failed:
+    "Composing worked; the database write did not. The message above is PostgREST's own — " +
+    "check migration 0027 is applied and that the payload matches the columns it defines.",
+  unknown: "Not classified. The message above is all there is; treat it as a bug in this script.",
+};
+
+const stop = { reason: "", message: "" };
+
+const pacer = {
+  delayMs: flags.pace,
+  cooldownUntil: 0,
+  rateLimited: 0,
+  clean: 0,
+
+  // Called before each build. Honours the shared cooldown first — that is the
+  // whole run holding still — and then the current pace.
+  async waitTurn() {
+    const remaining = this.cooldownUntil - Date.now();
+    if (remaining > 0) await sleep(remaining);
+    if (this.delayMs > 0) await sleep(this.delayMs);
+  },
+
+  // A rate limit anywhere slows everything. `retryAfterMs` is OpenAI's own
+  // figure, forwarded by the function; without one, a step up is the best
+  // guess available.
+  rateLimit(retryAfterMs) {
+    this.rateLimited++;
+    this.clean = 0;
+    this.delayMs = Math.min(
+      Math.max(this.delayMs + PACE_STEP_MS, Math.min(retryAfterMs ?? 0, PACE_MAX_MS)),
+      PACE_MAX_MS,
+    );
+    if (retryAfterMs) {
+      this.cooldownUntil = Math.max(this.cooldownUntil, Date.now() + retryAfterMs);
+    }
+  },
+
+  // Ease off only after a clean run, and never below what the operator asked
+  // for on the command line.
+  succeeded() {
+    this.clean++;
+    if (this.clean >= PACE_CLEAN_RUN && this.delayMs > flags.pace) {
+      this.clean = 0;
+      this.delayMs = Math.max(flags.pace, Math.floor(this.delayMs * PACE_DECAY));
+    }
+  },
+};
+
+// ============================================================
 // What is already there
 // ============================================================
 
@@ -241,12 +391,27 @@ console.log("");
 
 const built = [];
 const failures = [];
+const notAttempted = [];
 let done = 0;
 
 await runPool(work, flags.concurrency, async (raw) => {
   const mailbox = String(raw.ms365_mailbox).toLowerCase();
+
+  // A run that has hit a wall stops asking. When the key is wrong or the
+  // account is out of credit, every remaining person fails identically — 29
+  // more round trips, 29 more identical lines in the report, and a longer wait
+  // before the operator sees the one sentence that matters. They are recorded
+  // as not attempted, which is honest and costs nothing: nobody has a row, so
+  // the next run picks up exactly them, the same as any other failure.
   try {
+    if (stop.reason) {
+      notAttempted.push({ mailbox });
+      return;
+    }
+
+    await pacer.waitTurn();
     const result = await buildOne(raw);
+    pacer.succeeded();
 
     if (result.skipped) {
       // Ahmed's rule, decided in the function so there is one copy of it.
@@ -263,7 +428,23 @@ await runPool(work, flags.concurrency, async (raw) => {
     }
     built.push({ mailbox, row: payload, usedModel: result.usedModel });
   } catch (err) {
-    failures.push({ mailbox, message: String(err?.message ?? err) });
+    // `err.code` is the function's own classification, read out of the
+    // response body rather than inferred from the status. Keeping it on the
+    // failure record — instead of flattening everything into one string — is
+    // what lets the report below group by cause and say what to do about it.
+    const code = err?.code ?? "unknown";
+    failures.push({
+      mailbox,
+      code,
+      status: err?.status ?? 0,
+      attempts: err?.attempts ?? 1,
+      message: String(err?.message ?? err),
+    });
+    if (FATAL_CODES.has(code) && !stop.reason) {
+      stop.reason = code;
+      stop.message = String(err?.message ?? err);
+      console.error(`\n  STOPPING: ${stop.message}\n  (${code} — every remaining person would fail the same way)\n`);
+    }
   } finally {
     done++;
     if (done % 10 === 0 || done === work.length) {
@@ -327,16 +508,53 @@ for (const [label, listing] of [
   for (const s of listing) console.log(`  ${s.name || ""}  <${s.mailbox}>`);
 }
 
+// ============================================================
+// Why it failed, not that it failed
+// ============================================================
+//
+// The previous version of this block printed `HTTP 500` and nothing else, for
+// every one of 29 failures, because the retry helper threw on the status code
+// before anybody read the body — where the function had written the actual
+// reason. That cost two blind re-runs. What follows is the same list with the
+// reason attached: the cause, grouped, with the one thing to do about it, and
+// then the individual lines.
 if (failures.length) {
   console.log("");
   console.log("------------------------------------------------------------");
-  console.log(`FAILED: ${failures.length} — the rest of the run completed`);
+  console.log(`FAILED: ${failures.length}${stop.reason ? " — the run stopped early" : " — the rest of the run completed"}`);
   console.log("------------------------------------------------------------");
-  for (const f of failures) console.log(`  <${f.mailbox}>  ${f.message}`);
+
+  const byCode = new Map();
+  for (const f of failures) {
+    if (!byCode.has(f.code)) byCode.set(f.code, []);
+    byCode.get(f.code).push(f);
+  }
+  for (const [code, listing] of [...byCode.entries()].sort((a, b) => b[1].length - a[1].length)) {
+    console.log("");
+    console.log(`  ${code} — ${listing.length}`);
+    console.log(`    ${listing[0].message}`);
+    const hint = REMEDY[code];
+    if (hint) console.log(`    → ${typeof hint === "function" ? hint() : hint}`);
+    for (const f of listing) {
+      console.log(`      <${f.mailbox}>  ${f.attempts} attempt${f.attempts === 1 ? "" : "s"}, last status ${f.status || "none"}`);
+    }
+  }
+
+  if (notAttempted.length) {
+    console.log("");
+    console.log(`  not attempted — the run stopped first: ${notAttempted.length}`);
+  }
+
   console.log("");
   console.log("These people have no row, so re-running this command picks up");
   console.log("exactly them and nobody else.");
   process.exitCode = 1;
+}
+
+if (pacer.rateLimited) {
+  console.log("");
+  console.log(`Rate limited ${pacer.rateLimited} time(s); the run slowed itself to ${pacer.delayMs}ms between builds.`);
+  console.log(`Start the next run with --pace ${pacer.delayMs} to begin at that speed instead of finding it again.`);
 }
 
 if (flags.showText) {
@@ -371,21 +589,157 @@ async function buildOne(raw) {
   const person = {};
   for (const k of FORWARD) if (raw[k] !== undefined) person[k] = raw[k];
 
-  const res = await withRetry(() =>
-    fetch(`${SUPABASE_URL}/functions/v1/build-prospect-profile`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ person }),
-    })
-  );
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.error) {
-    throw new Error(`build-prospect-profile ${res.status}: ${data.error ?? "(no detail)"}`);
+  const startedAt = Date.now();
+  let attempt = 0;
+
+  for (;;) {
+    attempt++;
+    let failure;
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/build-prospect-profile`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${SERVICE_ROLE_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ person }),
+      });
+
+      // The body is read on every path, success or not. This is the line whose
+      // absence caused the whole problem: the old code threw on `res.status`
+      // from inside the retry helper and never looked at what the function had
+      // said, so "rate_limited" — written, returned, and sitting right there
+      // in the payload — was invisible at both layers.
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data && !data.error) return data;
+      failure = readFunctionError(res, data);
+    } catch (err) {
+      // Never reached the function at all. Distinguished from every status
+      // above because the remedy is different: this is the network or the
+      // project URL, not anything the function decided.
+      failure = buildFailure({
+        code: "network_error",
+        status: 0,
+        message: `The request never completed: ${String(err?.message ?? err)}`,
+        retryable: true,
+        retryAfterMs: null,
+      });
+    }
+
+    failure.attempts = attempt;
+    if (failure.code === "rate_limited") pacer.rateLimit(failure.retryAfterMs);
+
+    const plan = planRetry({
+      attempt,
+      maxAttempts: RETRY_MAX_ATTEMPTS,
+      elapsedMs: Date.now() - startedAt,
+      deadlineMs: PERSON_DEADLINE_MS,
+      reserveMs: PERSON_RESERVE_MS,
+      retryable: failure.retryable,
+      retryAfterMs: failure.retryAfterMs,
+      rand: Math.random,
+    });
+
+    if (!plan.retry) throw failure;
+
+    process.stderr.write(
+      `  retrying <${String(raw.ms365_mailbox).toLowerCase()}> in ${Math.round(plan.delayMs / 100) / 10}s (${failure.code}, attempt ${attempt} of ${RETRY_MAX_ATTEMPTS})\n`,
+    );
+    await sleep(plan.delayMs);
   }
-  return data;
+}
+
+// Everything a non-2xx from the function means, read out of the body first and
+// off the status only as a fallback. `lib/profile-form.js` does exactly this on
+// the browser side — `error.context.json()` for the function's own wording,
+// then a status-by-status fallback — and the reasoning is the same here: the
+// function knows what happened and this script does not, so anything it wrote
+// beats anything that could be inferred out here.
+//
+// `code` is trusted when present because the function is the only thing that
+// answers on this path and it sets one on every failure. Where it is absent —
+// an older deployment, or a platform error page from in front of the function
+// — the status is used, which is what the status is for.
+function readFunctionError(res, data) {
+  const status = res.status;
+  const fromBody = data && typeof data === "object" ? data : {};
+
+  // `Retry-After` twice over: the header for anything that speaks HTTP, and
+  // the body field for the case where a proxy stripped it. Whichever is
+  // present, the number is OpenAI's own and beats our backoff curve.
+  const headerRetry = Number(res.headers?.get?.("retry-after") ?? "");
+  const bodyRetry = Number(fromBody.retry_after ?? NaN);
+  const retryAfterMs = Number.isFinite(bodyRetry) && bodyRetry > 0
+    ? bodyRetry * 1000
+    : Number.isFinite(headerRetry) && headerRetry > 0
+    ? headerRetry * 1000
+    : null;
+
+  if (fromBody.code) {
+    return buildFailure({
+      code: String(fromBody.code),
+      status,
+      message: String(fromBody.error ?? `build-prospect-profile ${status}`),
+      // The function decides this, not the status: `quota_exhausted` and
+      // `rate_limited` are both HTTP 429 from OpenAI's side and only one of
+      // them is worth trying again.
+      retryable: fromBody.retryable === true,
+      retryAfterMs,
+    });
+  }
+
+  const retryable = status === 429 || status === 408 || status >= 500;
+  return buildFailure({
+    code: status === 429 ? "rate_limited" : "http_error",
+    status,
+    message: fromBody.error
+      ? String(fromBody.error)
+      : `build-prospect-profile answered ${status} with no readable body`,
+    retryable,
+    retryAfterMs,
+  });
+}
+
+function buildFailure({ code, status, message, retryable, retryAfterMs }) {
+  const err = new Error(message);
+  err.code = code;
+  err.status = status;
+  err.retryable = retryable;
+  err.retryAfterMs = retryAfterMs;
+  err.attempts = 1;
+  return err;
+}
+
+// ---- The same two decisions the function makes, with a longer budget ----
+//
+// Kept structurally identical to `planRetry`/`backoffDelayMs` in
+// `supabase/functions/build-prospect-profile/index.ts` on purpose: two layers
+// backing off on different curves, with different opinions about what is
+// transient, is how a retry storm gets built. Only the constants differ, and
+// they differ because one layer is inside a wall-clock-limited invocation and
+// this one is not.
+function planRetry(opts) {
+  if (!opts.retryable) return { retry: false, delayMs: 0, reason: "not_retryable" };
+  if (opts.attempt >= opts.maxAttempts) {
+    return { retry: false, delayMs: 0, reason: "attempts_exhausted" };
+  }
+  const delayMs = backoffDelayMs(opts.attempt, opts.retryAfterMs, opts.rand);
+  if (opts.elapsedMs + delayMs + opts.reserveMs > opts.deadlineMs) {
+    return { retry: false, delayMs, reason: "budget_exhausted" };
+  }
+  return { retry: true, delayMs, reason: "retry" };
+}
+
+// Exponential with equal jitter — half the window fixed, half random — so four
+// workers that were rate-limited by the same response do not come back in
+// lockstep. A `Retry-After` wins outright when it is longer: it is the only
+// number in play that came from the service doing the limiting.
+function backoffDelayMs(attempt, retryAfterMs, rand) {
+  const window = Math.min(RETRY_BASE_MS * 2 ** (attempt - 1), RETRY_CAP_MS);
+  const jittered = Math.round(window / 2 + rand() * (window / 2));
+  return Math.max(jittered, retryAfterMs ?? 0);
 }
 
 // The row as it will be sent to PostgREST: the writable columns only, plus the
@@ -456,7 +810,18 @@ async function upsert(payload) {
       body: JSON.stringify(payload),
     })
   );
-  if (!res.ok) throw new Error(`upsert ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) {
+    // Given a code like every other failure so the report can group it and
+    // say what to do. Without one it lands in the "unknown" bucket, which is
+    // the same not-quite-an-answer the old `HTTP 500` was.
+    throw buildFailure({
+      code: "upsert_failed",
+      status: res.status,
+      message: `The row was composed but PostgREST refused the write: ${(await res.text()).slice(0, 300)}`,
+      retryable: false,
+      retryAfterMs: null,
+    });
+  }
 }
 
 function restHeaders() {
@@ -469,20 +834,33 @@ function restHeaders() {
 // Retries the transient things only: rate limits, gateway errors, and network
 // resets. A 400 or a 403 is an answer, not a hiccup, and repeating it three
 // times only makes the log longer.
+//
+// PostgREST only — `buildOne` no longer comes through here, because "retry on
+// the status code" is exactly the behaviour that hid 29 rate limits behind
+// `HTTP 500`. What is left is the two calls where the status genuinely is the
+// whole answer, and even those now carry the body: a PostgREST error names the
+// column or the constraint, and `HTTP 400` on its own has sent people looking
+// at the wrong table before.
 async function withRetry(fn, attempts = 3) {
   let lastErr;
   for (let i = 0; i < attempts; i++) {
     try {
       const res = await fn();
       if (res.status === 429 || res.status >= 500) {
-        lastErr = new Error(`HTTP ${res.status}`);
-        await sleep(1500 * 2 ** i);
+        const detail = await res.text().catch(() => "");
+        lastErr = new Error(`HTTP ${res.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`);
+        const retryAfter = Number(res.headers?.get?.("retry-after") ?? "");
+        await sleep(backoffDelayMs(
+          i + 1,
+          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : null,
+          Math.random,
+        ));
         continue;
       }
       return res;
     } catch (err) {
       lastErr = err;
-      await sleep(1500 * 2 ** i);
+      await sleep(backoffDelayMs(i + 1, null, Math.random));
     }
   }
   throw lastErr ?? new Error("request failed");

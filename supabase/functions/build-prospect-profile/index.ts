@@ -69,6 +69,128 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 
 // ============================================================
+// What "it failed" is allowed to mean
+// ============================================================
+//
+// A live import of 87 people failed 29 times with a bare `HTTP 500`. Every one
+// of them was an OpenAI 429: `askModel` threw `new Error("rate_limited")` and
+// the outer catch turned every throw, of every kind, into
+// `json({ error }, 500)`. Two consecutive runs then failed on *different*
+// people — six that had succeeded now failed and four the reverse — which is
+// the signature of a timing problem wearing a server error's clothes. Nobody
+// could see that, because a 500 says "this request is broken, stop sending it"
+// and a 429 says "this request is fine, send it again in a moment", and the
+// caller was told the first thing about the second situation.
+//
+// So every failure below now carries three things, and the third is the one
+// that was missing:
+//
+//   * a **status** the caller can act on without parsing English;
+//   * a **code**, stable and machine-readable, because a sentence written for
+//     a member is a sentence somebody will reword;
+//   * whether it is **retryable**, decided here — at the only place that knows
+//     what actually went wrong — rather than guessed from the status code by
+//     each caller in turn.
+//
+// The triage itself is `generate-avatar`'s, kept deliberately in the same
+// order (model name, credentials, rate limit, then a general fallback) so the
+// two functions cannot drift into two different opinions about the same
+// upstream. What is added here is the status/code/retryable trio and the
+// separation of quota from rate limit: both arrive as HTTP 429 and only one of
+// them ever clears on its own.
+//
+// Messages stay member-readable sentences. `build-prospect-profile` is called
+// by staff tooling today, but the surrounding functions surface `error`
+// verbatim to members (see `lib/profile-form.js` readInvokeError, which prefers
+// the function's own wording over anything it could write itself), and a code
+// in that slot would eventually reach somebody's screen.
+//
+// The whole set, so a caller can be written against it without reading the
+// code — `retryable` is the column that matters, and it is not derivable from
+// the status (429 appears in both halves):
+//
+//   code                       status  retryable  meaning
+//   ------------------------   ------  ---------  --------------------------
+//   rate_limited                  429  yes        OpenAI is throttling us
+//   upstream_error                502  yes        OpenAI 5xx/408
+//   upstream_timeout              502  yes        our own attempt timeout
+//   upstream_unreachable          502  yes        the request never completed
+//   upstream_bad_response         502  yes        200 with nothing usable in it
+//   quota_exhausted               402  no         the OpenAI balance is spent
+//   ai_unconfigured               503  no         OPENAI_API_KEY not set
+//   ai_credentials                503  no         OPENAI_API_KEY rejected
+//   model_not_configured          503  no         OPENAI_MODEL unusable
+//   not_configured                503  no         no service-role key here
+//   model_refused                 422  no         the model declined this text
+//   bad_request                   400  no         the caller sent nonsense
+//   not_signed_in / not_allowed   401/403  no     the caller is not staff
+//   output_truncated              500  no         our token ceiling is too low
+//   upstream_rejected_request     500  no         we sent OpenAI a bad request
+//   sources_audit_failed          500  no         a composed field has no source
+//   internal_error                500  no         an unhandled bug in here
+//
+// Every failure also carries `retry_after` (seconds) when OpenAI told us one,
+// alongside the `Retry-After` header.
+class ProfileError extends Error {
+  readonly code: string;
+  readonly status: number;
+  readonly retryable: boolean;
+  readonly retryAfterMs: number | null;
+  attempts = 1;
+
+  constructor(
+    code: string,
+    status: number,
+    message: string,
+    opts: { retryable?: boolean; retryAfterMs?: number | null } = {},
+  ) {
+    super(message);
+    this.name = "ProfileError";
+    this.code = code;
+    this.status = status;
+    this.retryable = opts.retryable ?? false;
+    this.retryAfterMs = opts.retryAfterMs ?? null;
+  }
+}
+
+// ============================================================
+// The retry budget, and why it is this small
+// ============================================================
+//
+// A rate limit is transient by definition, so the first place to absorb one is
+// here — retrying inside the invocation costs the caller one round trip
+// instead of one failed person. But an Edge Function has a wall-clock limit
+// (150s on the free plan), and a function killed mid-retry is worse than one
+// that answered honestly: the caller gets a dead connection instead of a 429
+// it could have acted on.
+//
+// So the budget is bounded twice, and by wall clock rather than by attempt
+// count alone:
+//
+//   * at most RETRY_MAX_ATTEMPTS attempts, total, per invocation;
+//   * no new attempt may *start* once RETRY_DEADLINE_MS of wall clock has
+//     passed, and a retry is only started if the sleep plus RETRY_RESERVE_MS
+//     of room for the attempt itself still fits inside that deadline;
+//   * every attempt is aborted at ATTEMPT_TIMEOUT_MS, so one hung socket
+//     cannot silently consume the whole budget.
+//
+// Worst case is therefore an attempt starting at 50s and being aborted at 80s
+// — comfortably inside 150s, with the margin left for the Supabase client
+// handshake, the auth lookup and the response write.
+//
+// Anything needing a longer wait than that is *not* absorbed here. It is
+// returned as a 429 with `Retry-After`, because a caller with a queue of 87
+// people can wait 60 seconds cheaply and a function holding a socket open
+// cannot. That division — seconds here, minutes in the importer — is the whole
+// arrangement.
+const RETRY_MAX_ATTEMPTS = 3;
+const RETRY_BASE_MS = 1_000;
+const RETRY_CAP_MS = 8_000;
+const RETRY_DEADLINE_MS = 50_000;
+const RETRY_RESERVE_MS = 15_000;
+const ATTEMPT_TIMEOUT_MS = 30_000;
+
+// ============================================================
 // Where a value came from, in a form somebody can go and check
 // ============================================================
 //
@@ -229,9 +351,14 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  // Taken here rather than inside `askModel` so the retry budget is measured
+  // against the invocation's own wall clock — the auth lookup and the body
+  // read have already spent some of it by the time the model is called.
+  const startedAt = Date.now();
+
   try {
     if (!SERVICE_ROLE_KEY) {
-      return json({ error: "Not configured" }, 503);
+      return fail(new ProfileError("not_configured", 503, "Not configured"));
     }
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
@@ -251,7 +378,7 @@ Deno.serve(async (req) => {
     if (bearer !== SERVICE_ROLE_KEY) {
       const { data: userData, error: userError } = await admin.auth.getUser(bearer);
       if (userError || !userData.user) {
-        return json({ error: "Not signed in" }, 401);
+        return fail(new ProfileError("not_signed_in", 401, "Not signed in"));
       }
       const { data: callerProfile } = await admin
         .from("profiles")
@@ -260,14 +387,14 @@ Deno.serve(async (req) => {
         .maybeSingle();
       if (callerProfile?.role !== "staff" && callerProfile?.role !== "admin") {
         console.error(`non-staff user ${userData.user.id} attempted build-prospect-profile`);
-        return json({ error: "Not allowed" }, 403);
+        return fail(new ProfileError("not_allowed", 403, "Not allowed"));
       }
     }
 
     const body = await req.json().catch(() => ({}));
     const raw = body?.person;
     if (!raw || typeof raw !== "object") {
-      return json({ error: "person is required" }, 400);
+      return fail(new ProfileError("bad_request", 400, "person is required"));
     }
 
     // ---- Allowlist, before anything else touches the payload ----
@@ -281,7 +408,7 @@ Deno.serve(async (req) => {
     const person = takeAllowedFields(raw);
 
     if (!person.ms365_mailbox) {
-      return json({ error: "person.ms365_mailbox is required" }, 400);
+      return fail(new ProfileError("bad_request", 400, "person.ms365_mailbox is required"));
     }
 
     const material = distil(person);
@@ -325,11 +452,13 @@ Deno.serve(async (req) => {
     if (material.noteText !== "" || material.position || material.company) {
       if (!OPENAI_API_KEY) {
         console.error("OPENAI_API_KEY is not set");
-        return json({
-          error: "The AI writer isn't configured yet. Set OPENAI_API_KEY in the Edge Function secrets.",
-        }, 503);
+        return fail(new ProfileError(
+          "ai_unconfigured",
+          503,
+          "The AI writer isn't configured yet. Set OPENAI_API_KEY in the Edge Function secrets.",
+        ));
       }
-      const draft = await askModel(material);
+      const draft = await askModel(material, startedAt);
       written = validate(draft, material, person.ms365_mailbox);
       usedModel = true;
     }
@@ -352,18 +481,63 @@ Deno.serve(async (req) => {
       console.error(
         `sources audit failed for ${person.ms365_mailbox}: populated with no source: ${untraceable.join(", ")}`,
       );
-      return json({
-        error: "Composed a field with no source — refusing to return it",
-        fields: untraceable,
-      }, 500);
+      // A genuine bug, and one that must not be retried: the same input will
+      // compose the same untraceable field every time. 500 with a code that
+      // says which bug it is.
+      return fail(
+        new ProfileError(
+          "sources_audit_failed",
+          500,
+          "Composed a field with no source — refusing to return it",
+        ),
+        { fields: untraceable },
+      );
     }
 
     return json({ ok: true, skipped: false, usedModel, model: usedModel ? MODEL : null, row });
   } catch (err) {
+    // The line this whole change exists for. Before, every throw landed here
+    // and became a 500 — including `new Error("rate_limited")`, which is the
+    // one failure in the set that is neither our fault nor permanent. A
+    // ProfileError already knows what it is; anything else genuinely is a bug
+    // in this function and keeps the 500 it always had.
+    if (err instanceof ProfileError) {
+      console.error(`build-prospect-profile ${err.code} after ${err.attempts} attempt(s): ${err.message}`);
+      return fail(err);
+    }
     console.error(err);
-    return json({ error: String(err instanceof Error ? err.message : err) }, 500);
+    return fail(new ProfileError(
+      "internal_error",
+      500,
+      String(err instanceof Error ? err.message : err),
+    ));
   }
 });
+
+// One shape for every failure, so a caller can branch on `code` and never has
+// to read `error` to find out what happened. `Retry-After` is a real header as
+// well as a body field: the header is what a proxy or an HTTP client honours
+// automatically, the body field is what survives a client that does not expose
+// headers to script (a browser, without the explicit expose list below).
+function fail(err: ProfileError, extra: Record<string, unknown> = {}): Response {
+  const retryAfterSeconds = err.retryAfterMs === null
+    ? null
+    : Math.max(1, Math.ceil(err.retryAfterMs / 1000));
+
+  const headers: Record<string, string> = {};
+  if (retryAfterSeconds !== null) {
+    headers["Retry-After"] = String(retryAfterSeconds);
+    headers["Access-Control-Expose-Headers"] = "Retry-After";
+  }
+
+  return json({
+    error: err.message,
+    code: err.code,
+    retryable: err.retryable,
+    ...(retryAfterSeconds !== null ? { retry_after: retryAfterSeconds } : {}),
+    ...extra,
+  }, err.status, headers);
+}
 
 // ============================================================
 // Input handling
@@ -582,7 +756,243 @@ type Written = {
   skills: string[];
 };
 
-async function askModel(m: Material): Promise<Written> {
+// Retries the transient half of the taxonomy, in-process, and gives up early
+// rather than late. `startedAt` is the invocation's start, not this function's:
+// the budget being protected is the Edge Function's wall clock, and it has
+// already been running for the auth lookup by the time we get here.
+async function askModel(m: Material, startedAt: number): Promise<Written> {
+  let attempt = 0;
+  for (;;) {
+    attempt++;
+    let failure: ProfileError;
+    try {
+      return await askModelOnce(m);
+    } catch (err) {
+      // `askModelOnce` already classifies everything it knows about — including
+      // a fetch that never completed. So anything arriving here unclassified is
+      // a defect in this file (a JSON.parse over a malformed body, say), and it
+      // must NOT be swept into the retryable bucket: retrying a bug three times
+      // is three times the cost and the same wrong answer, reported as though
+      // the network were at fault.
+      if (err instanceof ProfileError) {
+        failure = err;
+      } else {
+        console.error("build-prospect-profile: unclassified failure in askModel", err);
+        failure = new ProfileError(
+          "internal_error",
+          500,
+          String(err instanceof Error ? err.message : err),
+        );
+      }
+      failure.attempts = attempt;
+    }
+
+    const plan = planRetry({
+      attempt,
+      maxAttempts: RETRY_MAX_ATTEMPTS,
+      elapsedMs: Date.now() - startedAt,
+      deadlineMs: RETRY_DEADLINE_MS,
+      reserveMs: RETRY_RESERVE_MS,
+      retryable: failure.retryable,
+      retryAfterMs: failure.retryAfterMs,
+      rand: Math.random,
+    });
+
+    if (!plan.retry) {
+      // The distinction the caller needs: we stopped because we ran out of
+      // room, not because the condition cleared. A rate limit that outlives
+      // our budget is still a rate limit, and it leaves here as a 429 with
+      // whatever wait OpenAI asked for — the importer has minutes to spend
+      // where this function has seconds.
+      console.error(
+        `openai attempt ${attempt} failed (${failure.code}); not retrying: ${plan.reason}`,
+      );
+      throw failure;
+    }
+
+    console.warn(
+      `openai attempt ${attempt} failed (${failure.code}); retrying in ${plan.delayMs}ms`,
+    );
+    await sleep(plan.delayMs);
+  }
+}
+
+// ---- Should we go again, and how long do we wait? ---------------------
+//
+// Pure, and separated from the loop so it can be exercised without a network:
+// every input is an argument, including the clock reading and the source of
+// randomness. The three ways it says no are distinguished by `reason` because
+// "we gave up" and "there was nothing to gain" are different operational
+// facts and one of them means raise the budget.
+function planRetry(opts: {
+  attempt: number;
+  maxAttempts: number;
+  elapsedMs: number;
+  deadlineMs: number;
+  reserveMs: number;
+  retryable: boolean;
+  retryAfterMs: number | null;
+  rand: () => number;
+}): { retry: boolean; delayMs: number; reason: string } {
+  if (!opts.retryable) return { retry: false, delayMs: 0, reason: "not_retryable" };
+  if (opts.attempt >= opts.maxAttempts) {
+    return { retry: false, delayMs: 0, reason: "attempts_exhausted" };
+  }
+
+  const delayMs = backoffDelayMs(opts.attempt, opts.retryAfterMs, opts.rand);
+
+  // The reserve is room for the attempt the sleep is *for*. Without it the
+  // budget check passes at 49s, the attempt starts, and the invocation is
+  // killed holding a socket — which reaches the caller as a dead connection
+  // rather than as the 429 it should have been.
+  if (opts.elapsedMs + delayMs + opts.reserveMs > opts.deadlineMs) {
+    return { retry: false, delayMs, reason: "budget_exhausted" };
+  }
+  return { retry: true, delayMs, reason: "retry" };
+}
+
+// Exponential with equal jitter: half the window fixed, half random. Full
+// jitter would be better still for a thundering herd, but the herd here is at
+// most `--concurrency 4` and the fixed half keeps the wait from collapsing to
+// nearly zero on an unlucky draw, which is the failure mode that matters when
+// there are only three attempts to spend.
+//
+// A `Retry-After` from OpenAI wins whenever it asks for longer than we would
+// have waited anyway: it is the only party that knows when the window actually
+// reopens. It is deliberately NOT capped here — `planRetry` compares the
+// result against the remaining budget and declines the retry if it does not
+// fit, which is a more honest answer than sleeping for less than we were told
+// and being refused again.
+function backoffDelayMs(attempt: number, retryAfterMs: number | null, rand: () => number): number {
+  const window = Math.min(RETRY_BASE_MS * 2 ** (attempt - 1), RETRY_CAP_MS);
+  const jittered = Math.round(window / 2 + rand() * (window / 2));
+  return Math.max(jittered, retryAfterMs ?? 0);
+}
+
+// ---- What OpenAI just told us -----------------------------------------
+//
+// Pure: status, body text and the parsed `Retry-After` in, a classified error
+// out. The order matters and is `generate-avatar`'s, with one addition —
+// quota is checked before the rate limit, because OpenAI reports an exhausted
+// balance as HTTP 429 with `insufficient_quota` in the body. Treated as a rate
+// limit it would be retried, backed off, retried again and reported as
+// "busy" forever, when the true answer is that no amount of waiting will fix
+// it and somebody has to go and add credit.
+function triageOpenAI(status: number, detail: string, retryAfterMs: number | null): ProfileError {
+  if (/model_not_found|does not exist|unknown model/i.test(detail)) {
+    return new ProfileError(
+      "model_not_configured",
+      503,
+      "The configured AI model name isn't valid. Set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.",
+    );
+  }
+  if (/insufficient_quota|billing_hard_limit|exceeded your current quota|billing_not_active/i.test(detail)) {
+    return new ProfileError(
+      "quota_exhausted",
+      402,
+      "The AI account has run out of credit. Top up the OpenAI billing account, then run this again.",
+    );
+  }
+  if (status === 401 || status === 403 || /invalid_api_key|incorrect api key/i.test(detail)) {
+    // 503, not 502. 502 would say the upstream misbehaved; a key that OpenAI
+    // rejects is our own configuration being wrong, which is the same class of
+    // thing as the key being absent — and that already answers 503 four lines
+    // up in the handler. Two statuses for one operator action ("go and fix the
+    // secret") would be a distinction with nothing behind it. `profile-form.js`
+    // also already maps 503 to "isn't configured on the server yet", which is
+    // exactly what this is.
+    return new ProfileError(
+      "ai_credentials",
+      503,
+      "The AI service rejected our credentials. Check OPENAI_API_KEY.",
+    );
+  }
+  if (status === 429) {
+    return new ProfileError(
+      "rate_limited",
+      429,
+      "The AI service is rate-limiting us right now. Nothing is wrong with this person's data — try them again in a moment.",
+      { retryable: true, retryAfterMs },
+    );
+  }
+  if (status === 408 || status === 409 || status >= 500) {
+    return new ProfileError(
+      "upstream_error",
+      502,
+      `The AI service couldn't answer just now (its status was ${status}). Try again shortly.`,
+      { retryable: true, retryAfterMs },
+    );
+  }
+  if (status === 400 || status === 422) {
+    // OpenAI understood us and said no. That is this function's request being
+    // wrong, which is a bug here — retrying it would only produce the same
+    // refusal more expensively.
+    return new ProfileError(
+      "upstream_rejected_request",
+      500,
+      "The AI service rejected the request this function sent. That is a bug here, not a problem with the data.",
+    );
+  }
+  return new ProfileError(
+    "upstream_error",
+    502,
+    `The AI service couldn't answer just now (its status was ${status}). Try again shortly.`,
+    { retryable: true, retryAfterMs },
+  );
+}
+
+// `Retry-After` is seconds or an HTTP date. OpenAI also sends
+// `x-ratelimit-reset-requests` / `-tokens` as a duration string ("6m0s",
+// "1.5s", "200ms"), which is often the only one present on a 429 — reading it
+// is the difference between waiting the right amount and guessing.
+//
+// Pure: takes a lookup function and the current time, so it can be tested
+// without a Response and without a clock.
+function parseRetryAfterMs(get: (name: string) => string | null, nowMs: number): number | null {
+  const header = (get("retry-after") ?? "").trim();
+  if (header) {
+    const seconds = Number(header);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+    const at = Date.parse(header);
+    if (Number.isFinite(at)) return Math.max(0, at - nowMs);
+  }
+  for (const name of ["x-ratelimit-reset-requests", "x-ratelimit-reset-tokens"]) {
+    const ms = parseDurationMs((get(name) ?? "").trim());
+    if (ms !== null) return ms;
+  }
+  return null;
+}
+
+// "6m0s", "1.5s", "200ms", "1h2m3s" → milliseconds. Anything that is not
+// wholly made of duration parts returns null rather than a number built out of
+// the parts it recognised: half-parsing "soon" into 0 would look like an
+// instruction to retry immediately.
+function parseDurationMs(v: string): number | null {
+  if (!v) return null;
+  const re = /(\d+(?:\.\d+)?)(ms|s|m|h)/gy;
+  const unit: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 };
+  let total = 0;
+  let end = 0;
+  let matched = false;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(v)) !== null) {
+    total += Number(match[1]) * unit[match[2]];
+    // Recorded inside the loop, not read off `re` afterwards: a sticky regex
+    // resets `lastIndex` to 0 the moment `exec` fails, which is exactly when
+    // this loop ends. Reading it after the loop compares 0 against the string
+    // length and rejects every well-formed duration there is.
+    end = re.lastIndex;
+    matched = true;
+  }
+  if (!matched || end !== v.length) return null;
+  return Math.round(total);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function askModelOnce(m: Material): Promise<Written> {
   // Built key by key rather than passing `Material` through, so that a field
   // added to the harvest later — or to `distil` — cannot quietly start
   // appearing in prompts. `linkedin_url` is NOT here: see the header. Nor are
@@ -613,50 +1023,90 @@ async function askModel(m: Material): Promise<Written> {
     bioNote,
   ].join("\n");
 
-  const res = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Authorization": "Bearer " + OPENAI_API_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      instructions: SYSTEM_PROMPT,
-      max_output_tokens: 1500,
-      input: [{ role: "user", content: [{ type: "input_text", text: userPrompt }] }],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "prospect_profile",
-          strict: true,
-          schema: PROFILE_SCHEMA,
-        },
+  // One hung socket must not be allowed to spend the whole invocation: the
+  // caller would get a killed connection, which carries none of the triage
+  // below. Aborted attempts are retryable — a timeout is the most transient
+  // thing in the set.
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), ATTEMPT_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      signal: abort.signal,
+      headers: {
+        "Authorization": "Bearer " + OPENAI_API_KEY,
+        "Content-Type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        model: MODEL,
+        instructions: SYSTEM_PROMPT,
+        max_output_tokens: 1500,
+        input: [{ role: "user", content: [{ type: "input_text", text: userPrompt }] }],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "prospect_profile",
+            strict: true,
+            schema: PROFILE_SCHEMA,
+          },
+        },
+      }),
+    });
+  } catch (err) {
+    const aborted = abort.signal.aborted;
+    console.error("OpenAI request failed: " + String(err instanceof Error ? err.message : err));
+    throw new ProfileError(
+      aborted ? "upstream_timeout" : "upstream_unreachable",
+      502,
+      aborted
+        ? "The AI service took too long to answer. Try again shortly."
+        : "Couldn't reach the AI service just now. Try again shortly.",
+      { retryable: true },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const detail = await res.text();
     console.error("OpenAI " + res.status + ": " + detail.slice(0, 500));
-    if (/model_not_found|does not exist|unknown model/i.test(detail)) {
-      throw new Error("The configured AI model name isn't valid. Set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.");
-    }
-    if (res.status === 401) throw new Error("The AI service rejected our credentials. Check OPENAI_API_KEY.");
-    if (res.status === 429) throw new Error("rate_limited");
-    throw new Error("OpenAI " + res.status);
+    throw triageOpenAI(
+      res.status,
+      detail,
+      parseRetryAfterMs((n) => res.headers.get(n), Date.now()),
+    );
   }
 
   const data = await res.json();
   const message = (data.output ?? []).find((o: { type?: string }) => o.type === "message");
   const parts = message?.content ?? [];
   if (parts.some((p: { type?: string }) => p.type === "refusal")) {
-    throw new Error("The model declined this one");
+    // A judgement about this person's text, not a hiccup. Retrying asks the
+    // same question again and pays for the same answer, so it is not retried
+    // and it is not a 500 — nothing is broken. 422: we sent something the
+    // model would not act on.
+    throw new ProfileError("model_refused", 422, "The model declined this one");
   }
   if (data.status === "incomplete") {
-    throw new Error("Ran out of output tokens before finishing");
+    // Deterministic: the same input hits the same `max_output_tokens` ceiling
+    // every time. A bug here (the budget is too small for this input), not a
+    // transient upstream condition.
+    throw new ProfileError("output_truncated", 500, "Ran out of output tokens before finishing");
   }
   const textPart = parts.find((p: { type?: string }) => p.type === "output_text");
-  if (!textPart?.text) throw new Error("Nothing came back");
+  if (!textPart?.text) {
+    // An empty 200 is the upstream misbehaving rather than refusing, and it
+    // does clear on a second ask — so unlike the two above, this one is
+    // retryable.
+    throw new ProfileError(
+      "upstream_bad_response",
+      502,
+      "Nothing came back from the AI service. Try again shortly.",
+      { retryable: true },
+    );
+  }
 
   const parsed = JSON.parse(textPart.text);
   return {
@@ -932,9 +1382,9 @@ function letters(s: string): string {
   return String(s ?? "").replace(/[^\p{L}]/gu, "");
 }
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json", ...extraHeaders },
   });
 }
