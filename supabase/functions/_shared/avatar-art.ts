@@ -97,15 +97,66 @@ export const HOUSE_STYLE = [
 // forward from the previous drawing.
 export type PromptMode = "photo" | "avatar";
 
+// ---- The variant rota -------------------------------------------------
+
+// Three tries used to mean three near-identical pictures. The prompt was the
+// same on every attempt, and an image model handed the same prompt twice
+// produces the same drawing with a different seed — so "generate another" gave
+// a member noise rather than a choice, and they spent their allowance
+// discovering that.
+//
+// These are ACCENTS ON ONE IDENTITY, not three art directions. Everything that
+// makes the wall one wall — the illustrated house style, the violet-to-cyan
+// gradient, the month's theme, the member's own interests — is stated above
+// and stays stated. What rotates is framing, which end of the palette leads,
+// and how the background is handled. That is enough for three visibly
+// different pictures of the same person in the same club, and small enough
+// that a member's three tries still all belong on the same directory page.
+//
+// The wording is deliberately phrased as a refinement rather than as a new
+// instruction, because HOUSE_STYLE has already said "head and shoulders fill
+// the frame" and "clean smooth gradient background". Two prompt lines that
+// flatly contradict each other are two lines the model gets to choose between,
+// which is how you get a rota that quietly does nothing.
+const VARIANTS = [
+  "a close crop — the head fills most of the frame and the shoulders only just " +
+    "enter at the bottom; let the violet end of the gradient lead, with the cyan " +
+    "kept back as a rim accent; the background stays a plain, smooth, unbroken " +
+    "gradient with nothing in it",
+  "a classic head-and-shoulders, with a little air above the head; let the cyan " +
+    "end of the gradient lead, with the violet as the deeper accent underneath; " +
+    "the background carries a few large, soft, low-contrast geometric shapes — " +
+    "simple arcs and circles, well away from the face",
+  "a slightly wider view — the upper chest is in frame and there is clear space " +
+    "around the head; hold violet and cyan in even balance; the background is a " +
+    "gentle depth-of-field wash, softly blurred and a little deeper at the edges " +
+    "so the face still reads first",
+];
+
+// The attempt index (0, 1, 2) from generate-avatar, but tolerant of anything:
+// a negative, a fraction or a NaN should produce a portrait, not an exception
+// halfway through a paid image call.
+function variantTreatment(variant: number): string {
+  const n = Number.isFinite(variant) ? Math.trunc(variant) : 0;
+  const i = ((n % VARIANTS.length) + VARIANTS.length) % VARIANTS.length;
+  return VARIANTS[i];
+}
+
 // Built from the member's own interests, skills and industry, so that a wall
 // of avatars in one house style is still a wall of different people. The
 // interests come in as subtle props and colour accents rather than costumes:
 // "interested in aviation" should not produce a pilot's uniform, it should
 // produce a hint of sky in the palette.
+//
+// `variant` is optional and trailing on purpose. refresh-avatars calls this
+// with three arguments and must keep compiling untouched — the monthly job
+// draws one picture per member and has nothing to vary between, so variant 0
+// is the right answer for it and it should not have to say so.
 export function buildPrompt(
   profile: Record<string, unknown>,
   theme: string,
   mode: PromptMode = "photo",
+  variant: number = 0,
 ): string {
   const interests = tidyList(profile.interests, 4);
   const skills = tidyList(profile.skills, 3);
@@ -130,6 +181,15 @@ export function buildPrompt(
     ? `This month's accent: ${theme}. Apply it to the lighting and to the secondary colours only — the violet-to-cyan gradient remains the dominant background and the club's identity.`
     : "";
 
+  // Last of the accents, and the narrowest. Stated as a refinement of the
+  // framing and background already described rather than as a replacement for
+  // them, and with the identity restated afterwards so that a rota entry
+  // asking for a wider crop cannot be read as permission to change the style.
+  const treatment =
+    `For this version, treat the composition as follows: ${variantTreatment(variant)}. ` +
+    "Where that differs in degree from the framing or background above, follow this line — " +
+    "but the illustration style, the club's violet-to-cyan identity and this month's accent are unchanged.";
+
   // The opening line and the closing guard both depend on what the input
   // image actually is, which is the one real difference between the two
   // callers.
@@ -144,7 +204,7 @@ export function buildPrompt(
       // somebody else is worse than not refreshing at all.
       "Keep the same person clearly recognisable — same face, same hair, same skin tone, same apparent age. Only the lighting, palette accents and background treatment change.";
 
-  return [opening, HOUSE_STYLE, personal, context, seasonal, closing]
+  return [opening, HOUSE_STYLE, personal, context, seasonal, treatment, closing]
     .filter(Boolean)
     .join(" ");
 }
