@@ -127,6 +127,10 @@
   }
   .dash-pc-state.info { background: rgba(56,189,248,0.1); border: 1px solid rgba(56,189,248,0.3); color: #7dd3fc; }
   .dash-pc-state.ok { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: #4ade80; }
+  /* Third hue, for the one thing on this card that can actually go wrong: a
+     background drawing that failed. Same pair .dash-status.err already uses,
+     because the dark-theme ink measures 1.36:1 on the light card without it. */
+  .dash-pc-state.err { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.35); color: #fca5a5; }
   .dash-pc-state svg { flex-shrink: 0; margin-top: 1px; }
 
   /* ---- Forms ---- */
@@ -213,6 +217,7 @@
   html.light-mode .dash-pill.status-active,
   html.light-mode .dash-pc-state.ok,
   html.light-mode .dash-status.ok { color: #166534; }
+  html.light-mode .dash-pc-state.err,
   html.light-mode .dash-status.err { color: #b91c1c; }
   html.light-mode .dash-count-num.is-low { color: #92620a; }
   .dash-mailbox { font-size: 16px; font-weight: 700; color: var(--text); word-break: break-all; }
@@ -391,6 +396,16 @@
         <div class="dash-pc-state info" id="pc-state" role="status">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6v.4"/></svg>
           <span id="pc-state-text"></span>
+        </div>
+
+        <!-- Where a drawing started somewhere else reports in. Saving the form
+             with a photo staged kicks a generation off and returns the member
+             straight here, so this card is the thing that has to notice when
+             the picture lands — it repaints the avatar above and this line
+             disappears. Hidden whenever nothing is happening. -->
+        <div class="dash-pc-state info hidden" id="pc-drawing" role="status">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5V12l3 2"/></svg>
+          <span id="pc-drawing-text"></span>
         </div>
 
         <p style="margin-top:14px;">
@@ -647,12 +662,18 @@
   import {
     loadCountries, loadTagSuggestions, suggestionsFor, fillCountrySelect,
     createTagPicker, connectHint, onConnectHintJump, createAvatarControl,
-    mergeExtracted, OPEN_TO, nullIfBlank, intOrNull,
+    avatarIsDrawing, mergeExtracted, saveErrorMessage, OPEN_TO, nullIfBlank, intOrNull,
   } from "../lib/profile-form.js";
 
   var session = null;
   var profileSource = null;   // set only when a document filled the form in
   var profileRow = {};        // the row as loaded, so we only send columns that exist
+  // profiles.work_history (0023). There is no editor for it in this form yet,
+  // so unlike every other field it has no DOM element to live in — it is read
+  // off the row or off a CV import and carried through to the save. Losing it
+  // between the two would mean reading a member's whole career and throwing it
+  // away again, which is the thing 0023 exists to stop.
+  var workHistory = [];
   var pickers = {};
   var avatar = null;
 
@@ -868,21 +889,73 @@
     if (avatar) avatar.focus();
   });
 
+  // The line on the card that reports a drawing running somewhere else. It is
+  // the card's half of the reveal: the form panel may well be hidden by the
+  // time the picture lands, because saving sends the member back here.
+  function showDrawingLine(kind, message) {
+    var box = document.getElementById("pc-drawing");
+    box.classList.toggle("hidden", !message);
+    box.classList.remove("info", "err");
+    box.classList.add(kind || "info");
+    document.getElementById("pc-drawing-text").textContent = message || "";
+  }
+
   function buildAvatar() {
-    // Saves as soon as a photo is chosen rather than waiting for the form's
-    // Save button — generate-avatar stores the drawing itself, so there is
-    // nothing for the submit to carry. The card behind the form is re-rendered
-    // so the member sees the new picture when they go back.
+    // `deferOnSave` — a chosen photo is held until the form is saved, and the
+    // save starts the drawing. This is Ahmed's ask: since 0026 the generation
+    // runs on the server after a 202, so there is nothing left worth making a
+    // member sit through. They save, they land back on the card, and the
+    // portrait appears underneath them when it is done.
+    //
+    // onStatus is how it appears. The control keeps polling the member's own
+    // row after the form panel has been hidden — hiding a panel does not stop
+    // its JavaScript — and hands each settled read here, so the card repaints
+    // itself with no reload and no realtime subscription.
     avatar = createAvatarControl({
       root: document.getElementById("f-avatar"),
       session: session,
       profile: profileRow,
       providers: sessionPhotoProviders(session),
+      deferOnSave: true,
       onChange: function (url) {
         profileRow.avatar_url = url;
         renderProfileCard(profileRow);
       },
+      onStatus: function (row, outcome) {
+        if (row) {
+          if (row.avatar_url) profileRow.avatar_url = row.avatar_url;
+          profileRow.avatar_status = row.avatar_status;
+          profileRow.avatar_error = row.avatar_error;
+          profileRow.avatar_gallery = row.avatar_gallery;
+          profileRow.avatar_attempts = row.avatar_attempts;
+          profileRow.avatar_cycle = row.avatar_cycle;
+          renderProfileCard(profileRow);
+        }
+        if (outcome === "ready") {
+          showDrawingLine("info", "");
+          return;
+        }
+        if (outcome === "failed") {
+          // Already a sentence written for the member — 0026 says so of the
+          // column, and generate-avatar writes it that way.
+          showDrawingLine("err", (row && row.avatar_error) ||
+            "That drawing didn't work out. Your try has been given back.");
+          return;
+        }
+        if (outcome === "timeout" || outcome === "stopped" || outcome === "blocked") {
+          // Not a failure. We stopped watching; the drawing did not stop.
+          showDrawingLine("info",
+            "Still drawing — it'll appear here shortly. Reload the page in a moment to see it.");
+          return;
+        }
+        showDrawingLine("info", "Drawing your portrait — it'll appear here when it's done.");
+      },
     });
+    // A drawing that was already running when this page opened. The control
+    // picks the watch up on its own; this is only the card catching up.
+    if (avatarIsDrawing(profileRow)) {
+      showDrawingLine("info", "Drawing your portrait — it'll appear here when it's done.");
+    }
   }
 
   // ---- Profile panels ---------------------------------------------------
@@ -972,6 +1045,7 @@
     document.getElementById("f-industry").value = p.industry || "";
     document.getElementById("f-timezone").value = p.timezone || "";
     document.getElementById("f-language").value = p.language || "";
+    workHistory = Array.isArray(p.work_history) ? p.work_history : [];
     setOpenTo(p.open_to || []);
     if (pickers.skills) pickers.skills.set(p.skills || []);
     if (pickers.interests) pickers.interests.set(p.interests || []);
@@ -1002,6 +1076,9 @@
       timezone: nullIfBlank(document.getElementById("f-timezone").value),
       language: nullIfBlank(document.getElementById("f-language").value),
       open_to: readOpenTo(),
+      // Listed here so mergeExtracted's default allowlist covers it and an
+      // imported work history reaches fillForm like any other field.
+      work_history: workHistory,
       skills: pickers.skills ? pickers.skills.get() : [],
       interests: pickers.interests ? pickers.interests.get() : [],
       goals: pickers.goals ? pickers.goals.get() : [],
@@ -1049,6 +1126,14 @@
       fillForm(mergeExtracted(readForm(), data.profile));
 
       profileSource = file.name.toLowerCase().indexOf("linkedin") !== -1 ? "linkedin_pdf" : "cv";
+      // Work history has no control in this form to review it in, so say what
+      // was read rather than saving it invisibly. Everything else on this
+      // screen the member can see and correct; this they cannot yet.
+      reviewBanner.textContent = workHistory.length
+        ? "Here's what we read from your document, including " + workHistory.length +
+          (workHistory.length === 1 ? " past role" : " roles") + " of work history. " +
+          "Check the fields over and fix anything that's off — nothing is saved until you press Save below."
+        : "Here's what we read from your document. Check it over and fix anything that's off — nothing is saved until you press Save below.";
       reviewBanner.classList.remove("hidden");
       showProfilePanel(formCard);
     };
@@ -1074,18 +1159,52 @@
     // that does not exist fails the whole statement, taking the unrelated
     // fields down with it.
     var patch = {};
+    var dropped = [];
     Object.keys(values).forEach(function (k) {
       if (Object.prototype.hasOwnProperty.call(profileRow, k)) patch[k] = values[k];
+      else dropped.push(k);
     });
+
+    // The filter above is a safety net that can hide a real failure. If 0023
+    // has not been applied, `work_history` is simply not a key on the loaded
+    // row, so a career read off a CV is dropped here without a word and the
+    // member is then told "Saved." — the save did happen, but not the part
+    // they uploaded a document for. Refuse rather than lie; the rest of the
+    // form is untouched and saves fine on the next press once 0023 is in.
+    if (dropped.indexOf("work_history") !== -1 && values.work_history.length) {
+      saveBtn.disabled = false;
+      showStatus(
+        "profile-status",
+        "Your work history can't be saved yet — this database is missing the " +
+        "work_history column, so migration 0023 hasn't been applied. Nothing " +
+        "was saved just now, so nothing has been lost.",
+        "err"
+      );
+      return;
+    }
 
     var { error } = await supabase.from("profiles").update(patch).eq("user_id", session.user.id);
 
     saveBtn.disabled = false;
     if (error) {
-      showStatus("profile-status", "Couldn't save: " + esc(error.message), "err");
+      // error.message is the database talking to whoever wrote the query
+      // ("permission denied for column work_history of relation profiles").
+      // saveErrorMessage turns the codes that actually occur here — a missing
+      // column, a missing column grant — into something a member can act on,
+      // and logs the original for whoever has to fix it.
+      console.error("profile save failed", error);
+      showStatus("profile-status", esc(saveErrorMessage(error)), "err");
       return;
     }
-    showStatus("profile-status", "Saved. Taking you back to your dashboard…", "ok");
+    var drawing = Boolean(avatar && avatar.hasStagedPhoto());
+    showStatus(
+      "profile-status",
+      drawing
+        ? "Saved. We're drawing your portrait — it'll appear on your profile in a moment, and " +
+          "you don't have to wait here for it."
+        : "Saved. Taking you back to your dashboard…",
+      "ok"
+    );
     reviewBanner.classList.add("hidden");
 
     Object.keys(patch).forEach(function (k) { profileRow[k] = patch[k]; });
@@ -1093,10 +1212,32 @@
     document.getElementById("dash-greeting").textContent =
       "Welcome, " + (patch.full_name || "there");
 
+    // Generating on save. The request goes now; generate-avatar answers 202 as
+    // soon as it has reserved the attempt and draws in the background, so this
+    // is not awaited past that point — the member leaves for the card below and
+    // the control's own watch reports in through onStatus when the picture is
+    // ready. That is the whole of "removes the wait entirely": nothing on this
+    // page blocks on an image.
+    if (drawing) {
+      showDrawingLine("info", "Drawing your portrait — it'll appear here when it's done.");
+      avatar.startStagedGeneration();
+    }
+
     // Saving is the end of the task, so it should end somewhere — leaving the
     // member sitting in the form they just finished makes them wonder whether
-    // it took. Long enough to read "Saved.", short enough not to feel stuck.
-    setTimeout(function () { showSection("overview"); }, 1200);
+    // it took. Back to the profile card, which is where the finished portrait
+    // is revealed. Long enough to read the line above, short enough not to
+    // feel stuck.
+    //
+    // This used to call showSection("overview"). There is no "overview"
+    // section — the four are profile, membership, ms365 and events — so it hid
+    // every one of them and set the subheading to the string "undefined",
+    // leaving a member who had just saved staring at an empty page. The panel,
+    // not the section, is what "back to the dashboard" meant here.
+    setTimeout(function () {
+      showProfilePanel(cardPanel);
+      showSection("profile");
+    }, 1200);
   });
 
   // ---- Membership -------------------------------------------------------

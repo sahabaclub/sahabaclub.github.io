@@ -95,29 +95,65 @@ It defaults to `members@sahabaclub.com`.
 
 ## 5. Phase 2 — AI profile import and newsletters
 
-**Anthropic API key** for reading CVs and LinkedIn PDF exports: create one
-at [console.anthropic.com](https://console.anthropic.com).
+**OpenAI API key.** Every AI function in the project reads `OPENAI_API_KEY` —
+there is no Anthropic key anywhere in the code. Create one at
+[platform.openai.com](https://platform.openai.com/api-keys).
+
+This one secret covers `parse-profile-document` (reading CVs and LinkedIn PDF
+exports), `write-member-intro`, `write-contact-email`, `import-event`,
+`generate-avatar` and `refresh-avatars`. `send-newsletter` needs no AI key —
+it only needs the Resend secrets from step 4.
 
 ```bash
-supabase functions secrets set ANTHROPIC_API_KEY=...
+supabase functions secrets set OPENAI_API_KEY=...
+
+# Optional, and read by four functions: parse-profile-document,
+# import-event, write-contact-email and write-member-intro. Defaults to
+# gpt-5 in all four. Set it if your account cannot use that name, so a
+# model rename is a dashboard edit rather than a redeploy — the functions
+# say so by name when OpenAI rejects the model.
+supabase functions secrets set OPENAI_MODEL=gpt-5
+
+# Optional, for the two image functions (generate-avatar, import-event).
+# Defaults to gpt-image-1; set it if your account uses another image model.
+supabase functions secrets set OPENAI_IMAGE_MODEL=gpt-image-1
 
 supabase functions deploy parse-profile-document
 supabase functions deploy send-newsletter
 ```
 
+If `parse-profile-document` reports "Document import isn't configured yet"
+with a key apparently set, it is looking for `OPENAI_API_KEY` — an
+`ANTHROPIC_API_KEY` secret does nothing here.
+
+**Run migration `0023` for work history.** `parse-profile-document` reads a
+CV's whole employment history and returns it as `work_history`, but it never
+writes to `profiles` itself — the member's Save does. That needs
+`0023_profile_history_and_hackathons.sql`, both for the column and for the
+`grant update (work_history)` on it. Until 0023 is applied the import still
+works and the dashboard refuses the save with a message naming this migration,
+rather than reporting "Saved." over a career it quietly dropped.
+
+If you are deploying `parse-profile-document` from the **dashboard editor**
+rather than the CLI, deploy its `index.deploy.ts` rather than `index.ts`, for
+the same reason as `generate-avatar` below. Regenerate it whenever `index.ts`
+changes: it is `index.ts` with the `../_shared/cors.ts` import line replaced by
+the `corsHeaders` object inline, and nothing else.
+
 **Avatars.** `generate-avatar` turns a member's photo into an illustrated
-club-style portrait and then discards the photo. It needs an OpenAI key,
-because it is the one function that generates images:
+club-style portrait and then discards the photo. It uses the same
+`OPENAI_API_KEY` as everything above, plus `OPENAI_IMAGE_MODEL`:
 
 ```bash
-supabase functions secrets set OPENAI_API_KEY=...
-# Optional. Defaults to gpt-image-1; set it if your account uses another
-# image model, so a rename is a dashboard edit rather than a redeploy.
-supabase functions secrets set OPENAI_IMAGE_MODEL=gpt-image-1
-
 supabase functions deploy generate-avatar
 supabase functions deploy refresh-avatars
 ```
+
+**Run migration `0026` first.** `generate-avatar` writes `avatar_status`,
+`avatar_error` and `avatar_gallery` on every run, including the very first
+UPDATE that reserves the attempt. Deploy it against a database that has not
+had `0026_avatar_gallery_and_status.sql` applied and every generation fails
+with "column avatar_status does not exist" before it reaches OpenAI.
 
 If you are deploying from the **dashboard editor** rather than the CLI,
 deploy `supabase/functions/generate-avatar/index.deploy.ts` instead of

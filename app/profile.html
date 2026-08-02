@@ -439,18 +439,28 @@
 
     fillCountrySelect(el("f-country"), countries, data.country);
 
-    // Saves itself the moment a photo is chosen rather than waiting for the
-    // form's Save button — the avatar is stored by generate-avatar (or, for
-    // the initials tile, written directly), so there is nothing for the form
-    // submit to carry. `loaded.avatar_url` is kept in step so the Connect
-    // line re-reads correctly without a round trip.
+    // `deferOnSave` — a chosen photo is held rather than drawn on the spot, and
+    // the save below starts the drawing. Since 0026 that generation runs on the
+    // server after a 202, so starting it as the member finishes the form costs
+    // them nothing: they carry on, and the portrait lands on the profile on its
+    // own. The initials tile is unaffected — it is drawn here, costs nothing and
+    // has nothing to wait for, so it still applies immediately.
+    //
+    // `loaded.avatar_url` is kept in step both ways so the Connect line re-reads
+    // correctly without a round trip: onChange for anything the member picks,
+    // onStatus for a drawing that finishes while they are still on this page.
     avatar = createAvatarControl({
       root: el("f-avatar"),
       session: session,
       profile: data,
       providers: sessionPhotoProviders(session),
+      deferOnSave: true,
       onChange: function (url) {
         loaded.avatar_url = url;
+        refreshConnectState();
+      },
+      onStatus: function (row) {
+        if (row && row.avatar_url) loaded.avatar_url = row.avatar_url;
         refreshConnectState();
       },
     });
@@ -573,6 +583,18 @@
 
     Object.keys(patch).forEach(function (k) { loaded[k] = patch[k]; });
     refreshConnectState();
+
+    // Generating on save is the whole point of the change: the request is sent
+    // here, generate-avatar answers 202 the moment it has reserved the attempt,
+    // and the drawing happens on the server. Deliberately not awaited past that
+    // — the member is finished with this form and should not be held on it, and
+    // the control follows the row to the end by itself if they stay.
+    if (avatar && avatar.hasStagedPhoto()) {
+      showStatus("Saved. We're drawing your portrait now — it'll appear on your profile shortly, " +
+        "and you don't have to wait here for it.", "ok");
+      avatar.startStagedGeneration();
+      return;
+    }
     showStatus("Saved.", "ok");
   });
 </script>
