@@ -20,6 +20,15 @@
 // what produced "UAE" and "United Arab Emirates" as two separate countries and
 // made filtering by either of them useless.
 //
+// Work history (profiles.work_history, added in 0023) is the other half of
+// that. `company` and `position` hold one job; a CV is mostly the twelve years
+// before it, and all of it used to be read and then thrown away. 0023 stores it
+// as jsonb and deliberately puts no CHECK on the structure — "a CHECK on jsonb
+// structure would reject a perfectly good import over a field order nobody
+// sees" — which makes this function the only place the shape is enforced. See
+// normaliseWorkHistory below: dates coerced to YYYY-MM, is_current reconciled
+// against the end date, lengths capped, order imposed here rather than trusted.
+//
 // Uses OpenAI's Responses API over plain fetch rather than the SDK: one HTTP
 // call, no npm/esm.sh version to drift out from under the deployment.
 //
@@ -54,6 +63,33 @@ const OPEN_TO_VALUES = ["mentoring", "collaborating", "hiring", "speaking"];
 // here means a nonsense number is visible in the review step rather than
 // surfacing much later as a failed save.
 const MAX_YEARS_EXPERIENCE = 60;
+
+// Caps on profiles.work_history. 0023 stores it as jsonb with no CHECK, and
+// the member's own row is what gets written, so an adversarial CV — or just a
+// twenty-page academic one — must not be able to push an unbounded blob into
+// it. Twenty roles covers a forty-year career with room to spare; anything
+// past that is padding or an attack. Worst case is roughly 20 KB of JSON.
+const MAX_WORK_HISTORY = 20;
+const MAX_WORK_TEXT = 200;      // company, position
+const MAX_WORK_SUMMARY = 600;   // one or two sentences, generously
+
+// A role dated 1743 or 2087 is a misread, not a job. Anything outside this
+// becomes null, the same as an unparseable date.
+const MIN_WORK_YEAR = 1900;
+
+// Both spellings appear on CVs and both have to resolve to the same month.
+const MONTHS: Record<string, number> = {
+  jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3,
+  apr: 4, april: 4, may: 5, jun: 6, june: 6, jul: 7, july: 7,
+  aug: 8, august: 8, sep: 9, sept: 9, september: 9, oct: 10, october: 10,
+  nov: 11, november: 11, dec: 12, december: 12,
+};
+
+// "Present", "Current", "Ongoing" and friends are not dates — they are the
+// document saying the role has no end. They become null, and it is is_current
+// that carries the meaning.
+const OPEN_ENDED =
+  /^(present|current|currently|now|ongoing|to\s*date|till\s*date|until\s*now|to\s*present)$/i;
 
 type Admin = ReturnType<typeof createClient>;
 
@@ -94,11 +130,35 @@ const PROFILE_SCHEMA = {
       items: { type: "string", enum: OPEN_TO_VALUES },
       description: "Only the things the document actually signals this person is open to. \"Mentored junior developers\" earns mentoring; \"open to collaboration\" earns collaborating; recruiting or team-building responsibilities earn hiring; offering to speak or a record of talks earns speaking. A senior title on its own earns none of them. An empty array is the ordinary answer.",
     },
+    // The one field the schema was missing, and the one a CV is mostly made
+    // of. `end` is a string rather than a nullable type because strict mode
+    // is easier to satisfy with the same "" convention every other optional
+    // field here uses; normaliseWorkHistory turns "" into the null 0023
+    // documents. Nothing below is trusted — the model is asked for the right
+    // shape because asking is cheap, and then the answer is rebuilt anyway.
+    work_history: {
+      type: "array",
+      description: "Every distinct role the document dates or describes, most recent first, including the current one. Education, certifications, awards and unpaid volunteering do not belong here — only employment, contracting and internships. Return an empty array if the document lists no roles.",
+      items: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "The organisation the role was at, as the document writes it. Empty string only if the document genuinely does not name one." },
+          position: { type: "string", description: "The job title held in that role, e.g. Solutions Architect. Empty string only if the document gives no title." },
+          start: { type: "string", description: "When the role started, as \"YYYY-MM\" — e.g. \"2021-03\". If the document gives only a year, return just \"YYYY\". If it gives no start date at all, return an empty string. Do not invent a month." },
+          end: { type: "string", description: "When the role ended, in the same format as start. Return an empty string if the role is still held — never write \"Present\", \"Current\" or today's date." },
+          is_current: { type: "boolean", description: "True only for a role the person still holds. If you set this true, end must be an empty string. Exactly one role is usually current, and a CV whose most recent role has an end date has none." },
+          summary: { type: "string", description: "One or two sentences on what they did in that role, in the third person, drawn from the bullet points under it. Empty string if the document only gives a title and dates." },
+        },
+        required: ["company", "position", "start", "end", "is_current", "summary"],
+        additionalProperties: false,
+      },
+    },
   },
   required: [
     "full_name", "headline", "bio", "experience_level", "industry",
     "company", "position", "years_experience", "city", "country",
     "timezone", "language", "skills", "interests", "goals", "open_to",
+    "work_history",
   ],
   additionalProperties: false,
 } as const;
@@ -109,7 +169,9 @@ Fill each field only from what the document actually says. Where the document gi
 
 Working things out from what is written is not inventing: years of experience should be counted from dated roles, and a headline should be composed from their actual work. Putting in something the document does not support is.
 
-Keep skills and interests as short, individually meaningful tags ("Power Apps", "Copilot Studio") rather than sentences, since they are used for filtering and matching.`;
+Keep skills and interests as short, individually meaningful tags ("Power Apps", "Copilot Studio") rather than sentences, since they are used for filtering and matching.
+
+WORK HISTORY. Return every employment entry the document contains, not just the current one — a CV is mostly this, and the rest of the profile only holds one job. One entry per role: a promotion within the same employer is a separate role if the document dates it separately, and a single role is not split across entries. Give dates as the document gives them, reduced to year and month ("2021-03"), or to just the year when that is all it says. If a role is still held, set is_current true and leave end empty rather than writing "Present". "company" and "position" must agree with the top-level company and position fields for whichever entry is current.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -354,7 +416,155 @@ function reconcile(raw: unknown, countries: string[], tags: string[]): Record<st
         .filter((v) => OPEN_TO_VALUES.includes(v))
     : [];
 
+  // Always present, even as [], so the review step and the save path never
+  // have to distinguish "the model returned nothing" from "this deployment
+  // predates work history".
+  profile.work_history = normaliseWorkHistory(profile.work_history);
+
   return profile;
+}
+
+// ---- Work history ------------------------------------------------------
+
+type WorkEntry = {
+  company: string;
+  position: string;
+  start: string | null;
+  end: string | null;
+  is_current: boolean;
+  summary: string;
+};
+
+// 0023 stores this as jsonb with no CHECK on its structure, on purpose, so
+// this function is where the shape is actually decided. Everything the model
+// sent is treated as a suggestion: dates are re-parsed, is_current is
+// recomputed, order is imposed, and the whole thing is capped.
+function normaliseWorkHistory(raw: unknown): WorkEntry[] {
+  if (!Array.isArray(raw)) return [];
+
+  const entries: WorkEntry[] = [];
+
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+
+    const company = clip(row.company, MAX_WORK_TEXT);
+    const position = clip(row.position, MAX_WORK_TEXT);
+
+    // A row with neither an employer nor a title says nothing a member would
+    // want on their profile, whatever else it carries.
+    if (!company && !position) continue;
+
+    const start = toYearMonth(row.start);
+    const end = toYearMonth(row.end);
+
+    // The one contradiction the model can produce that the member cannot see
+    // the consequences of. An end date is something the document said; the
+    // is_current flag is the model's inference about it, so the date wins and
+    // the flag is corrected rather than the entry being dropped.
+    //
+    // Note the asymmetry: no end date does NOT make a role current. "Left in
+    // 2019, no leaving month given" is a real and common shape, and inventing
+    // is_current there would put a job someone left years ago at the top of
+    // their profile as though they were still in it.
+    const is_current = end === null && row.is_current === true;
+
+    entries.push({
+      company,
+      position,
+      start,
+      end,
+      is_current,
+      summary: clip(row.summary, MAX_WORK_SUMMARY),
+    });
+  }
+
+  // Newest first, decided here rather than trusted from the model — it is the
+  // order 0023 documents and the order the profile renders in. A role still
+  // held is newer than any dated one. Undated roles sink to the bottom, since
+  // there is nothing to place them by. Array.prototype.sort is stable, so
+  // entries that tie keep the order the document had them in.
+  entries.sort((a, b) => {
+    if (a.is_current !== b.is_current) return a.is_current ? -1 : 1;
+    const byStart = compareDesc(a.start, b.start);
+    if (byStart !== 0) return byStart;
+    return compareDesc(a.end, b.end);
+  });
+
+  // Sort first, then cap, so a long CV keeps its most recent roles rather
+  // than whichever ones the model happened to emit first.
+  return entries.slice(0, MAX_WORK_HISTORY);
+}
+
+// Newest first, with null — "no date given" — always last.
+function compareDesc(a: string | null, b: string | null): number {
+  if (a === b) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return a < b ? 1 : -1;
+}
+
+// Only a string or a number is text. Anything else — an object, an array —
+// would stringify to "[object Object]" and land on someone's profile looking
+// like a bug they wrote themselves.
+function clip(value: unknown, max: number): string {
+  if (typeof value !== "string" && typeof value !== "number") return "";
+  return String(value).replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+// CVs write dates every way there is, and 0023 wants one: "YYYY-MM". This
+// takes the four shapes that actually turn up and refuses everything else —
+// an unparseable date becomes null, because a blank is visible in the review
+// step and a guessed date is not.
+//
+// A year with no month becomes January of that year. The alternative, storing
+// a bare "YYYY", would mean every reader of work_history has to handle two
+// different lengths of string forever, for a distinction nobody displays.
+// January is also where a year-only date belongs when sorting: it is the
+// earliest month the role could have started, so "2021" sorts just before
+// "2021-03" rather than after it.
+function toYearMonth(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const text = String(value).trim();
+  if (!text) return null;
+
+  // "Present" is not a date. It means the role has no end, which is null here
+  // and is_current above.
+  if (OPEN_ENDED.test(text)) return null;
+
+  // 2021-03, 2021/03, 2021-03-15 — ISO and its near misses.
+  let m = text.match(/^(\d{4})[-/.](\d{1,2})(?:[-/.]\d{1,2})?$/);
+  if (m) return build(Number(m[1]), Number(m[2]));
+
+  // 03/2021, 3-2021 — month first, the other way round from the above, told
+  // apart by which group is four digits.
+  m = text.match(/^(\d{1,2})[-/.](\d{4})$/);
+  if (m) return build(Number(m[2]), Number(m[1]));
+
+  // Mar 2021, March 2021, Mar. 2021, Mar-2021 — and the reverse, 2021 March.
+  // An unrecognised word here falls through to the year-only branch rather
+  // than failing: "Spring 2021" matches this shape but is not a month.
+  m = text.match(/^([A-Za-z]{3,9})\.?[\s\-/,]+(\d{4})$/);
+  if (m && MONTHS[m[1].toLowerCase()]) return build(Number(m[2]), MONTHS[m[1].toLowerCase()]);
+  m = text.match(/^(\d{4})[\s\-/,]+([A-Za-z]{3,9})\.?$/);
+  if (m && MONTHS[m[2].toLowerCase()]) return build(Number(m[1]), MONTHS[m[2].toLowerCase()]);
+
+  // 2021, and anything else built around a year we can still read a year out
+  // of — "Spring 2021", "Summer 2019". The season is dropped rather than
+  // mapped to a month: which months it means depends on the hemisphere, and
+  // the year is the part that is actually stated.
+  m = text.match(/(?:^|\D)(\d{4})(?:\D|$)/);
+  if (m) return build(Number(m[1]), 1);
+
+  return null;
+}
+
+function build(year: number, month: number): string | null {
+  const now = new Date().getUTCFullYear();
+  // A date after next year is a typo or a misread column, not a job.
+  if (!Number.isInteger(year) || year < MIN_WORK_YEAR || year > now + 1) return null;
+  if (!Number.isInteger(month) || month < 1 || month > 12) return null;
+  return year + "-" + String(month).padStart(2, "0");
 }
 
 // Case- and punctuation-insensitive, the same normalisation 0019 used to fold

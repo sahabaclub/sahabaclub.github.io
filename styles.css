@@ -3119,6 +3119,13 @@ html.light-mode .av-state.err { color: #b91c1c; }
   padding: 13px; border-radius: 12px;
   border: 1px solid var(--glass-border); background: var(--glass);
 }
+/* The `hidden` attribute has to be spelled out here, and this one was missed:
+   `[hidden] { display: none }` lives in the browser's own stylesheet, and an
+   author rule beats a UA rule whatever the specificity — so `display: flex`
+   above was overriding it and this panel rendered on every page load, empty,
+   with a broken image where the avatar goes. Same fix as .lightbox,
+   .pod-modal and .filter-backdrop already carry for the same reason. */
+.av-result[hidden] { display: none; }
 .av-result-img {
   width: 96px; height: 96px; border-radius: 12px; object-fit: cover;
   flex-shrink: 0; background: var(--glass-border); display: block;
@@ -3131,6 +3138,93 @@ html.light-mode .av-state.err { color: #b91c1c; }
   .av-result { flex-direction: column; }
   .av-result-img { width: 84px; height: 84px; }
   .av-result-actions .av-btn { width: auto; flex: 1 1 auto; }
+}
+
+/* ---- The photo waiting for the Save button ----
+   Since 0026 the drawing runs in the background, so there is no reason to make
+   a member sit through it — the photo is held here and the drawing starts when
+   they save the profile they were filling in anyway.
+
+   ⚠ Nothing in this block or the gallery below may be a bare `input`, `select`
+   or `textarea`. Both hosts of this control put it inside a field wrapper
+   (`.dash-field` / `.prof-field`) whose own inline <style> sets
+   `input { width: 100% }`, and those rules match this file's specificity while
+   being declared later — which is what stretched the opt-in checkboxes out
+   past their pills twice already. Buttons and images are safe; form controls
+   are not. */
+.av-staged {
+  display: flex; gap: 13px; align-items: flex-start; margin-top: 12px;
+  padding: 12px; border-radius: 12px;
+  border: 1px solid var(--glass-border); background: var(--glass);
+}
+/* See the note on .av-result[hidden]: an author `display` beats the browser's
+   own `[hidden] { display: none }` no matter the specificity. */
+.av-staged[hidden] { display: none; }
+.av-staged-img {
+  width: 72px; height: 72px; border-radius: 10px; object-fit: cover;
+  flex-shrink: 0; background: var(--glass-border); display: block;
+}
+.av-staged-side { min-width: 0; flex: 1; }
+.av-staged-note { margin: 0 0 10px; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary); }
+.av-staged-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.av-staged-actions .av-btn { padding: 7px 13px; font-size: 12.5px; min-height: 36px; }
+@media (max-width: 420px) {
+  .av-staged { flex-direction: column; }
+  .av-staged-actions .av-btn { width: auto; flex: 1 1 auto; }
+}
+
+/* ---- The gallery of past drawings ----
+   0026 keeps the last twelve, and the three tries in a cycle differ in
+   framing, palette and background, so these are real alternatives rather than
+   near-copies of each other. A strip of pictures, because that is the only way
+   to choose between pictures.
+
+   The strip scrolls sideways rather than wrapping. Twelve 72px thumbnails wrap
+   to four rows on a phone and push the Save button off the bottom of a form
+   that is already long; one row that scrolls keeps the control the same height
+   whether the member has one drawing or twelve. */
+.av-gallery { margin-top: 16px; }
+.av-gallery-title { margin: 0 0 3px; font-size: 13px; font-weight: 700; color: var(--text); }
+.av-gallery-why { margin: 0 0 10px; font-size: 12px; line-height: 1.55; color: var(--text-muted); }
+.av-gallery-strip {
+  display: flex; gap: 9px; overflow-x: auto; padding: 3px 3px 8px;
+  scrollbar-width: thin; -webkit-overflow-scrolling: touch;
+}
+/* Same reasoning as .av-btn: --glass-border is a panel edge at ~1.26:1, and
+   the outline of a control that IS the affordance owes 1.4.11 3:1. Measured
+   3.57:1 dark and 3.32:1 light on the card surface. */
+.av-thumb {
+  position: relative; flex: 0 0 auto; padding: 0; cursor: pointer;
+  width: 72px; height: 72px; border-radius: 12px; overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.38); background: var(--glass);
+  font-family: inherit;
+}
+html.light-mode .av-thumb { border-color: rgba(16, 22, 39, 0.5); }
+.av-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.av-thumb:hover:not(:disabled) { border-color: var(--cyan); }
+.av-thumb:disabled { opacity: 0.45; cursor: not-allowed; }
+/* The one in use. A ring plus a tick: colour alone would carry the whole
+   meaning otherwise, which 1.4.1 does not allow, and the tick is also what a
+   member sees at a glance on a strip of twelve similar faces. --cyan measures
+   10.35:1 dark and 4.65:1 light against the card. */
+.av-thumb.is-on { border-color: var(--cyan); box-shadow: 0 0 0 2px var(--cyan); }
+.av-thumb.is-on::after {
+  content: "\2713";
+  position: absolute; right: 3px; bottom: 3px;
+  width: 19px; height: 19px; border-radius: 50%;
+  background: var(--cyan); color: #05070d;
+  font-size: 12px; font-weight: 800; line-height: 19px; text-align: center;
+}
+/* Light-mode --cyan is #0e7490, on which the near-black tick falls to 1.44:1.
+   White is 5.36:1 — the same swap .av-shot and .dash-pc-avatar already make. */
+html.light-mode .av-thumb.is-on::after { color: #ffffff; }
+/* The label each thumbnail carries is for screen readers; sighted members get
+   the picture, the ring and the tick, plus the same words on hover as a title.
+   Not `display: none`, which would take it out of the accessibility tree and
+   leave the button announced as nothing at all. */
+.av-thumb-label {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
 
 /* Where the "a photo" button in the Connect line lands. A ring rather than a
