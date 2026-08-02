@@ -1,0 +1,1218 @@
+/* Sahaba Club — PromptArena
+   ============================================================
+   A different room in the same building.
+
+   The club's identity is a calm violet→cyan gradient and every other page
+   wears it. Ahmed asked for something else here: "use different UI for the
+   game, full of AI feeling and robotic life, make it more colourful section
+   with different look and feel, and use colours like orange and red to give
+   energy." So this page is a reactor room — ember background, machined
+   panels, scanlines, a judge core that visibly runs.
+
+   What does NOT change is the shell. The header, the nav and the footer are
+   the club's and stay exactly as they are on every other page; only the game
+   surface between them is re-skinned. A member should feel they walked into a
+   different room, not a different website.
+
+   ------------------------------------------------------------
+   Two rules this file is built around
+   ------------------------------------------------------------
+
+   1. WCAG AA IN BOTH THEMES. Orange and red are the easiest colours in the
+      palette to fail with: mid-orange on near-black looks vivid and passes
+      comfortably, while the same orange on white is around 2:1 and is
+      unreadable. So the accents here are two different colours wearing one
+      name — a bright ember for dark mode, a burnt rust for light — and every
+      ink value below has been measured against the surface it actually sits
+      on rather than against the page background. Where text is painted with a
+      gradient, BOTH stops clear the threshold, because a computed style
+      reports a gradient as `transparent` and only the stops can be scored.
+
+   2. THE PAGE MUST SURVIVE prefers-reduced-motion. This design is built on
+      movement, so switching it off has to leave something calm and complete
+      rather than something broken: the reactor stops rotating but keeps its
+      ring, the score stops counting up but still arrives, the scanlines stop
+      drifting but stay as texture. Nothing is hidden and nothing is left
+      mid-transition — see the block at the foot of this file.
+
+   Every class here is prefixed `pa-`. Nothing in this file overrides a
+   styles.css rule for any other page. */
+
+/* ============================================================
+   1. The palette
+   ============================================================ */
+
+:root {
+  /* --- Inks. Measured against --pa-panel, the surface they sit on. --- */
+  --pa-ink: #fff2e9;        /* 18.9:1 on --pa-panel */
+  --pa-ink-2: #f0cdb8;      /* 14.3:1 */
+  --pa-ink-3: #d9a88f;      /*  9.9:1 — the muted tone, still well clear */
+
+  /* --- Accents. Used for text, icons and borders alike. --- */
+  --pa-orange: #ff8f3f;     /*  8.5:1 on --pa-panel */
+  --pa-orange-hi: #ffb066;  /* 10.7:1 */
+  --pa-red: #ff5a45;        /*  6.3:1 */
+  --pa-red-hi: #ff8a72;     /*  8.2:1 */
+  --pa-amber: #ffc555;      /* 12.1:1 */
+
+  /* --- Surfaces --- */
+  --pa-void: #0b0406;       /* the deepest well, behind the reactor */
+  --pa-panel: #170a0c;      /* every panel that carries text */
+  --pa-panel-2: #22100f;    /* insets, code blocks, table stripes */
+  --pa-line: rgba(255, 143, 63, 0.30);
+  --pa-line-soft: rgba(255, 143, 63, 0.16);
+
+  /* --- Fills used behind chips, never behind body text --- */
+  --pa-fill: rgba(255, 106, 40, 0.10);
+  --pa-fill-hot: rgba(255, 74, 45, 0.14);
+
+  /* ⚠ The ink for text sitting ON --pa-fill, which is a separate value from
+     the ink for text on a panel. A chip is a translucent warm tint over
+     whatever is behind it, so its effective background is lighter than the
+     panel — and in light mode that difference is the whole margin: #b34700
+     measures 5.2:1 on the panel but only 4.22:1 on a kicker chip laid over
+     the hero's warm gradient, which is a fail nobody would spot by eye. */
+  --pa-chip-ink: var(--pa-orange);
+  --pa-chip-ink-hot: var(--pa-red);
+
+  --pa-glow: rgba(255, 106, 40, 0.40);
+  --pa-radius: 14px;
+  --pa-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Consolas,
+             "Liberation Mono", Menlo, monospace;
+}
+
+/* Light mode. Not the dark palette lightened — a different set of colours
+   that happens to read as the same family. Ember ink becomes rust ink,
+   because #ff8f3f on a white card measures about 2.1:1 and is not a colour
+   anybody can read. */
+html.light-mode {
+  --pa-ink: #2b1206;        /* 15.2:1 on --pa-panel */
+  --pa-ink-2: #5a2a14;      /* 10.0:1 */
+  --pa-ink-3: #7a3a1c;      /*  8.1:1 */
+
+  --pa-orange: #b34700;     /*  5.2:1 — the lightest orange that clears AA here */
+  --pa-orange-hi: #8a3300;  /*  7.4:1 */
+  --pa-red: #b3261e;        /*  6.1:1 */
+  --pa-red-hi: #8f1f18;     /*  8.3:1 */
+  --pa-amber: #8a5a00;      /*  5.5:1 */
+
+  --pa-void: #fff1e6;
+  --pa-panel: #fff6f0;
+  --pa-panel-2: #ffece1;
+  --pa-line: rgba(179, 71, 0, 0.28);
+  --pa-line-soft: rgba(179, 71, 0, 0.14);
+
+  --pa-fill: rgba(255, 138, 61, 0.13);
+  --pa-fill-hot: rgba(179, 38, 30, 0.10);
+  --pa-glow: rgba(255, 122, 40, 0.30);
+
+  /* Measured on a chip over the hero gradient — the worst surface either of
+     these lands on: 6.3:1 and 7.1:1 respectively. */
+  --pa-chip-ink: #8a3300;
+  --pa-chip-ink-hot: #8f1f18;
+}
+
+/* ============================================================
+   2. The room itself
+   ============================================================
+   The club's fixed background layers are violet and cyan. Rather than fight
+   them under the arena, they are repainted for this page only — the selector
+   is scoped to the body class, so no other page is touched and styles.css is
+   left alone. */
+
+body.pa-body .nebula-bg {
+  background:
+    radial-gradient(680px 460px at 12% 4%, rgba(255, 92, 30, 0.20), transparent 62%),
+    radial-gradient(760px 520px at 88% 14%, rgba(220, 38, 38, 0.16), transparent 62%),
+    radial-gradient(620px 520px at 50% 78%, rgba(255, 150, 40, 0.11), transparent 62%),
+    radial-gradient(520px 400px at 22% 96%, rgba(255, 60, 60, 0.10), transparent 60%);
+}
+html.light-mode body.pa-body .nebula-bg {
+  background:
+    radial-gradient(640px 440px at 12% 6%, rgba(255, 122, 40, 0.13), transparent 62%),
+    radial-gradient(580px 400px at 88% 12%, rgba(179, 38, 30, 0.10), transparent 62%),
+    radial-gradient(720px 480px at 50% 100%, rgba(255, 150, 40, 0.10), transparent 60%);
+}
+body.pa-body .noise-bg { opacity: 0.05; }
+
+.pa-wrap {
+  position: relative;
+  z-index: 2;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px 16px 96px;
+  color: var(--pa-ink);
+}
+
+/* `hidden` has to keep meaning hidden: several blocks below set `display`,
+   which outranks the user-agent's [hidden] rule and would leave an empty
+   panel on screen. Same fix, same reason, as app/connect.css. */
+.pa-wrap [hidden] { display: none !important; }
+
+/* ============================================================
+   3. Machined panels
+   ============================================================
+   One panel shape, used by everything. The corner ticks are drawn with two
+   gradients rather than four extra elements, so any block can become a plate
+   by taking the class. */
+
+.pa-panel {
+  position: relative;
+  background: var(--pa-panel);
+  border: 1px solid var(--pa-line);
+  border-radius: var(--pa-radius);
+  padding: 18px;
+}
+.pa-panel::before,
+.pa-panel::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+.pa-panel::before {
+  top: -1px; left: -1px;
+  border-top: 2px solid var(--pa-orange);
+  border-left: 2px solid var(--pa-orange);
+  border-top-left-radius: var(--pa-radius);
+}
+.pa-panel::after {
+  bottom: -1px; right: -1px;
+  border-bottom: 2px solid var(--pa-red);
+  border-right: 2px solid var(--pa-red);
+  border-bottom-right-radius: var(--pa-radius);
+}
+.pa-panel + .pa-panel { margin-top: 16px; }
+
+.pa-section { margin-top: 26px; }
+.pa-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.pa-section-title {
+  font-family: var(--pa-mono);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--pa-orange);
+  margin: 0;
+  font-weight: 700;
+}
+.pa-section-note {
+  font-size: 12.5px;
+  color: var(--pa-ink-3);
+  margin: 0;
+}
+
+/* ============================================================
+   4. The hero plate
+   ============================================================ */
+
+.pa-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--pa-line);
+  border-radius: 20px;
+  background:
+    radial-gradient(120% 140% at 8% 0%, rgba(255, 106, 40, 0.20), transparent 60%),
+    radial-gradient(110% 130% at 100% 30%, rgba(220, 38, 38, 0.18), transparent 62%),
+    linear-gradient(160deg, var(--pa-panel-2), var(--pa-void));
+  padding: 26px 20px 22px;
+}
+html.light-mode .pa-hero {
+  background:
+    radial-gradient(120% 140% at 8% 0%, rgba(255, 138, 61, 0.20), transparent 60%),
+    radial-gradient(110% 130% at 100% 30%, rgba(179, 38, 30, 0.12), transparent 62%),
+    linear-gradient(160deg, #fffaf6, var(--pa-panel-2));
+  box-shadow: 0 2px 14px rgba(120, 50, 10, 0.08);
+}
+
+/* Scanlines. Decorative only, and deliberately never over body text — this
+   layer sits inside the hero and the reactor, both of which carry headings
+   and short labels at large sizes, and at 0.05 alpha it shifts a measured
+   ratio by under a tenth. It is not allowed anywhere near a paragraph. */
+.pa-scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.05) 0px,
+    rgba(255, 255, 255, 0.05) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  animation: pa-scan-drift 8s linear infinite;
+  opacity: 0.7;
+}
+html.light-mode .pa-scan {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(120, 50, 10, 0.05) 0px,
+    rgba(120, 50, 10, 0.05) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+@keyframes pa-scan-drift {
+  from { transform: translateY(0); }
+  to   { transform: translateY(4px); }
+}
+
+.pa-hero-inner { position: relative; z-index: 1; }
+
+.pa-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--pa-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--pa-chip-ink);
+  border: 1px solid var(--pa-line);
+  background: var(--pa-fill);
+  border-radius: 999px;
+  padding: 5px 12px;
+  margin-bottom: 12px;
+}
+.pa-kicker-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--pa-red);
+  box-shadow: 0 0 8px var(--pa-glow);
+  animation: pa-pulse 1.8s ease-in-out infinite;
+}
+@keyframes pa-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.75); }
+}
+
+.pa-title {
+  font-size: 34px;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 10px;
+  /* Gradient ink. Both stops are scored against the hero fill, not just the
+     one that happens to sit under the first letter: #ffb066 is 10.7:1 and
+     #ff5a45 is 6.3:1 on --pa-panel, so the worst stop still clears AA at any
+     size. background-image rather than the `background` shorthand — the
+     shorthand resets background-clip to border-box and paints a solid bar
+     where the heading should be, which styles.css already learned once. */
+  background-image: linear-gradient(96deg, var(--pa-orange-hi) 6%, var(--pa-red) 62%, var(--pa-amber) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* If background-clip:text is unavailable the text would be invisible, so the
+   transparent colour is only applied where the clip actually works. */
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .pa-title { color: var(--pa-orange); background-image: none; }
+}
+.pa-hero-lead {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--pa-ink-2);
+  margin: 0;
+  max-width: 62ch;
+}
+.pa-hero-lead strong { color: var(--pa-ink); }
+
+/* ============================================================
+   5. Gauges — the hub numbers
+   ============================================================ */
+
+.pa-gauges {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+@media (min-width: 700px) {
+  .pa-gauges { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+
+.pa-gauge {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--pa-line-soft);
+  border-radius: 12px;
+  background: var(--pa-panel);
+  padding: 13px 12px;
+  text-align: center;
+}
+.pa-gauge::after {
+  /* A meter bar along the bottom edge — reads as instrumentation rather than
+     decoration, and is the only place a gradient touches this tile. */
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--pa-red), var(--pa-orange), transparent);
+  opacity: 0.85;
+}
+.pa-gauge-num {
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--pa-ink);
+}
+.pa-gauge-num.is-none {
+  font-size: 19px;
+  color: var(--pa-ink-3);
+  font-weight: 700;
+}
+.pa-gauge-label {
+  font-family: var(--pa-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--pa-ink-3);
+  margin-top: 3px;
+}
+.pa-gauge-sub {
+  font-size: 11.5px;
+  color: var(--pa-ink-3);
+  margin-top: 2px;
+}
+
+/* ============================================================
+   6. Controls
+   ============================================================ */
+
+.pa-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+
+.pa-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 10px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--pa-line);
+  background: var(--pa-panel-2);
+  color: var(--pa-ink);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.pa-btn:hover:not(:disabled) {
+  border-color: var(--pa-orange);
+  transform: translateY(-1px);
+}
+.pa-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.pa-btn:focus-visible { outline: 2px solid var(--pa-orange); outline-offset: 2px; }
+
+/* The one loud button on the page, and the one place where the obvious
+   choice measures badly.
+   ⚠ White on a bright orange fill is the trap: #ffffff on #ff7a1a is 2.6:1,
+   which fails AA at every size, and it fails while looking perfectly
+   confident on screen. Darkening the fill until white passes would have cost
+   the button all its heat. So the fill stays loud and the INK goes dark:
+   #23090a on the darker stop is 6.0:1 and on the lighter stop 9.2:1. Both
+   ends clear AA, and because the ink and the fill are both fixed values the
+   same button works unchanged in light mode — there is nothing theme-relative
+   left in it to get wrong. */
+.pa-btn-fire {
+  border-color: transparent;
+  background-image: linear-gradient(96deg, #ff5a1f, #ffa022);
+  color: #23090a;
+  box-shadow: 0 6px 22px rgba(224, 67, 31, 0.35);
+}
+.pa-btn-fire:hover:not(:disabled) {
+  box-shadow: 0 10px 30px rgba(224, 67, 31, 0.48);
+  border-color: transparent;
+}
+.pa-btn-fire:focus-visible { outline-color: var(--pa-ink); }
+html.light-mode .pa-btn-fire { box-shadow: 0 6px 18px rgba(179, 38, 10, 0.28); }
+.pa-btn-sm { min-height: 36px; padding: 7px 15px; font-size: 13px; }
+
+.pa-btn-ghost { background: transparent; }
+
+/* ============================================================
+   7. The challenge terminal
+   ============================================================ */
+
+.pa-term {
+  border: 1px solid var(--pa-line);
+  border-radius: var(--pa-radius);
+  background: var(--pa-panel);
+  overflow: hidden;
+}
+.pa-term-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  background: var(--pa-panel-2);
+  border-bottom: 1px solid var(--pa-line-soft);
+}
+.pa-term-lamps { display: flex; gap: 5px; }
+.pa-term-lamp {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--pa-red);
+  opacity: 0.85;
+}
+.pa-term-lamp:nth-child(2) { background: var(--pa-orange); }
+.pa-term-lamp:nth-child(3) { background: var(--pa-amber); }
+.pa-term-path {
+  font-family: var(--pa-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  color: var(--pa-ink-3);
+  text-transform: uppercase;
+}
+.pa-term-body { padding: 18px; }
+
+.pa-challenge-title {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.25;
+  margin: 0 0 10px;
+  color: var(--pa-ink);
+}
+.pa-brief {
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--pa-ink);
+  margin: 0 0 14px;
+  white-space: pre-wrap;
+}
+
+.pa-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.pa-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--pa-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--pa-line-soft);
+  background: var(--pa-fill);
+  color: var(--pa-chip-ink);
+}
+.pa-chip.is-hot { color: var(--pa-chip-ink-hot); background: var(--pa-fill-hot); }
+.pa-chip.is-plain { color: var(--pa-ink-2); background: transparent; }
+
+/* Difficulty as five bars rather than a word alone: it is an ordered number
+   in the schema and it reads faster as a level than as a label. */
+.pa-bars { display: inline-flex; gap: 3px; align-items: flex-end; }
+.pa-bar {
+  width: 4px;
+  border-radius: 1px;
+  background: var(--pa-line);
+}
+.pa-bar.is-on { background: var(--pa-orange); }
+.pa-bar:nth-child(1) { height: 6px; }
+.pa-bar:nth-child(2) { height: 8px; }
+.pa-bar:nth-child(3) { height: 10px; }
+.pa-bar:nth-child(4) { height: 12px; }
+.pa-bar:nth-child(5) { height: 14px; }
+
+.pa-constraints { margin: 0 0 4px; padding: 0; list-style: none; }
+.pa-constraints li {
+  position: relative;
+  padding-left: 24px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--pa-ink-2);
+  margin-bottom: 7px;
+}
+.pa-constraints li::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 4px;
+  width: 14px; height: 14px;
+  border: 1.5px solid var(--pa-orange);
+  border-radius: 3px;
+  background: var(--pa-fill);
+}
+
+/* ---- Writing box ---- */
+
+.pa-compose { margin-top: 16px; }
+.pa-compose-label {
+  display: block;
+  font-family: var(--pa-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pa-orange);
+  margin-bottom: 7px;
+}
+.pa-input {
+  width: 100%;
+  min-height: 168px;
+  resize: vertical;
+  padding: 14px 14px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--pa-ink);
+  background: var(--pa-panel-2);
+  border: 1px solid var(--pa-line);
+  border-radius: 12px;
+}
+.pa-input::placeholder { color: var(--pa-ink-3); }
+.pa-input:focus-visible {
+  outline: 2px solid var(--pa-orange);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px rgba(255, 106, 40, 0.14);
+}
+.pa-compose-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.pa-count {
+  font-family: var(--pa-mono);
+  font-size: 12px;
+  color: var(--pa-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.pa-count.is-over { color: var(--pa-red); font-weight: 700; }
+
+/* ============================================================
+   8. The judge core — what "thinking" looks like
+   ============================================================
+   Judging is a model call and it is not instant. The single most complained
+   about thing in this project has been a member sitting on a spinner through
+   one, so this is built to be watched: a core that runs, a real elapsed
+   counter, and status lines that describe the wait honestly rather than
+   faking a progress bar out of a number nobody has. */
+
+.pa-core-wrap {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--pa-line);
+  border-radius: var(--pa-radius);
+  background:
+    radial-gradient(120% 120% at 50% 0%, rgba(255, 106, 40, 0.16), transparent 62%),
+    linear-gradient(180deg, var(--pa-panel-2), var(--pa-panel));
+  padding: 30px 20px 24px;
+  text-align: center;
+}
+.pa-core {
+  position: relative;
+  width: 128px;
+  height: 128px;
+  margin: 0 auto 18px;
+}
+.pa-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--pa-orange);
+  border-right-color: var(--pa-red);
+  animation: pa-spin 2.4s linear infinite;
+}
+.pa-ring.pa-ring-2 {
+  inset: 14px;
+  border-top-color: var(--pa-amber);
+  border-right-color: transparent;
+  border-left-color: var(--pa-red);
+  animation-duration: 3.6s;
+  animation-direction: reverse;
+}
+.pa-ring.pa-ring-3 {
+  inset: 28px;
+  border-top-color: transparent;
+  border-bottom-color: var(--pa-orange);
+  animation-duration: 1.8s;
+}
+@keyframes pa-spin { to { transform: rotate(360deg); } }
+
+.pa-core-heart {
+  position: absolute;
+  inset: 44px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, var(--pa-amber), var(--pa-red) 70%);
+  box-shadow: 0 0 26px var(--pa-glow);
+  animation: pa-breathe 2.2s ease-in-out infinite;
+}
+@keyframes pa-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(0.86); opacity: 0.78; }
+}
+
+.pa-core-title {
+  font-size: 19px;
+  font-weight: 800;
+  margin: 0 0 6px;
+  color: var(--pa-ink);
+}
+.pa-core-status {
+  font-family: var(--pa-mono);
+  font-size: 13px;
+  /* The chip ink, not the panel ink: the reactor's warm radial wash lightens
+     the surface under this line, and the panel-grade orange measured 4.35:1
+     on it in light mode — a fail, and one only a measurement finds. */
+  color: var(--pa-chip-ink);
+  margin: 0 0 4px;
+  min-height: 1.5em;
+}
+.pa-core-sub {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--pa-ink-2);
+  margin: 8px auto 0;
+  max-width: 48ch;
+}
+.pa-core-clock {
+  font-family: var(--pa-mono);
+  font-size: 12px;
+  color: var(--pa-ink-3);
+  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
+}
+
+/* ============================================================
+   9. The verdict
+   ============================================================
+   A low score must not feel like a punishment, so the reveal is built to
+   celebrate the attempt and lead straight into the feedback: the numeral is
+   large and warm at every value, the band under it is never the vocabulary of
+   failure, and the four feedback blocks are the tallest thing on screen. */
+
+.pa-verdict { position: relative; }
+
+.pa-verdict-top {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--pa-line-soft);
+}
+
+/* The dial. The arc is a conic gradient driven by --pa-pct, which the page
+   sets from the score; the inner disc is the panel colour so the numeral is
+   never painted on the gradient. */
+.pa-dial {
+  position: relative;
+  width: 108px; height: 108px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 180deg,
+    var(--pa-red) 0turn,
+    var(--pa-orange) calc(var(--pa-pct, 0.5) * 0.5turn),
+    var(--pa-line-soft) calc(var(--pa-pct, 0.5) * 0.5turn)
+  );
+  display: grid;
+  place-items: center;
+  animation: pa-dial-in 0.7s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+@keyframes pa-dial-in {
+  from { transform: scale(0.82) rotate(-14deg); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+/* The inner disc is a real element, not a ::after. It carries the numerals,
+   so it is the surface their contrast is actually measured against — and a
+   pseudo-element is invisible to any auditor that walks the DOM, which is how
+   a number painted on a gradient arc gets scored against the wrong colour and
+   passes a check it should have failed. */
+.pa-dial-face {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--pa-panel);
+  display: grid;
+  place-items: center;
+  align-content: center;
+}
+.pa-dial-num {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  /* Solid ink, not a gradient: this is the number the whole page exists to
+     show and it is not worth the 3:1 large-text allowance. 18.9:1 on panel. */
+  color: var(--pa-ink);
+}
+.pa-dial-of {
+  font-family: var(--pa-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--pa-ink-3);
+}
+
+.pa-verdict-said { flex: 1 1 240px; min-width: 200px; }
+.pa-band {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0 0 4px;
+  color: var(--pa-orange);
+}
+.pa-band-line {
+  font-size: 14.5px;
+  line-height: 1.6;
+  color: var(--pa-ink-2);
+  margin: 0;
+}
+
+/* The four parts of the evaluation. They are four columns in the schema for
+   exactly this reason — "why", "what was good", "what could be better" and
+   "what to do next" answer different questions, and a member re-reading their
+   feedback is nearly always looking for one of them specifically. */
+.pa-fbs { display: grid; gap: 12px; margin-top: 16px; }
+@media (min-width: 760px) {
+  .pa-fbs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pa-fb-wide { grid-column: 1 / -1; }
+}
+
+.pa-fb {
+  border: 1px solid var(--pa-line-soft);
+  border-left: 3px solid var(--pa-orange);
+  border-radius: 10px;
+  background: var(--pa-panel-2);
+  padding: 14px 15px;
+  animation: pa-fb-in 0.45s ease both;
+}
+.pa-fb:nth-child(2) { animation-delay: 0.08s; }
+.pa-fb:nth-child(3) { animation-delay: 0.16s; }
+.pa-fb:nth-child(4) { animation-delay: 0.24s; }
+@keyframes pa-fb-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.pa-fb.is-good { border-left-color: var(--pa-amber); }
+.pa-fb.is-next { border-left-color: var(--pa-red); }
+.pa-fb-title {
+  font-family: var(--pa-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pa-orange);
+  margin: 0 0 8px;
+}
+.pa-fb.is-good .pa-fb-title { color: var(--pa-amber); }
+.pa-fb.is-next .pa-fb-title { color: var(--pa-red); }
+.pa-fb-body {
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--pa-ink);
+  margin: 0;
+}
+.pa-fb ul { margin: 0; padding-left: 18px; }
+.pa-fb li {
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--pa-ink);
+  margin-bottom: 6px;
+}
+.pa-fb li::marker { color: var(--pa-orange); }
+
+/* Per-criterion marks, when the judge returned them. */
+.pa-rubric { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.pa-rubric-item {
+  border: 1px solid var(--pa-line-soft);
+  border-radius: 8px;
+  background: var(--pa-panel-2);
+  padding: 7px 11px;
+  min-width: 96px;
+}
+.pa-rubric-key {
+  display: block;
+  font-family: var(--pa-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pa-ink-3);
+}
+.pa-rubric-val {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--pa-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* What the member wrote, kept beside the verdict — reading the feedback is
+   most of the value and it is unreadable without the prompt next to it. */
+.pa-yours {
+  margin-top: 16px;
+  border: 1px dashed var(--pa-line);
+  border-radius: 10px;
+  background: var(--pa-panel-2);
+  padding: 13px 14px;
+}
+.pa-yours-title {
+  font-family: var(--pa-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--pa-ink-3);
+  margin: 0 0 7px;
+}
+.pa-yours-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--pa-ink-2);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ============================================================
+   10. Status messages
+   ============================================================ */
+
+.pa-status {
+  font-size: 13.5px;
+  line-height: 1.6;
+  padding: 11px 13px;
+  border-radius: 10px;
+  margin-top: 12px;
+  border: 1px solid;
+}
+.pa-status.is-info {
+  color: var(--pa-ink);
+  background: var(--pa-fill);
+  border-color: var(--pa-line);
+}
+.pa-status.is-warn {
+  color: var(--pa-ink);
+  background: var(--pa-fill-hot);
+  border-color: var(--pa-red);
+}
+.pa-status.is-ok {
+  color: var(--pa-ink);
+  background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.42);
+}
+/* Also on --pa-fill, so also the chip ink rather than the panel ink. */
+.pa-status strong { color: var(--pa-chip-ink); }
+.pa-status a { text-decoration: underline; color: var(--pa-chip-ink); }
+
+.pa-note {
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--pa-ink-3);
+  margin: 12px 0 0;
+}
+
+.pa-empty {
+  text-align: center;
+  padding: 34px 18px;
+  border: 1px dashed var(--pa-line);
+  border-radius: var(--pa-radius);
+  background: var(--pa-panel);
+}
+.pa-empty-title { font-size: 17px; font-weight: 800; margin: 0 0 7px; color: var(--pa-ink); }
+.pa-empty-text {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--pa-ink-2);
+  margin: 0 auto;
+  max-width: 46ch;
+}
+
+/* ============================================================
+   11. Leaderboard
+   ============================================================ */
+
+.pa-board { display: grid; gap: 8px; }
+.pa-row {
+  display: grid;
+  grid-template-columns: 42px 34px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--pa-line-soft);
+  border-radius: 11px;
+  background: var(--pa-panel);
+  padding: 10px 12px;
+}
+.pa-row.is-me {
+  border-color: var(--pa-orange);
+  background: var(--pa-fill);
+}
+.pa-rank {
+  font-family: var(--pa-mono);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--pa-orange);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.pa-rank.is-top { color: var(--pa-amber); }
+.pa-av {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--pa-line);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--pa-ink);
+  background: var(--pa-panel-2);
+}
+.pa-who { min-width: 0; }
+.pa-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--pa-ink);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pa-who-sub { font-size: 12px; color: var(--pa-ink-3); margin: 0; }
+.pa-rating {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--pa-ink);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.pa-rating small {
+  display: block;
+  font-family: var(--pa-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pa-ink-3);
+}
+
+/* ============================================================
+   12. The opt-in
+   ============================================================
+   Joining the leaderboard is an active choice and the control has to look
+   like one: it starts off, it is never pre-ticked, and the text under it
+   spells out exactly what appears and what does not rather than saying
+   "public profile" and leaving the member to guess. */
+
+.pa-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  cursor: pointer;
+}
+.pa-toggle input {
+  width: 18px; height: 18px;
+  margin-top: 3px;
+  flex: 0 0 auto;
+  accent-color: var(--pa-orange);
+  cursor: pointer;
+}
+.pa-toggle-text { font-size: 15px; font-weight: 700; color: var(--pa-ink); }
+.pa-toggle-why {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--pa-ink-2);
+  margin: 9px 0 0 29px;
+}
+.pa-toggle-why strong { color: var(--pa-ink); }
+
+/* ============================================================
+   13. Recent attempts and legacy history
+   ============================================================ */
+
+.pa-list { display: grid; gap: 10px; }
+
+.pa-item {
+  border: 1px solid var(--pa-line-soft);
+  border-radius: 11px;
+  background: var(--pa-panel);
+  padding: 13px 14px;
+}
+.pa-item-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pa-item-title { font-size: 14.5px; font-weight: 700; color: var(--pa-ink); margin: 0; }
+.pa-item-when { font-family: var(--pa-mono); font-size: 11.5px; color: var(--pa-ink-3); }
+.pa-item-text {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--pa-ink-2);
+  margin: 7px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pa-mark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  font-weight: 800;
+  font-size: 17px;
+  color: var(--pa-ink);
+  font-variant-numeric: tabular-nums;
+}
+.pa-mark small { font-size: 11px; font-weight: 700; color: var(--pa-ink-3); }
+
+/* "No score" is a sentence, not a dash and not a zero. It is styled as text
+   on purpose so it can never be mistaken for a number in a column of
+   numbers. */
+.pa-nomark {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--pa-ink-3);
+  font-style: italic;
+}
+
+.pa-rounds { display: grid; gap: 8px; margin-top: 12px; }
+.pa-round {
+  border: 1px solid var(--pa-line-soft);
+  border-left: 3px solid var(--pa-line);
+  border-radius: 9px;
+  background: var(--pa-panel-2);
+  padding: 11px 13px;
+}
+.pa-round.is-scored { border-left-color: var(--pa-orange); }
+.pa-round.is-absent { border-left-color: var(--pa-line-soft); opacity: 0.92; }
+.pa-round-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pa-round-n {
+  font-family: var(--pa-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pa-ink-3);
+}
+.pa-round-q {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--pa-ink-2);
+  margin: 6px 0 0;
+}
+.pa-round-p {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--pa-ink);
+  margin: 7px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pa-round-c {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--pa-ink-2);
+  margin: 8px 0 0;
+  padding-left: 11px;
+  border-left: 2px solid var(--pa-line);
+}
+
+/* ============================================================
+   14. Tabs
+   ============================================================ */
+
+.pa-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 22px 0 14px;
+  border-bottom: 1px solid var(--pa-line-soft);
+  padding-bottom: 8px;
+}
+.pa-tab {
+  font-family: var(--pa-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--pa-line-soft);
+  background: transparent;
+  color: var(--pa-ink-2);
+  cursor: pointer;
+}
+.pa-tab:hover { color: var(--pa-ink); border-color: var(--pa-line); }
+.pa-tab[aria-selected="true"] {
+  color: var(--pa-ink);
+  border-color: var(--pa-orange);
+  background: var(--pa-fill);
+}
+.pa-tab:focus-visible { outline: 2px solid var(--pa-orange); outline-offset: 2px; }
+
+/* ============================================================
+   15. Reduced motion
+   ============================================================
+   A page built on animation has to degrade to something calm, not something
+   half-drawn. Two separate jobs here:
+
+     * Stop the loops. The reactor rings, the pulse, the scanline drift and
+       the score dial all stop where they are.
+     * Make sure nothing that ANIMATES IN is left invisible. Every entrance
+       animation above starts at opacity 0, so switching animation off without
+       restoring the end state would blank the feedback blocks and the dial —
+       the exact "degrades to something broken" this is meant to avoid. The
+       rules below re-assert the finished state explicitly.
+
+   The page's JavaScript reads the same media query and skips the score
+   count-up, so the number is simply there rather than ticking. */
+
+@media (prefers-reduced-motion: reduce) {
+  .pa-scan,
+  .pa-kicker-dot,
+  .pa-ring,
+  .pa-core-heart,
+  .pa-dial,
+  .pa-fb,
+  .pa-btn {
+    animation: none !important;
+    transition: none !important;
+  }
+  .pa-fb, .pa-dial { opacity: 1 !important; transform: none !important; }
+  .pa-btn:hover:not(:disabled) { transform: none; }
+
+  /* The reactor still has to say "running" without spinning. A complete ring
+     in each accent reads as an instrument at rest rather than as a stalled
+     spinner. */
+  .pa-ring {
+    border-color: var(--pa-line-soft);
+    border-top-color: var(--pa-orange);
+  }
+  .pa-ring.pa-ring-2 { border-top-color: var(--pa-amber); }
+  .pa-ring.pa-ring-3 { border-top-color: var(--pa-red); }
+  .pa-scan { opacity: 0.35; }
+}
+
+/* ============================================================
+   16. Narrow screens
+   ============================================================ */
+
+@media (max-width: 560px) {
+  .pa-title { font-size: 27px; }
+  .pa-wrap { padding: 18px 13px 80px; }
+  .pa-panel, .pa-term-body { padding: 15px; }
+  .pa-row { grid-template-columns: 32px 30px 1fr auto; gap: 8px; }
+  .pa-dial { width: 92px; height: 92px; }
+  .pa-dial-num { font-size: 34px; }
+  .pa-core { width: 104px; height: 104px; }
+  .pa-core-heart { inset: 36px; }
+}

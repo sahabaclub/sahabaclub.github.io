@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PromptArena — Sahaba Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="promptarena.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body class="pa-body">
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="../assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <a href="connect.html" class="nav-link">Connect</a>
+      <a href="../events.html" class="nav-link">Events</a>
+    </div>
+  </div>
+</header>
+
+<main class="pa-wrap">
+
+  <!-- ---- The room you just walked into ---- -->
+  <section class="pa-hero">
+    <div class="pa-scan" aria-hidden="true"></div>
+    <div class="pa-hero-inner">
+      <span class="pa-kicker"><span class="pa-kicker-dot" aria-hidden="true"></span> Practice mode · online arena</span>
+      <h1 class="pa-title">PromptArena</h1>
+      <p class="pa-hero-lead">
+        A brief, a blank box, and an AI coach that reads what you wrote and tells you
+        <strong>why</strong> it scored the way it did, what worked, what didn't, and what to try next.
+        This is practice, not an exam — play as often as you like, and a low score is just
+        the most useful feedback you'll get all week.
+      </p>
+      <div class="pa-gauges" id="gauges" aria-live="polite">
+        <div class="pa-gauge"><div class="pa-gauge-num is-none">—</div><div class="pa-gauge-label">Rating</div></div>
+        <div class="pa-gauge"><div class="pa-gauge-num is-none">—</div><div class="pa-gauge-label">Challenges</div></div>
+        <div class="pa-gauge"><div class="pa-gauge-num is-none">—</div><div class="pa-gauge-label">Best score</div></div>
+        <div class="pa-gauge"><div class="pa-gauge-num is-none">—</div><div class="pa-gauge-label">Streak</div></div>
+        <div class="pa-gauge"><div class="pa-gauge-num is-none">—</div><div class="pa-gauge-label">Board</div></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="page-status"></div>
+
+  <!-- ---- The play surface ---- -->
+  <section class="pa-section" id="stage" aria-live="polite">
+    <div class="pa-empty">
+      <p class="pa-empty-title">Warming up…</p>
+      <p class="pa-empty-text">Loading the arena.</p>
+    </div>
+  </section>
+
+  <!-- ---- Everything that isn't the game ---- -->
+  <div class="pa-tabs" role="tablist" aria-label="PromptArena sections">
+    <button type="button" class="pa-tab" role="tab" id="tab-board"
+            aria-controls="panel-board" aria-selected="true">Leaderboard</button>
+    <button type="button" class="pa-tab" role="tab" id="tab-attempts"
+            aria-controls="panel-attempts" aria-selected="false">My attempts</button>
+    <button type="button" class="pa-tab" role="tab" id="tab-legacy"
+            aria-controls="panel-legacy" aria-selected="false">Event history</button>
+  </div>
+
+  <section class="pa-panel" id="panel-board" role="tabpanel" aria-labelledby="tab-board" tabindex="0">
+    <div class="pa-section-head">
+      <h2 class="pa-section-title">Leaderboard</h2>
+      <p class="pa-section-note">Members who've chosen to be ranked.</p>
+    </div>
+    <div id="board">
+      <p class="pa-note">Loading…</p>
+    </div>
+
+    <!-- The opt-in. Off unless the member says otherwise, and the text says
+         exactly what appears rather than "make my profile public". -->
+    <div class="pa-status is-info" style="margin-top:18px">
+      <label class="pa-toggle" for="opt-in">
+        <input type="checkbox" id="opt-in" disabled>
+        <span class="pa-toggle-text">Put me on the PromptArena leaderboard</span>
+      </label>
+      <p class="pa-toggle-why">
+        Off unless you switch it on. Turning it on shows other members your <strong>name, photo,
+        rating, challenges completed and highest score</strong> — nothing else. Your prompts, the
+        judge's feedback, your streak and when you play are never shown to anyone, whichever way
+        this is set. Switch it off again at any time and you disappear from the board.
+      </p>
+      <p class="pa-note" id="opt-in-note" hidden></p>
+    </div>
+  </section>
+
+  <section class="pa-panel" id="panel-attempts" role="tabpanel" aria-labelledby="tab-attempts" tabindex="0" hidden>
+    <div class="pa-section-head">
+      <h2 class="pa-section-title">My attempts</h2>
+      <p class="pa-section-note">Every prompt you've submitted, and what the judge said.</p>
+    </div>
+    <div id="attempts"><p class="pa-note">Loading…</p></div>
+  </section>
+
+  <section class="pa-panel" id="panel-legacy" role="tabpanel" aria-labelledby="tab-legacy" tabindex="0" hidden>
+    <div class="pa-section-head">
+      <h2 class="pa-section-title">Event history</h2>
+      <p class="pa-section-note">Rounds you played at a live Sahaba event.</p>
+    </div>
+    <div id="legacy"><p class="pa-note">Loading…</p></div>
+  </section>
+
+</main>
+
+<script type="module">
+  import {
+    requireUser, escapeHtml,
+    myStats, myPosition, leaderboard, setRankingVisibility,
+    listDeck, myAttemptedChallengeIds, pickChallenge,
+    submitPrompt, awaitJudgement, listMyAttempts,
+    legacyResults, groupLegacy, invalidReasonText,
+    scoreBand, difficultyLabel, creativityLabel, formatDate, elapsedLabel,
+    ARENA_OFF_MESSAGE, PROMPT_MAX, PROMPT_MIN, JUDGE_WAIT_MS,
+  } from "../lib/promptarena.js";
+
+  var esc = escapeHtml;
+  var stage = document.getElementById("stage");
+  var me = null;
+  var deck = [];
+  var attempted = new Set();
+  var current = null;      // the challenge on screen
+  var lastSubmission = null;
+  var arenaOff = false;
+
+  // Everything animated on this page is decoration over a real state, so the
+  // reduced-motion answer is read once and used to *skip* animation, never to
+  // skip content. The count-up below is the only JS-driven motion.
+  var calm = window.matchMedia &&
+             window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---- Rendering helpers ------------------------------------------------
+
+  // Everything rendered from the database is untrusted: challenge briefs are
+  // model-generated, prompts are member-written, legacy rows came out of
+  // Microsoft Forms. `esc` on every value, without exception.
+  //
+  // dir="auto" is not decoration either — 63 of the legacy submissions are in
+  // Arabic script, and without it they render left-to-right with the
+  // punctuation thrown to the wrong end of the sentence. Live prompts get the
+  // same treatment for the same reason.
+  function text(value, tag, cls) {
+    var t = tag || "p";
+    return "<" + t + ' class="' + cls + '" dir="auto">' + esc(value) + "</" + t + ">";
+  }
+
+  function bars(level) {
+    var n = Math.max(0, Math.min(5, Number(level) || 0));
+    var out = '<span class="pa-bars" aria-hidden="true">';
+    for (var i = 1; i <= 5; i++) out += '<span class="pa-bar' + (i <= n ? " is-on" : "") + '"></span>';
+    return out + "</span>";
+  }
+
+  function statusBox(kind, html) {
+    return '<div class="pa-status is-' + kind + '">' + html + "</div>";
+  }
+
+  function pageStatus(kind, html) {
+    document.getElementById("page-status").innerHTML =
+      html ? '<div class="pa-status is-' + kind + '" style="margin-top:16px">' + html + "</div>" : "";
+  }
+
+  // ---- The hub numbers --------------------------------------------------
+
+  function gauge(value, label, sub, none) {
+    var isNone = value === null || value === undefined || value === "";
+    return '<div class="pa-gauge">' +
+      '<div class="pa-gauge-num' + (isNone ? " is-none" : "") + '">' +
+        esc(isNone ? (none || "—") : value) + "</div>" +
+      '<div class="pa-gauge-label">' + esc(label) + "</div>" +
+      (sub ? '<div class="pa-gauge-sub">' + esc(sub) + "</div>" : "") +
+    "</div>";
+  }
+
+  // A member who has never had an attempt judged has no stats row at all —
+  // 0029 does that deliberately so this page can say "not started" instead of
+  // publishing a rating of zero. Nothing below invents a 0 to fill a gap.
+  function renderGauges(stats, position) {
+    var s = stats || null;
+    var streak = s && Number(s.current_streak) > 0 ? Number(s.current_streak) : null;
+    var boardValue = position ? "#" + position.rank : null;
+    var boardSub = position ? "of those ranked" : (s && s.show_in_ranking ? "not ranked yet" : "not listed");
+
+    document.getElementById("gauges").innerHTML =
+      gauge(s && s.rating !== null ? Number(s.rating).toFixed(2) : null, "Rating",
+            s ? "avg of " + s.judged_attempts + " judged" : "no attempts yet") +
+      gauge(s ? s.challenges_completed : null, "Challenges",
+            s && s.judged_attempts > s.challenges_completed
+              ? s.judged_attempts + " attempts in total" : "") +
+      gauge(s && s.highest_score !== null ? s.highest_score + " / 10" : null, "Best score", "") +
+      gauge(streak, "Streak", streak ? (streak === 1 ? "day" : "days in a row") : "play today to start one") +
+      gauge(boardValue, "Board", boardSub);
+  }
+
+  // ---- Stage: idle ------------------------------------------------------
+
+  function renderIdle(firstTime) {
+    stage.innerHTML =
+      '<div class="pa-panel">' +
+        '<h2 class="pa-challenge-title">' +
+          (firstTime ? "Ready for your first challenge?" : "Ready for another?") + "</h2>" +
+        '<p class="pa-hero-lead">You\'ll get a brief with a few constraints. Write the prompt you\'d ' +
+          'actually use, submit it, and an AI coach scores it out of 10 and explains itself — what ' +
+          'worked, what didn\'t, and exactly what to change next time.</p>' +
+        '<div class="pa-actions">' +
+          '<button type="button" class="pa-btn pa-btn-fire" id="btn-start">Enter the arena</button>' +
+        "</div>" +
+        '<p class="pa-note">Every logged-in member can play, on any plan. Your rating is simply the ' +
+          'average of everything you\'ve had judged — replaying a challenge after reading your ' +
+          'feedback is encouraged, and it counts.</p>' +
+      "</div>";
+    document.getElementById("btn-start").addEventListener("click", startChallenge);
+  }
+
+  // ---- Stage: a challenge -----------------------------------------------
+
+  function renderChallenge(c) {
+    current = c;
+    var constraints = (c.constraints || []).filter(Boolean);
+
+    stage.innerHTML =
+      '<div class="pa-term">' +
+        '<div class="pa-term-bar">' +
+          '<span class="pa-term-lamps" aria-hidden="true">' +
+            '<span class="pa-term-lamp"></span><span class="pa-term-lamp"></span><span class="pa-term-lamp"></span>' +
+          "</span>" +
+          '<span class="pa-term-path">challenge // ' + esc(c.domain || "general") + "</span>" +
+        "</div>" +
+        '<div class="pa-term-body">' +
+          text(c.title || "Untitled challenge", "h2", "pa-challenge-title") +
+          '<div class="pa-meta">' +
+            '<span class="pa-chip">' + bars(c.difficulty) + esc(difficultyLabel(c.difficulty)) + "</span>" +
+            '<span class="pa-chip is-plain">' + esc(creativityLabel(c.creativity)) + "</span>" +
+            '<span class="pa-chip is-plain">for ' + esc(c.target_audience || "general") + "</span>" +
+          "</div>" +
+          text(c.brief || "", "p", "pa-brief") +
+          (constraints.length
+            ? '<p class="pa-compose-label">Must respect</p><ul class="pa-constraints">' +
+              constraints.map(function (r) { return '<li dir="auto">' + esc(r) + "</li>"; }).join("") +
+              "</ul>"
+            : "") +
+
+          '<div class="pa-compose">' +
+            '<label class="pa-compose-label" for="prompt">Your prompt</label>' +
+            '<textarea class="pa-input" id="prompt" dir="auto" maxlength="' + PROMPT_MAX + '" ' +
+              'placeholder="Write the prompt you would actually send…"></textarea>' +
+            '<div class="pa-compose-foot">' +
+              '<span class="pa-count" id="count">0 / ' + PROMPT_MAX + "</span>" +
+              '<span class="pa-actions" style="margin:0">' +
+                '<button type="button" class="pa-btn pa-btn-ghost pa-btn-sm" id="btn-skip">Different challenge</button>' +
+                '<button type="button" class="pa-btn pa-btn-fire" id="btn-submit">Submit to the judge</button>' +
+              "</span>" +
+            "</div>" +
+            '<div id="compose-status"></div>' +
+          "</div>" +
+        "</div>" +
+      "</div>";
+
+    var box = document.getElementById("prompt");
+    var count = document.getElementById("count");
+    box.addEventListener("input", function () {
+      count.textContent = box.value.length + " / " + PROMPT_MAX;
+      count.className = "pa-count" + (box.value.length > PROMPT_MAX ? " is-over" : "");
+    });
+    document.getElementById("btn-skip").addEventListener("click", function () {
+      startChallenge(c.id);
+    });
+    document.getElementById("btn-submit").addEventListener("click", submit);
+    box.focus();
+  }
+
+  async function startChallenge(notJust) {
+    pageStatus("", "");
+    stage.innerHTML =
+      '<div class="pa-empty"><p class="pa-empty-title">Dealing a challenge…</p>' +
+      '<p class="pa-empty-text">Picking one you haven\'t seen.</p></div>';
+
+    if (!deck.length) {
+      var res = await listDeck();
+      if (res.off) return renderOff();
+      if (res.error) {
+        stage.innerHTML =
+          '<div class="pa-empty"><p class="pa-empty-title">Couldn\'t reach the challenge bank</p>' +
+          '<p class="pa-empty-text">Something went wrong on the way to the server. Refreshing usually sorts it.</p></div>';
+        return;
+      }
+      deck = res.data || [];
+    }
+
+    if (!deck.length) {
+      stage.innerHTML =
+        '<div class="pa-empty"><p class="pa-empty-title">No challenges yet</p>' +
+        '<p class="pa-empty-text">The challenge bank is empty — the club generates these, and none ' +
+        'have been added yet. Nothing is broken, and there is nothing for you to fix. Check back soon.</p></div>';
+      return;
+    }
+
+    var pick = pickChallenge(deck, {
+      avoid: attempted,
+      notJust: typeof notJust === "string" ? notJust : "",
+    });
+    if (!pick) return renderIdle(true);
+    renderChallenge(pick);
+  }
+
+  // ---- Submitting and waiting -------------------------------------------
+
+  async function submit() {
+    var box = document.getElementById("prompt");
+    var btn = document.getElementById("btn-submit");
+    var slot = document.getElementById("compose-status");
+    var value = box.value;
+
+    if (value.trim().length < PROMPT_MIN) {
+      slot.innerHTML = statusBox("warn",
+        "Write a little more before submitting — the judge needs a prompt to read.");
+      box.focus();
+      return;
+    }
+
+    btn.disabled = true;
+    slot.innerHTML = "";
+    var res = await submitPrompt(current.id, value);
+    btn.disabled = false;
+
+    if (res.off) return renderOff();
+    if (res.error) {
+      slot.innerHTML = statusBox("warn", esc(res.error));
+      return;
+    }
+
+    lastSubmission = { id: res.data.id, challenge: current, prompt: value.trim() };
+    attempted.add(current.id);
+    watch(lastSubmission);
+  }
+
+  // What the core says while it waits. Every line is true of the actual state
+  // — the page knows the row was stored and knows how long it has been — so
+  // none of them claims to know what the judge is doing inside the model call.
+  var WAIT_LINES = [
+    "Prompt stored · handed to the judge",
+    "The judge is a model call, not a lookup — it thinks before it answers",
+    "Still working · your attempt is safe either way",
+    "You can leave this page — the result will be waiting for you",
+  ];
+
+  function renderCore(state) {
+    stage.innerHTML =
+      '<div class="pa-core-wrap">' +
+        '<div class="pa-scan" aria-hidden="true"></div>' +
+        '<div class="pa-core" aria-hidden="true">' +
+          '<span class="pa-ring"></span><span class="pa-ring pa-ring-2"></span>' +
+          '<span class="pa-ring pa-ring-3"></span><span class="pa-core-heart"></span>' +
+        "</div>" +
+        '<h2 class="pa-core-title">The judge is reading your prompt</h2>' +
+        '<p class="pa-core-status" id="core-status" role="status">' + esc(WAIT_LINES[0]) + "</p>" +
+        '<p class="pa-core-clock" id="core-clock">0s</p>' +
+        '<p class="pa-core-sub">Scoring takes a few seconds to a minute or so. Nothing is lost if you ' +
+          'close this tab — the result is stored against your account and shows up under ' +
+          '<strong>My attempts</strong>.</p>' +
+      "</div>";
+    return state;
+  }
+
+  async function watch(sub, resumed) {
+    renderCore();
+    var statusEl = document.getElementById("core-status");
+    var clockEl = document.getElementById("core-clock");
+    var line = 0;
+
+    var res = await awaitJudgement(sub.id, {
+      timeoutMs: JUDGE_WAIT_MS,
+      onTick: function (t) {
+        if (clockEl) clockEl.textContent = elapsedLabel(t.elapsedMs) + " · check " + t.polls;
+        // The line advances on real polls rather than on a timer of its own,
+        // so a throttled background tab does not come back showing a
+        // conversation that never happened.
+        if (statusEl && t.polls % 3 === 0) {
+          line = (line + 1) % WAIT_LINES.length;
+          statusEl.textContent = WAIT_LINES[line];
+        }
+      },
+    });
+
+    if (res.status === "judged") return renderVerdict(res.data, sub);
+    if (res.status === "off") return renderOff();
+    if (res.status === "failed") return renderJudgeFailed(res.data, sub);
+    if (res.status === "unreachable") return renderUnreachable(sub);
+    return renderStillWaiting(sub, res.elapsedMs, resumed);
+  }
+
+  // ⚠ The cap is reached, and NOTHING IS KNOWN TO HAVE GONE WRONG. The row is
+  // stored, the judge may well still be running, and the page has simply
+  // stopped asking. Saying "something went wrong" here would be a guess
+  // presented as a fact — and the member would have no way of finding out it
+  // was untrue except by discovering the result later, judged, in their list.
+  function renderStillWaiting(sub, elapsedMs, resumed) {
+    stage.innerHTML =
+      '<div class="pa-panel">' +
+        '<h2 class="pa-challenge-title">Still judging</h2>' +
+        '<p class="pa-hero-lead">This one has been going ' + esc(elapsedLabel(elapsedMs)) +
+          ', which is longer than usual. <strong>Nothing has failed.</strong> Your prompt is stored ' +
+          'and the judge may still be working on it — this page just stopped checking on its own so ' +
+          'it isn\'t sitting there refreshing forever.</p>' +
+        '<p class="pa-hero-lead">Check again whenever you like, or leave it: when the judge finishes, ' +
+          'the score and the feedback appear under <strong>My attempts</strong>.</p>' +
+        '<div class="pa-actions">' +
+          '<button type="button" class="pa-btn pa-btn-fire" id="btn-recheck">Check again</button>' +
+          '<button type="button" class="pa-btn" id="btn-another">Start another challenge</button>' +
+        "</div>" +
+      "</div>";
+    document.getElementById("btn-recheck").addEventListener("click", function () {
+      watch(sub, true);
+    });
+    document.getElementById("btn-another").addEventListener("click", function () { startChallenge(); });
+  }
+
+  function renderUnreachable(sub) {
+    stage.innerHTML =
+      '<div class="pa-panel">' +
+        '<h2 class="pa-challenge-title">Couldn\'t check on it</h2>' +
+        '<p class="pa-hero-lead">We can\'t reach the server to see how the judging is going. ' +
+          '<strong>Your prompt was submitted and is stored</strong> — this is about the connection ' +
+          'from this page, not about your attempt.</p>' +
+        '<div class="pa-actions">' +
+          '<button type="button" class="pa-btn pa-btn-fire" id="btn-recheck">Try again</button>' +
+        "</div>" +
+      "</div>";
+    document.getElementById("btn-recheck").addEventListener("click", function () { watch(sub, true); });
+  }
+
+  // The row itself says `failed`. Only now may the page say so — and it says
+  // whose problem it is, because "the judge errored" reads as "your prompt
+  // broke it" to anybody who has just written one.
+  function renderJudgeFailed(row, sub) {
+    var why = row && row.judge_error ? String(row.judge_error) : "";
+    stage.innerHTML =
+      '<div class="pa-panel">' +
+        '<h2 class="pa-challenge-title">The judge couldn\'t finish this one</h2>' +
+        '<p class="pa-hero-lead">That\'s a fault on our side, not a problem with your prompt. Your ' +
+          'attempt is stored exactly as you wrote it and can be judged again — and because it was ' +
+          'never scored, <strong>it hasn\'t affected your rating at all</strong>.</p>' +
+        (why
+          ? '<details class="pa-note"><summary>What the judge reported</summary>' +
+            '<p class="pa-yours-text" dir="auto" style="margin-top:8px">' + esc(why) + "</p></details>"
+          : "") +
+        '<div class="pa-actions">' +
+          '<button type="button" class="pa-btn pa-btn-fire" id="btn-another">Try another challenge</button>' +
+          '<button type="button" class="pa-btn" id="btn-recheck">Check this one again</button>' +
+        "</div>" +
+      "</div>";
+    document.getElementById("btn-another").addEventListener("click", function () { startChallenge(); });
+    document.getElementById("btn-recheck").addEventListener("click", function () { watch(sub, true); });
+  }
+
+  function renderOff() {
+    arenaOff = true;
+    stage.innerHTML =
+      '<div class="pa-empty">' +
+        '<p class="pa-empty-title">PromptArena isn\'t switched on yet</p>' +
+        '<p class="pa-empty-text">' + esc(ARENA_OFF_MESSAGE) + "</p>" +
+      "</div>";
+  }
+
+  // ---- The verdict ------------------------------------------------------
+
+  function bulletBlock(title, items, cls) {
+    var list = (items || []).filter(Boolean);
+    if (!list.length) return "";
+    return '<div class="pa-fb ' + cls + '">' +
+      '<p class="pa-fb-title">' + esc(title) + "</p>" +
+      "<ul>" + list.map(function (i) { return '<li dir="auto">' + esc(i) + "</li>"; }).join("") + "</ul>" +
+    "</div>";
+  }
+
+  function proseBlock(title, body, cls, wide) {
+    if (!body) return "";
+    return '<div class="pa-fb ' + cls + (wide ? " pa-fb-wide" : "") + '">' +
+      '<p class="pa-fb-title">' + esc(title) + "</p>" +
+      text(body, "p", "pa-fb-body") +
+    "</div>";
+  }
+
+  function rubricBlock(scores) {
+    if (!scores || typeof scores !== "object") return "";
+    var keys = Object.keys(scores);
+    if (!keys.length) return "";
+    return '<div class="pa-rubric">' + keys.map(function (k) {
+      var label = String(k).replace(/_/g, " ");
+      return '<div class="pa-rubric-item">' +
+        '<span class="pa-rubric-key">' + esc(label) + "</span>" +
+        '<span class="pa-rubric-val">' + esc(scores[k]) + "</span>" +
+      "</div>";
+    }).join("") + "</div>";
+  }
+
+  function renderVerdict(row, sub) {
+    var band = scoreBand(row.score);
+    var challengeTitle = (sub && sub.challenge && sub.challenge.title) || "";
+
+    stage.innerHTML =
+      '<div class="pa-panel pa-verdict">' +
+        '<div class="pa-verdict-top">' +
+          '<div class="pa-dial" id="dial" role="img" aria-label="You scored ' + esc(row.score) + ' out of 10">' +
+            '<span class="pa-dial-face">' +
+              '<span class="pa-dial-num" id="dial-num">' + esc(row.score) + "</span>" +
+              '<span class="pa-dial-of">/ 10</span>' +
+            "</span>" +
+          "</div>" +
+          '<div class="pa-verdict-said">' +
+            '<p class="pa-band">' + esc(band.label) + "</p>" +
+            '<p class="pa-band-line">' + esc(band.line) + "</p>" +
+            (challengeTitle
+              ? '<p class="pa-item-when" dir="auto" style="margin-top:8px">' + esc(challengeTitle) + "</p>"
+              : "") +
+          "</div>" +
+        "</div>" +
+
+        '<div class="pa-fbs">' +
+          proseBlock("Why this score", row.feedback_summary, "", true) +
+          bulletBlock("What worked", row.feedback_strengths, "is-good") +
+          bulletBlock("What could be better", row.feedback_improvements, "") +
+          proseBlock("How to improve it next time", row.feedback_how_to_improve, "is-next", true) +
+        "</div>" +
+
+        rubricBlock(row.rubric_scores) +
+
+        '<div class="pa-yours">' +
+          '<p class="pa-yours-title">What you wrote</p>' +
+          text(row.prompt_text || (sub && sub.prompt) || "", "p", "pa-yours-text") +
+        "</div>" +
+
+        '<div class="pa-actions">' +
+          '<button type="button" class="pa-btn pa-btn-fire" id="btn-again">Play again</button>' +
+          '<button type="button" class="pa-btn" id="btn-retry-same">Retry this challenge</button>' +
+        "</div>" +
+        '<p class="pa-note">Retrying counts too — your rating is the average of every judged attempt, ' +
+          'and rewriting a prompt after reading the feedback is the whole point of practising.</p>' +
+      "</div>";
+
+    var dial = document.getElementById("dial");
+    var pct = Math.max(0, Math.min(10, Number(row.score) || 0)) / 10;
+    // Set as a property rather than interpolated into markup: it is a number
+    // derived from a database value and it belongs nowhere near an HTML string.
+    dial.style.setProperty("--pa-pct", String(pct));
+
+    if (!calm) countUp(document.getElementById("dial-num"), Number(row.score));
+
+    document.getElementById("btn-again").addEventListener("click", function () {
+      startChallenge(sub && sub.challenge ? sub.challenge.id : "");
+    });
+    document.getElementById("btn-retry-same").addEventListener("click", function () {
+      if (sub && sub.challenge) renderChallenge(sub.challenge);
+      else startChallenge();
+    });
+
+    refreshHub();
+    renderAttempts();
+  }
+
+  // Purely cosmetic. The real number is already in the DOM before this runs.
+  //
+  // ⚠ AND IT HAS TO STAY THERE IF THE ANIMATION NEVER RUNS. requestAnimationFrame
+  // does not fire in a hidden tab or an off-screen frame, so the naive version of
+  // this — write "0", then count up on rAF — leaves a member looking at a score of
+  // 0 for a prompt that scored 8, which is the single worst wrong number this page
+  // could produce. Measured, not theorised: it reproduced first try in an
+  // off-screen frame.
+  //
+  // Two guards. It does not start at all unless the page is actually being
+  // looked at, and a plain timer restores the true value even if not one frame
+  // is ever delivered.
+  function countUp(el, target) {
+    if (!el || !isFinite(target)) return;
+    if (typeof document.hidden === "boolean" && document.hidden) return;
+    var final = String(target);
+    var safety = setTimeout(function () { el.textContent = final; }, 1500);
+    var start = performance.now();
+    var dur = 700;
+    function frame(now) {
+      var t = Math.min(1, (now - start) / dur);
+      el.textContent = String(Math.round(target * (1 - Math.pow(1 - t, 3))));
+      if (t < 1) { requestAnimationFrame(frame); return; }
+      clearTimeout(safety);
+      el.textContent = final;
+    }
+    el.textContent = "0";
+    requestAnimationFrame(frame);
+  }
+
+  // ---- Leaderboard ------------------------------------------------------
+
+  function avatarHtml(row) {
+    if (row.avatar_url) {
+      return '<img class="pa-av" src="' + esc(row.avatar_url) + '" alt="" loading="lazy">';
+    }
+    var initial = String(row.full_name || "?").trim().charAt(0).toUpperCase() || "?";
+    return '<span class="pa-av" aria-hidden="true">' + esc(initial) + "</span>";
+  }
+
+  function boardRow(row) {
+    var isMe = me && row.user_id === me.id;
+    var name = row.full_name || "A member";
+    // profile_user_id is only filled for members who are also discoverable in
+    // Connect. Opting into the ranking is consent to be ranked, not consent to
+    // be browsed, so a missing id means plain text and no link.
+    var nameHtml = row.profile_user_id
+      ? '<a href="member.html?u=' + esc(row.profile_user_id) + '">' + esc(name) + "</a>"
+      : esc(name);
+
+    return '<div class="pa-row' + (isMe ? " is-me" : "") + '">' +
+      '<span class="pa-rank' + (row.rank <= 3 ? " is-top" : "") + '">' + esc(row.rank) + "</span>" +
+      avatarHtml(row) +
+      '<span class="pa-who">' +
+        '<p class="pa-name" dir="auto">' + nameHtml + (isMe ? " (you)" : "") + "</p>" +
+        '<p class="pa-who-sub">' + esc(row.challenges_completed) + " challenges · best " +
+          esc(row.highest_score) + "</p>" +
+      "</span>" +
+      '<span class="pa-rating">' + esc(Number(row.rating).toFixed(2)) + "<small>rating</small></span>" +
+    "</div>";
+  }
+
+  async function renderBoard() {
+    var slot = document.getElementById("board");
+    var res = await leaderboard(50);
+    if (res.off) {
+      slot.innerHTML = '<p class="pa-note">' + esc(ARENA_OFF_MESSAGE) + "</p>";
+      return;
+    }
+    if (res.error) {
+      slot.innerHTML = '<p class="pa-note">Couldn\'t load the leaderboard just now.</p>';
+      return;
+    }
+    var rows = res.data || [];
+    if (!rows.length) {
+      slot.innerHTML =
+        '<div class="pa-empty">' +
+          '<p class="pa-empty-title">Nobody\'s on the board yet</p>' +
+          '<p class="pa-empty-text">The leaderboard only lists members who have chosen to appear, ' +
+            'and so far nobody has. It stays that way until people opt in — including you.</p>' +
+        "</div>";
+      return;
+    }
+    slot.innerHTML = '<div class="pa-board">' + rows.map(boardRow).join("") + "</div>";
+  }
+
+  // ---- The opt-in -------------------------------------------------------
+
+  function optInNote(kind, msg) {
+    var el = document.getElementById("opt-in-note");
+    el.hidden = !msg;
+    el.textContent = msg || "";
+    el.style.color = kind === "warn" ? "var(--pa-red)" : "";
+  }
+
+  async function wireOptIn(stats) {
+    var box = document.getElementById("opt-in");
+    // Never pre-ticked from anything but the stored value, and the stored
+    // value defaults to false. A member with no stats row has never played and
+    // has certainly never opted in.
+    box.checked = Boolean(stats && stats.show_in_ranking);
+    box.disabled = arenaOff;
+
+    box.addEventListener("change", async function () {
+      var wanted = box.checked;
+      box.disabled = true;
+      optInNote("", wanted ? "Adding you to the board…" : "Removing you from the board…");
+      var res = await setRankingVisibility(wanted);
+      box.disabled = false;
+
+      if (res.off) {
+        // Includes the silent case: the update succeeded as far as PostgREST
+        // is concerned but changed no row, which means the column grant is
+        // missing. The switch must not sit there looking saved.
+        box.checked = !wanted;
+        optInNote("warn",
+          "That didn't save — the database update this needs hasn't been applied yet. " +
+          "Nothing about you has changed.");
+        return;
+      }
+      if (res.error) {
+        box.checked = !wanted;
+        optInNote("warn", "That didn't save. Nothing about you has changed.");
+        return;
+      }
+      box.checked = res.data;
+      optInNote("", res.data
+        ? "You're on the leaderboard. Switch this off any time to leave it."
+        : "You're off the leaderboard. Nobody can see your rating.");
+      renderBoard();
+      refreshHub();
+    });
+  }
+
+  // ---- My attempts ------------------------------------------------------
+
+  function attemptItem(row) {
+    var when = row.submitted_at ? formatDate(row.submitted_at) : "";
+    var mark;
+    if (row.judge_status === "judged" && row.score !== null && row.score !== undefined) {
+      mark = '<span class="pa-mark">' + esc(row.score) + "<small>/ 10</small></span>";
+    } else if (row.judge_status === "failed") {
+      mark = '<span class="pa-nomark">Not judged — the judge errored</span>';
+    } else {
+      mark = '<span class="pa-nomark">Still judging</span>';
+    }
+
+    var feedback = "";
+    if (row.judge_status === "judged" && row.feedback_summary) {
+      feedback = text(row.feedback_summary, "p", "pa-round-c");
+    }
+
+    return '<div class="pa-item">' +
+      '<div class="pa-item-top">' +
+        '<p class="pa-item-title">' + esc(scoreBand(row.score).label) + "</p>" +
+        mark +
+      "</div>" +
+      '<p class="pa-item-when">' + esc(when) + "</p>" +
+      text(row.prompt_text || "", "p", "pa-item-text") +
+      feedback +
+    "</div>";
+  }
+
+  async function renderAttempts() {
+    var slot = document.getElementById("attempts");
+    var res = await listMyAttempts(20);
+    if (res.off) {
+      slot.innerHTML = '<p class="pa-note">' + esc(ARENA_OFF_MESSAGE) + "</p>";
+      return;
+    }
+    var rows = res.data || [];
+    if (!rows.length) {
+      slot.innerHTML =
+        '<div class="pa-empty">' +
+          '<p class="pa-empty-title">Nothing here yet</p>' +
+          '<p class="pa-empty-text">Every prompt you submit shows up here with the judge\'s feedback, ' +
+            'so you can come back and read it again before your next attempt.</p>' +
+        "</div>";
+      return;
+    }
+    slot.innerHTML = '<div class="pa-list">' + rows.map(attemptItem).join("") + "</div>";
+  }
+
+  // ---- Legacy history ---------------------------------------------------
+  //
+  // ⚠ The rules here are not stylistic. See the header of lib/promptarena.js:
+  // a missing score is a round the player never attempted, a row the importer
+  // flagged with `invalid_reason` carries a mark that isn't a real result, and
+  // the stored event total is wrong for 53 people so any total shown is summed
+  // from the rounds. None of these may render as a number.
+
+  function roundBlock(r) {
+    var head, cls;
+    if (r.state === "scored") {
+      cls = "is-scored";
+      head = '<span class="pa-mark">' + esc(r.score) + "<small>/ 10</small></span>";
+    } else if (r.state === "unreliable") {
+      cls = "is-absent";
+      head = '<span class="pa-nomark">Score not shown</span>';
+    } else {
+      cls = "is-absent";
+      head = '<span class="pa-nomark">Not attempted</span>';
+    }
+
+    var explain = "";
+    if (r.state === "unreliable") {
+      explain = '<p class="pa-round-q">' + esc(invalidReasonText(r.invalid_reason)) + "</p>";
+    } else if (r.state === "not-attempted") {
+      explain = '<p class="pa-round-q">You didn’t submit anything for this round, so there was ' +
+        'nothing to mark.</p>';
+    }
+
+    return '<div class="pa-round ' + cls + '">' +
+      '<div class="pa-round-head">' +
+        '<span class="pa-round-n">Round ' + esc(r.round_number) + "</span>" + head +
+      "</div>" +
+      (r.question ? text(r.question, "p", "pa-round-q") : "") +
+      explain +
+      (r.prompt_text ? text(r.prompt_text, "p", "pa-round-p") : "") +
+      (r.state === "scored" && r.judge_comment ? text(r.judge_comment, "p", "pa-round-c") : "") +
+    "</div>";
+  }
+
+  function eventBlock(ev) {
+    // Summed here from the rounds that actually carry a mark. The stored total
+    // in the source export reads 0 for 53 players whose rounds add up to real
+    // marks, so it is never the number shown.
+    var summary;
+    if (ev.scoredCount) {
+      summary = '<span class="pa-mark">' + esc(ev.total) + "<small>from " +
+        esc(ev.scoredCount) + (ev.scoredCount === 1 ? " round" : " rounds") + "</small></span>";
+    } else {
+      summary = '<span class="pa-nomark">No scored rounds</span>';
+    }
+
+    var notes = [];
+    if (ev.notAttempted) {
+      notes.push(ev.notAttempted + (ev.notAttempted === 1 ? " round was" : " rounds were") +
+        " not attempted, so " + (ev.notAttempted === 1 ? "it has" : "they have") + " no score.");
+    }
+    if (ev.unreliable) {
+      notes.push((ev.unreliable === 1 ? "One round’s" : ev.unreliable + " rounds’") +
+        " recorded mark was found to be an artefact of the old scoring run, so it isn’t " +
+        "shown or counted.");
+    }
+    // 262 of the 556 legacy submissions never had written feedback. Said once,
+    // as a fact about the event, so an empty comment doesn't read as something
+    // the club lost. It never affects whether a score is shown.
+    if (ev.has_judge_comments === false) {
+      notes.push("Written feedback wasn’t recorded at this event — only the marks were.");
+    }
+
+    // ⚠ july18's rows run from 2025-07-18 to 2026-07-14 because that Forms
+    // list was left open and reused, so its earliest date is not an event
+    // date and must not be printed as one. `undefined` means the view didn't
+    // tell us, which is not the same as false — then the date is shown.
+    var whenHtml;
+    if (ev.is_single_day === false) {
+      whenHtml = '<p class="pa-item-when">Collected over a period, not on one day — this list ' +
+        'stayed open and was reused, so there’s no single event date to show.</p>';
+    } else if (ev.held_on) {
+      whenHtml = '<p class="pa-item-when">' + esc(formatDate(ev.held_on)) + "</p>";
+    } else {
+      whenHtml = "";
+    }
+
+    return '<div class="pa-item">' +
+      '<div class="pa-item-top">' +
+        text(ev.name || "A Sahaba event", "p", "pa-item-title") +
+        summary +
+      "</div>" +
+      whenHtml +
+      (notes.length ? '<p class="pa-note">' + esc(notes.join(" ")) + "</p>" : "") +
+      '<div class="pa-rounds">' + ev.rounds.map(roundBlock).join("") + "</div>" +
+    "</div>";
+  }
+
+  async function renderLegacy() {
+    var slot = document.getElementById("legacy");
+    var res = await legacyResults();
+    if (res.off) {
+      slot.innerHTML = '<p class="pa-note">' + esc(ARENA_OFF_MESSAGE) + "</p>";
+      return;
+    }
+    if (res.error) {
+      slot.innerHTML = '<p class="pa-note">Couldn\'t load your event history just now.</p>';
+      return;
+    }
+    var events = groupLegacy(res.data || []);
+    if (!events.length) {
+      slot.innerHTML =
+        '<div class="pa-empty">' +
+          '<p class="pa-empty-title">Nothing from a live event</p>' +
+          '<p class="pa-empty-text">PromptArena ran at six Sahaba events before it came online. ' +
+            'If you played at one of them under a different email address, the club can\'t match it ' +
+            'to this account — everything you play here from now on lands under <strong>My attempts</strong>.</p>' +
+        "</div>";
+      return;
+    }
+    slot.innerHTML =
+      '<p class="pa-note" style="margin-top:0">Your own rounds only. Nobody else can see these, and ' +
+        'you can\'t see anybody else\'s.</p>' +
+      '<div class="pa-list">' + events.map(eventBlock).join("") + "</div>";
+  }
+
+  // ---- Tabs -------------------------------------------------------------
+
+  var TABS = [
+    { tab: "tab-board", panel: "panel-board" },
+    { tab: "tab-attempts", panel: "panel-attempts" },
+    { tab: "tab-legacy", panel: "panel-legacy" },
+  ];
+  TABS.forEach(function (t) {
+    document.getElementById(t.tab).addEventListener("click", function () {
+      TABS.forEach(function (other) {
+        var on = other.tab === t.tab;
+        document.getElementById(other.tab).setAttribute("aria-selected", on ? "true" : "false");
+        document.getElementById(other.panel).hidden = !on;
+      });
+    });
+  });
+
+  // ---- Load -------------------------------------------------------------
+
+  async function refreshHub() {
+    var stats = await myStats();
+    if (stats.off) { renderOff(); return null; }
+    var pos = await myPosition();
+    renderGauges(stats.data, pos.data);
+    return stats.data;
+  }
+
+  (async function init() {
+    me = await requireUser("../login.html");
+    if (!me) return;
+
+    var stats = await myStats();
+    if (stats.off) {
+      renderOff();
+      document.getElementById("board").innerHTML = '<p class="pa-note">' + esc(ARENA_OFF_MESSAGE) + "</p>";
+      document.getElementById("attempts").innerHTML = '<p class="pa-note">' + esc(ARENA_OFF_MESSAGE) + "</p>";
+      document.getElementById("legacy").innerHTML = '<p class="pa-note">' + esc(ARENA_OFF_MESSAGE) + "</p>";
+      wireOptIn(null);
+      return;
+    }
+
+    var pos = await myPosition();
+    renderGauges(stats.data, pos.data);
+    wireOptIn(stats.data);
+
+    var seen = await myAttemptedChallengeIds();
+    attempted = seen.data || new Set();
+
+    renderIdle(!stats.data);
+    renderBoard();
+    renderAttempts();
+    renderLegacy();
+  })();
+</script>
+<script src="../script.js"></script>
+</body>
+</html>
