@@ -1,6 +1,8 @@
-// ⚠ GENERATED — do not edit. Deploy-time twin of index.ts with ../_shared/*
-// inlined, because the Supabase dashboard editor cannot resolve relative
-// imports outside the function directory. Edit index.ts and regenerate.
+// GENERATED - do not edit. Deploy-time twin of index.ts with the ../_shared/cors.ts
+// import replaced by the corsHeaders object inline, and nothing else. The Supabase
+// dashboard editor deploys one function directory at a time and cannot reach a
+// shared parent file. Edit index.ts and regenerate; the two must stay in step.
+
 // parse-profile-document
 // ------------------------------------------------------------
 // Takes a CV or a LinkedIn PDF export and fills in the same profile
@@ -37,7 +39,11 @@
 //   OPENAI_API_KEY
 //   OPENAI_MODEL                             — optional, see below
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-const corsHeaders = {  "Access-Control-Allow-Origin": "*",  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",};
+// ---- inlined from ../_shared/cors.ts ----
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";

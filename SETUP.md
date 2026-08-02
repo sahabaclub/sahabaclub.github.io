@@ -136,9 +136,20 @@ rather than reporting "Saved." over a career it quietly dropped.
 
 If you are deploying `parse-profile-document` from the **dashboard editor**
 rather than the CLI, deploy its `index.deploy.ts` rather than `index.ts`, for
-the same reason as `generate-avatar` below. Regenerate it whenever `index.ts`
-changes: it is `index.ts` with the `../_shared/cors.ts` import line replaced by
-the `corsHeaders` object inline, and nothing else.
+the same reason as `generate-avatar` below. That file is generated, not
+written by hand:
+
+```bash
+node tools/deploy-twin.mjs write     # regenerate the twins from their index.ts
+node tools/deploy-twin.mjs verify    # exit 1 if one of them is out of date
+```
+
+The script needs Node 18 and nothing else; this repo still has no
+`package.json` and no dependencies. It covers `parse-profile-document`,
+`generate-avatar` and `build-prospect-profile`. Run `write` after editing one
+of those `index.ts` files or anything in `supabase/functions/_shared/`, and
+`verify` before a dashboard deploy — a stale twin does not fail to deploy, it
+deploys the previous version of the function.
 
 **Avatars.** `generate-avatar` turns a member's photo into an illustrated
 club-style portrait and then discards the photo. It uses the same
@@ -160,8 +171,10 @@ deploy `supabase/functions/generate-avatar/index.deploy.ts` instead of
 `index.ts`. It is the same function with `_shared/cors.ts` and
 `_shared/avatar-art.ts` pasted inline, because the editor deploys one
 function directory at a time and cannot reach a shared parent file —
-the same arrangement `parse-profile-document` already uses. Keep the two
-in sync.
+the same arrangement `parse-profile-document` already uses. It is generated
+by `node tools/deploy-twin.mjs write` (above), which is also what keeps it
+in step with `index.ts` and with the two shared files; `verify` says whether
+it still is.
 
 Check it landed:
 

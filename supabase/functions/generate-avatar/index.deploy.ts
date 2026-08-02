@@ -1,3 +1,8 @@
+// GENERATED - do not edit. Deploy-time twin of index.ts with the ../_shared/cors.ts
+// and ../_shared/avatar-art.ts imports replaced by those files inline, and nothing
+// else. The Supabase dashboard editor deploys one function directory at a time and
+// cannot reach a shared parent file. Edit index.ts and regenerate; keep them in step.
+
 // generate-avatar
 // ------------------------------------------------------------
 // Turns a member's real photo into a stylised illustrated Sahaba Club avatar,
@@ -62,43 +67,20 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
 //   OPENAI_API_KEY
 //   OPENAI_IMAGE_MODEL                       — optional, see below
-//
-// ---------------------------------------------------------------------------
-// DEPLOY COPY. Identical logic to index.ts; the only difference is that
-// ../_shared/cors.ts and ../_shared/avatar-art.ts are inlined below, because
-// the Supabase dashboard editor deploys one function directory at a time and a
-// shared parent file is not reachable from there. Same arrangement as
-// parse-profile-document/index.deploy.ts. Keep in sync with index.ts and with
-// supabase/functions/_shared/.
-// ---------------------------------------------------------------------------
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// ---- inlined from ../_shared/cors.ts ----------------------------------
-export const corsHeaders = {
+// ---- inlined from ../_shared/cors.ts ----
+const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+// ---- inlined from ../_shared/avatar-art.ts ----
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-// ---- inlined from ../_shared/avatar-art.ts ----------------------------
-// avatar-art
-// ------------------------------------------------------------
-// The house style, the monthly theme rota, and the fallback tile.
-//
-// Two functions draw avatars: generate-avatar (one member, on demand, from
-// their photo) and refresh-avatars (the whole wall, once a month, from what
-// they already have). The pictures they produce sit next to each other in the
-// same directory, so the style, the theme and the fallback have to be the
-// same artwork — a house style that exists in two copies is a house style
-// that drifts. Everything shared between them lives here; everything about
-// *which columns get written* stays in the functions, because that part
-// genuinely differs.
-
-export const AVATAR_BUCKET = "avatars";
+const AVATAR_BUCKET = "avatars";
 
 // Three tries per monthly cycle. Also a CHECK constraint in 0015 (0..3), so
 // nothing here may ever write 4.
-export const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = 3;
 
 // ---- Cycles -----------------------------------------------------------
 
@@ -107,7 +89,7 @@ export const MAX_ATTEMPTS = 3;
 // view compare against — Supabase runs its databases in UTC, and taking the
 // month from the local clock instead would put this code and the view on
 // different months for a few hours around each boundary.
-export function currentCycle(now: Date = new Date()): string {
+function currentCycle(now: Date = new Date()): string {
   return now.toISOString().slice(0, 7);
 }
 
@@ -139,7 +121,7 @@ const THEMES = [
 
 // Takes the cycle string rather than a Date so the caller's month and the
 // stored `avatar_theme` can never disagree.
-export function themeForCycle(cycle: string): string {
+function themeForCycle(cycle: string): string {
   const month = Number(String(cycle).slice(5, 7));
   // An unparseable cycle should still produce a portrait. Falling back to
   // January is a duller failure than throwing halfway through a batch.
@@ -160,7 +142,7 @@ export function themeForCycle(cycle: string): string {
 // stated positively (flat, painterly, hand-drawn) *and* negatively (no 3D
 // render, no plastic surfacing) — image models drift back toward the
 // render-y default unless told not to twice.
-export const HOUSE_STYLE = [
+const HOUSE_STYLE = [
   "A clean, warm, high-quality stylised illustrated portrait: flat painterly character illustration, hand-drawn and hand-shaded.",
   "Not a 3D render, not CGI, not a photograph — illustration.",
   "Shoulders-up, facing the viewer, warm and approachable expression.",
@@ -177,7 +159,7 @@ export const HOUSE_STYLE = [
 // avatar on the monthly refresh, where there is no photograph left to work
 // from (0015 destroys it, deliberately) and the likeness has to be carried
 // forward from the previous drawing.
-export type PromptMode = "photo" | "avatar";
+type PromptMode = "photo" | "avatar";
 
 // ---- The variant rota -------------------------------------------------
 
@@ -234,7 +216,7 @@ function variantTreatment(variant: number): string {
 // with three arguments and must keep compiling untouched — the monthly job
 // draws one picture per member and has nothing to vary between, so variant 0
 // is the right answer for it and it should not have to say so.
-export function buildPrompt(
+function buildPrompt(
   profile: Record<string, unknown>,
   theme: string,
   mode: PromptMode = "photo",
@@ -295,13 +277,13 @@ export function buildPrompt(
 // prompt, so it is normalised rather than trusted: single line, trimmed,
 // length-capped, and capped in count. A 900-word "interest" would otherwise
 // drown the house style it is supposed to accent.
-export function tidyList(value: unknown, max: number): string[] {
+function tidyList(value: unknown, max: number): string[] {
   return Array.isArray(value)
     ? value.map((v) => tidyOne(v)).filter((v): v is string => !!v).slice(0, max)
     : [];
 }
 
-export function tidyOne(value: unknown): string {
+function tidyOne(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
 }
 
@@ -328,7 +310,7 @@ const PALETTES = [
   ["#818cf8", "#2dd4bf"],
 ];
 
-export function fallbackSvg(userId: string, fullName: string, cycle: string): string {
+function fallbackSvg(userId: string, fullName: string, cycle: string): string {
   // The cycle is mixed into the seed so that a member sitting on a fallback
   // tile still visibly turns over each month, like everyone else on the wall.
   // Within a month it is stable, which is what "deterministic" has to mean
@@ -358,7 +340,7 @@ export function fallbackSvg(userId: string, fullName: string, cycle: string): st
 // Draws the tile and puts it in the bucket. Returns the public URL, or "" if
 // storage refused — the caller decides what that means, because the two
 // callers write different columns afterwards.
-export async function uploadFallback(
+async function uploadFallback(
   admin: SupabaseClient,
   userId: string,
   fullName: string,
@@ -415,7 +397,7 @@ function escapeXml(s: string): string {
 
 // ---- Bytes ------------------------------------------------------------
 
-export function decodeBase64(b64: string): Uint8Array {
+function decodeBase64(b64: string): Uint8Array {
   // Data URLs are easy to send by accident from a FileReader; strip the
   // prefix rather than failing on it.
   const clean = String(b64).replace(/^data:[^;]+;base64,/, "");
@@ -425,11 +407,9 @@ export function decodeBase64(b64: string): Uint8Array {
   return bytes;
 }
 
-export function extFor(mediaType: string): string {
+function extFor(mediaType: string): string {
   return mediaType.includes("png") ? "png" : mediaType.includes("webp") ? "webp" : "jpg";
 }
-
-// ---- generate-avatar itself -------------------------------------------
 
 // A Supabase runtime global, not a Deno one, so it is in none of the types we
 // import. Declared here rather than reached for through `globalThis as any`,
