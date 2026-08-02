@@ -121,10 +121,11 @@ const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 //   ai_credentials                503  no         OPENAI_API_KEY rejected
 //   model_not_configured          503  no         OPENAI_MODEL unusable
 //   not_configured                503  no         no service-role key here
+//   output_truncated              503  yes        our token ceiling was too low
 //   model_refused                 422  no         the model declined this text
+//   content_filtered              422  no         the model's filter stopped it
 //   bad_request                   400  no         the caller sent nonsense
 //   not_signed_in / not_allowed   401/403  no     the caller is not staff
-//   output_truncated              500  no         our token ceiling is too low
 //   upstream_rejected_request     500  no         we sent OpenAI a bad request
 //   sources_audit_failed          500  no         a composed field has no source
 //   internal_error                500  no         an unhandled bug in here
@@ -189,6 +190,68 @@ const RETRY_CAP_MS = 8_000;
 const RETRY_DEADLINE_MS = 50_000;
 const RETRY_RESERVE_MS = 15_000;
 const ATTEMPT_TIMEOUT_MS = 30_000;
+
+// ============================================================
+// The output token budget, and why 1500 was never enough
+// ============================================================
+//
+// A live run failed 42.9% of the time with `status: "incomplete"` — 50
+// occurrences — and the ceiling that caused it was 1500. The tempting reading
+// is that the profiles are too long. They are not. The visible answer this
+// function asks for is tiny, and it is *bounded by `validate` below*, which is
+// what makes the number derivable rather than guessed:
+//
+//   headline   clipped to 200 characters
+//   bio        dropped unless it fits `noteText.length * 1.25 + 24` characters
+//   position   must fold to the supplied title, or the source value is used
+//   company    must fold to the supplied employer, ditto
+//   skills     intersected with the twelve; at most twelve short strings
+//
+// So anything the model writes past those limits is discarded by this function
+// anyway. Even the worst case — a long multi-round note, a bio at its full
+// character budget, all twelve skills — is a JSON object of roughly 1,400
+// characters. In English that is ~350 tokens. Rule 9 keeps the person's own
+// language, and Arabic costs several times more tokens per character, so the
+// honest visible-output ceiling is ~700 tokens. Not 1500. The output was never
+// the thing overflowing.
+//
+// **What overflows is the reasoning.** `OPENAI_MODEL` defaults to `gpt-5`, and
+// on the Responses API reasoning tokens are drawn from the *same*
+// `max_output_tokens` budget as the visible answer — OpenAI's reasoning guide
+// is explicit that the parameter limits "reasoning tokens, visible output
+// tokens, and non-visible formatting tokens", and that exhausting it "might
+// occur before any visible output tokens are produced". At `gpt-5`'s default
+// effort (medium), a few hundred to a few thousand reasoning tokens on a task
+// like this is ordinary. 1500 shared between the two is therefore mostly, and
+// sometimes entirely, spent before the first character of JSON is written.
+//
+// `parse-profile-document` already hit exactly this and fixed it exactly this
+// way: see its comment at the `reasoning` key — 4000 shared "starved the JSON",
+// and it now sends `effort: "low"` with a ceiling of 8000. Two things follow
+// from that precedent, and the second is the one that matters here:
+//
+//   * capping effort is safe to send — that function ships `reasoning` against
+//     the same `OPENAI_MODEL` default in production;
+//   * transcription needs no deep reasoning at all. Capping effort is not a
+//     workaround for the ceiling, it is the correct setting for the task, and
+//     it makes the spend predictable instead of merely survivable.
+//
+// Hence: 4000 for the first attempt — ~700 for the answer and the rest as
+// headroom for low-effort reasoning — and 12000 for a retry, because a ceiling
+// can always be hit by an input nobody anticipated. Neither number costs
+// anything unused: OpenAI bills tokens generated, not tokens permitted. The
+// ceiling only has to be high enough to be wrong rarely, and cheap when it is.
+//
+// A larger budget is NOT licence to write more. Every honesty check in
+// `validate` is unchanged, and the bio's 1.25× rule is what keeps the extra
+// room from turning into extra prose: the model may now finish its sentence,
+// but the sentence it finishes is measured against the source exactly as before.
+const MAX_OUTPUT_TOKENS = 4_000;
+const MAX_OUTPUT_TOKENS_RETRY = 12_000;
+
+// Transcription and tidying. There is nothing here to reason about, and every
+// token spent reasoning is a token not available for the answer.
+const REASONING_EFFORT = "low";
 
 // ============================================================
 // Where a value came from, in a form somebody can go and check
@@ -760,13 +823,41 @@ type Written = {
 // rather than late. `startedAt` is the invocation's start, not this function's:
 // the budget being protected is the Edge Function's wall clock, and it has
 // already been running for the auth lookup by the time we get here.
+//
+// ---- Why truncation is retried, when the old comment said it could not be ----
+//
+// This function used to mark `output_truncated` non-retryable, reasoning that
+// "the same input hits the same ceiling every time". That is wrong, and the
+// evidence was already in the logs: two consecutive runs over the same 87
+// people failed on *different* sets — 27 then 29, six that had succeeded now
+// failing and four the reverse. A deterministic ceiling cannot do that.
+//
+// The mechanism is the one described at MAX_OUTPUT_TOKENS: most of the budget
+// goes on reasoning, reasoning length is sampled rather than fixed, and no
+// seed or temperature is pinned here (reasoning models do not honour
+// temperature in any case). A person whose total sits near the ceiling
+// therefore fits on some draws and not others. Truncation is a coin flip, not
+// a verdict on the data.
+//
+// But "not deterministic" is not on its own an argument for retrying, and this
+// is the part worth being precise about: retrying the *same request* at the
+// *same ceiling* is just another flip with unknown odds, which buys latency and
+// spend for a maybe. So the ceiling escalates. Attempt one asks for
+// MAX_OUTPUT_TOKENS; any attempt after a truncation asks for
+// MAX_OUTPUT_TOKENS_RETRY. The retry is worth something because it is a
+// different request, not because the first one was unlucky.
+//
+// Everything else about the budget is unchanged and still applies: the
+// escalated attempt still has to fit inside the wall-clock deadline, and
+// `planRetry` declines it if it does not.
 async function askModel(m: Material, startedAt: number): Promise<Written> {
   let attempt = 0;
+  let ceiling = MAX_OUTPUT_TOKENS;
   for (;;) {
     attempt++;
     let failure: ProfileError;
     try {
-      return await askModelOnce(m);
+      return await askModelOnce(m, ceiling);
     } catch (err) {
       // `askModelOnce` already classifies everything it knows about — including
       // a fetch that never completed. So anything arriving here unclassified is
@@ -786,6 +877,11 @@ async function askModel(m: Material, startedAt: number): Promise<Written> {
       }
       failure.attempts = attempt;
     }
+
+    // Raise the ceiling for whatever comes next. Done before `planRetry` so
+    // that it also applies when the *next* failure is a rate limit: once we
+    // know this person needs more room, every further attempt gets it.
+    if (failure.code === "output_truncated") ceiling = MAX_OUTPUT_TOKENS_RETRY;
 
     const plan = planRetry({
       attempt,
@@ -992,7 +1088,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function askModelOnce(m: Material): Promise<Written> {
+async function askModelOnce(m: Material, maxOutputTokens: number): Promise<Written> {
   // Built key by key rather than passing `Material` through, so that a field
   // added to the harvest later — or to `distil` — cannot quietly start
   // appearing in prompts. `linkedin_url` is NOT here: see the header. Nor are
@@ -1042,7 +1138,12 @@ async function askModelOnce(m: Material): Promise<Written> {
       body: JSON.stringify({
         model: MODEL,
         instructions: SYSTEM_PROMPT,
-        max_output_tokens: 1500,
+        // Both keys matter, and neither substitutes for the other. See
+        // MAX_OUTPUT_TOKENS: the ceiling is shared with reasoning, so capping
+        // effort is what makes the ceiling predictable, and raising the ceiling
+        // is what survives the input nobody anticipated.
+        reasoning: { effort: REASONING_EFFORT },
+        max_output_tokens: maxOutputTokens,
         input: [{ role: "user", content: [{ type: "input_text", text: userPrompt }] }],
         text: {
           format: {
@@ -1089,12 +1190,53 @@ async function askModelOnce(m: Material): Promise<Written> {
     // model would not act on.
     throw new ProfileError("model_refused", 422, "The model declined this one");
   }
+  // ---- Stop here, before anything is read out of a half-written answer ----
+  //
+  // This check stays AHEAD of the `output_text` read, and that ordering is the
+  // safety property, not a stylistic preference. A truncated response still
+  // carries an `output_text` part; it is simply cut off mid-string. Parsing it
+  // would either throw on malformed JSON or — worse, and the case this guards —
+  // succeed on a bio whose last clause is missing, and hand back half a
+  // sentence about a real person as though it were finished. A profile that
+  // does not exist is recoverable. A profile that is quietly wrong is sent to
+  // the person it describes.
   if (data.status === "incomplete") {
-    // Deterministic: the same input hits the same `max_output_tokens` ceiling
-    // every time. A bug here (the budget is too small for this input), not a
-    // transient upstream condition.
-    throw new ProfileError("output_truncated", 500, "Ran out of output tokens before finishing");
+    const reason = data.incomplete_details?.reason ?? "unknown";
+    console.error(
+      `openai returned incomplete (${reason}) at max_output_tokens=${maxOutputTokens}; ` +
+        `reasoning tokens used: ${data.usage?.output_tokens_details?.reasoning_tokens ?? "unreported"} ` +
+        `of ${data.usage?.output_tokens ?? "unreported"} output tokens`,
+    );
+
+    // A different condition wearing the same status. The model's own filter
+    // stopped it; no ceiling is involved and raising ours would not change the
+    // answer. Reported as truncation it would send somebody to edit a config
+    // value that was never the problem — the exact failure mode this whole
+    // taxonomy exists to prevent.
+    if (reason === "content_filter") {
+      throw new ProfileError(
+        "content_filtered",
+        422,
+        "The AI service stopped partway through this one. Not a size problem — look at what this person wrote.",
+      );
+    }
+
+    // Retryable, and `askModel` escalates the ceiling before going again — see
+    // the comment there for why "not deterministic" alone would not justify a
+    // retry. The 503 is deliberate and is the one retryable 503 in the set: if
+    // the escalated attempt truncates too, the remaining action is to raise a
+    // configured number, which is what every other 503 here also means.
+    throw new ProfileError(
+      "output_truncated",
+      503,
+      `The AI service ran out of room mid-answer (ceiling ${maxOutputTokens} tokens, shared with its own ` +
+        `reasoning). Nothing is wrong with this person's data. If this persists, raise ` +
+        `MAX_OUTPUT_TOKENS_RETRY in build-prospect-profile or lower REASONING_EFFORT there — re-running at ` +
+        `the same settings will not reliably fix it.`,
+      { retryable: true },
+    );
   }
+
   const textPart = parts.find((p: { type?: string }) => p.type === "output_text");
   if (!textPart?.text) {
     // An empty 200 is the upstream misbehaving rather than refusing, and it
