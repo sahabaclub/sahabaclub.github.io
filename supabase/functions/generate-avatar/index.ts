@@ -27,6 +27,37 @@
 // between. The style itself lives in _shared/avatar-art.ts, shared with that
 // job so the wall stays one wall.
 //
+// ---- The member does not wait for the drawing ------------------------------
+//
+// This used to hold the HTTP request open for the whole OpenAI image call —
+// tens of seconds, and a test run that went past a 45-second limit and was
+// killed. A member sitting on a spinner that long assumes the page has hung,
+// and the one thing they can do about it (press the button again) is the one
+// thing that makes it worse.
+//
+// So the request now returns as soon as the attempt is RESERVED — 202, with
+// the allowance the member has left — and the drawing happens in the
+// background via EdgeRuntime.waitUntil. The reservation is the only part that
+// has to be synchronous, because it is the part that decides whether this
+// request is allowed to spend money at all, and its answer is what the member
+// needs before they can press anything else.
+//
+// Progress is reported through `profiles.avatar_status` (0026), which the
+// member's own row already lets them read, so the page polls one row it was
+// going to read anyway rather than this function growing a second endpoint:
+//
+//   202 {ok, queued:true, ...}  →  avatar_status 'generating'
+//                                    →  'ready'  and a new avatar_url
+//                                    →  'failed' and a readable avatar_error
+//
+// What did NOT change is the privacy promise, and it is worth saying plainly
+// because moving work into the background is exactly the kind of change that
+// quietly breaks it: the photo bytes still live only in a local variable, they
+// still never reach storage or a column, and they are still scrubbed the
+// moment the image call is done with them. The only difference is that the
+// variable now outlives the HTTP response instead of the request outliving the
+// drawing.
+//
 // Secrets this function needs (see SETUP.md):
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
 //   OPENAI_API_KEY
@@ -43,6 +74,16 @@ import {
   themeForCycle,
   uploadFallback,
 } from "../_shared/avatar-art.ts";
+
+// A Supabase runtime global, not a Deno one, so it is in none of the types we
+// import. Declared here rather than reached for through `globalThis as any`,
+// and declared as possibly undefined on purpose: `waitUntil` is the whole
+// reason this function can answer in a second, but a local `deno serve`, a
+// self-hosted deployment or a future runtime may not have it. The fallback
+// below awaits the work inline — slow, and exactly what this function used to
+// do — because answering late is a worse outcome than dropping a member's
+// paid-for image on the floor, not a better one.
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -66,6 +107,15 @@ const ALLOWED_SOURCES = ["upload", "google", "microsoft", "linkedin"];
 // before upload, and a body that arrives bigger than this is a bug or an
 // attempt to make us pay to forward large files to OpenAI.
 const MAX_SOURCE_BYTES = 8_000_000;
+
+// How many past drawings `avatar_gallery` keeps. Three tries a month, twelve
+// months a year, and a jsonb column that is read whole every time the profile
+// is: without a cap this grows for ever and every profile read pays for it.
+// Twelve is four months of a member using their full allowance, which is more
+// than enough for "put the one from last month back" — and every entry still
+// points at a file in the bucket, so nothing is deleted by falling off the
+// end, only forgotten.
+const GALLERY_MAX = 12;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -132,11 +182,17 @@ Deno.serve(async (req) => {
     // generated locally and costs nothing, so a member who has spent their
     // three still ends up with something that belongs on the wall — and gets
     // three more when the month turns over.
+    //
+    // This path stays synchronous. There is nothing to wait for — an SVG is
+    // drawn in this process and uploaded — so queueing it would only cost the
+    // member a poll to be told something that was already true when they
+    // asked. It answers 200 with the finished URL, exactly as it always did.
     if (attempts >= MAX_ATTEMPTS) {
       const url = await storeFallback(admin, userId, profile, cycle, theme);
       if (!url) return json({ error: "Couldn't save an avatar just now." }, 502);
       return json({
         ok: true,
+        queued: false,
         avatarUrl: url,
         attemptsUsed: attempts,
         attemptsLeft: 0,
@@ -160,8 +216,6 @@ Deno.serve(async (req) => {
       return json({ error: "That photo is too large. Try one under 8 MB." }, 413);
     }
 
-    const prompt = buildPrompt(profile, theme, "photo");
-
     // Reserve the attempt before spending money, guarded on the row we just
     // read. Two "generate another" clicks racing each other both read 2 and
     // would both generate; the guard means the loser's update matches no rows
@@ -176,10 +230,27 @@ Deno.serve(async (req) => {
     // (3, '2026-06') — what is really in the row — matches exactly once, and
     // the write that wins is also the write that moves the row into July. The
     // loser of a genuine race then sees the new cycle and correctly conflicts.
+    //
+    // `avatar_status`/`avatar_error` ride along in the same statement rather
+    // than following in a second one. The WHERE clause is untouched — this is
+    // the same guard on the same pair — but it means the row is never briefly
+    // "an attempt has been spent and nothing is happening", which is precisely
+    // the state a polling client would read as a stuck generation.
     const next = attempts + 1;
+    // The attempt index, 0-based, so a member's three tries in a cycle get the
+    // three different treatments in _shared/avatar-art.ts rather than three
+    // draws of the same prompt.
+    const prompt = buildPrompt(profile, theme, "photo", next - 1);
+
     let reservation = admin
       .from("profiles")
-      .update({ avatar_attempts: next, avatar_cycle: cycle, updated_at: new Date().toISOString() })
+      .update({
+        avatar_attempts: next,
+        avatar_cycle: cycle,
+        avatar_status: "generating",
+        avatar_error: null,
+        updated_at: new Date().toISOString(),
+      })
       .eq("user_id", userId)
       .eq("avatar_attempts", storedAttempts);
     // A never-generated member has a null cycle, and `= null` is never true in
@@ -195,36 +266,80 @@ Deno.serve(async (req) => {
       return json({ error: "Another avatar is already being generated. Give it a moment." }, 409);
     }
 
-    let pngBytes: Uint8Array;
-    try {
-      pngBytes = await generate(sourceBytes, mediaType, prompt);
-    } catch (err) {
-      // Nothing was produced, so nothing was charged for and the try is given
-      // back. Guarded on (next, cycle) so a concurrent success is never rolled
-      // back. The cycle is left at the current month rather than restored to
-      // the stale one: `attempts` is already the count for this month, and
-      // re-staling the row would only make the next request redo the reset.
-      await admin
-        .from("profiles")
-        .update({ avatar_attempts: attempts })
-        .eq("user_id", userId)
-        .eq("avatar_attempts", next)
-        .eq("avatar_cycle", cycle);
+    // Everything expensive, from here on, off the request's critical path.
+    // `draw` never rejects — it records its own outcome on the profile row,
+    // because after the response has gone there is nobody left to tell.
+    const work = draw(admin, {
+      userId,
+      source,
+      mediaType,
+      sourceBytes,
+      prompt,
+      theme,
+      cycle,
+      variant: next - 1,
+      attempts,
+      next,
+    });
 
-      const message = String(err instanceof Error ? err.message : err);
-      console.error("generate-avatar: " + message);
-      return json({
-        error: message,
-        attemptsUsed: attempts,
-        attemptsLeft: MAX_ATTEMPTS - attempts,
-        cycle,
-      }, 502);
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime && typeof EdgeRuntime.waitUntil === "function") {
+      EdgeRuntime.waitUntil(work);
+    } else {
+      // No waitUntil in this runtime. Do it the old way and answer late; the
+      // response below is still a 202, so a client that polls afterwards
+      // simply finds the work already finished on its first look.
+      console.warn("EdgeRuntime.waitUntil is unavailable — drawing inline");
+      await work;
     }
 
-    // The photo has done its job. It would be collected when this request
-    // ends anyway; zeroing it is cheap and means the source is gone before
-    // anything is written, not merely never written.
-    sourceBytes.fill(0);
+    // 202, not 200: accepted, not done. The allowance is already correct —
+    // the attempt is spent whether or not the drawing lands, and it is given
+    // back by `draw` if it does not, which the member sees on the next poll.
+    return json({
+      ok: true,
+      queued: true,
+      attemptsUsed: next,
+      attemptsLeft: MAX_ATTEMPTS - next,
+      cycle,
+    }, 202);
+  } catch (err) {
+    console.error(err);
+    return json({ error: String(err) }, 500);
+  }
+});
+
+// ---- The background half ----------------------------------------------
+
+type DrawJob = {
+  userId: string;
+  source: string;
+  mediaType: string;
+  sourceBytes: Uint8Array;
+  prompt: string;
+  theme: string;
+  cycle: string;
+  variant: number;
+  attempts: number;   // spent before this try — what a refund restores
+  next: number;       // spent including this try — what the guard matches on
+};
+
+// Draws, uploads, and writes the profile. Runs after the response has been
+// sent, so it must never throw: an unhandled rejection inside waitUntil is a
+// line in a log nobody is reading and a member left on 'generating' for ever.
+// Every exit from here leaves `avatar_status` at 'ready' or 'failed'.
+async function draw(admin: ReturnType<typeof createClient>, job: DrawJob): Promise<void> {
+  const { userId, source, mediaType, prompt, theme, cycle, variant, attempts, next } = job;
+
+  try {
+    // The photo has done its job, whether the call succeeded or not. It would
+    // be collected when this task ends anyway; zeroing it is cheap and means
+    // the source is gone before anything is written, not merely never written.
+    // Attached to the call itself rather than placed after it, because a
+    // failed generation is not a reason to keep somebody's photograph in
+    // memory for the rest of the instance's life — and now that the response
+    // has already gone, that life is longer than the request's was.
+    const pngBytes = await generate(job.sourceBytes, mediaType, prompt)
+      .finally(() => job.sourceBytes.fill(0));
 
     const path = `${userId}/${crypto.randomUUID()}.png`;
     const { error: upErr } = await admin.storage
@@ -232,18 +347,53 @@ Deno.serve(async (req) => {
       .upload(path, pngBytes, { contentType: "image/png", upsert: false });
     if (upErr) {
       console.error("upload: " + upErr.message);
-      return json({ error: "Couldn't save the new avatar just now." }, 502);
+      await fail(admin, userId, cycle, attempts, next, "Couldn't save the new avatar just now.");
+      return;
     }
     const avatarUrl = admin.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl;
+
+    // The gallery is read here, immediately before the write, rather than
+    // carried down from the request — it is minutes old by then, and
+    // refresh-avatars or the member's own previous try may have touched it.
+    //
+    // Read-then-write, so two drawings genuinely overlapping can still lose
+    // one entry, and that is a known cost rather than an oversight. The
+    // reservation guard does not prevent the overlap: it only stops two
+    // requests that read the *same* row from both reserving. A second request
+    // issued after the first has reserved reads the new count and reserves the
+    // next attempt quite legitimately — and now that the response no longer
+    // waits for the drawing, the member is free to send it. What is lost when
+    // that happens is one row of history; the picture itself is in the bucket,
+    // and the winning `avatar_url` is still the last one written. Serialising
+    // it would mean a jsonb-appending SQL function on the hot path of every
+    // generation, which is a lot of machinery for a forgotten thumbnail.
+    const { data: current } = await admin
+      .from("profiles")
+      .select("avatar_gallery")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const held = current?.avatar_gallery;
+    const previous = Array.isArray(held) ? held : [];
+    const gallery = [
+      { url: avatarUrl, prompt, theme, variant, cycle, created_at: new Date().toISOString() },
+      ...previous,
+    ].slice(0, GALLERY_MAX);
 
     // One UPDATE. `source_purged_at` travels with `avatar_url` so the two can
     // never disagree — the alert in 0015 looks for a generated avatar with a
     // null purge timestamp, and splitting these into two statements would
-    // create a window where that is briefly true.
+    // create a window where that is briefly true. `avatar_status` is in the
+    // same statement for the same reason: 'ready' and the URL the member is
+    // about to be shown must become true together, or a poll lands between
+    // them and shows the old picture as the new one.
     const { error: saveErr } = await admin
       .from("profiles")
       .update({
         avatar_url: avatarUrl,
+        avatar_gallery: gallery,
+        avatar_status: "ready",
+        avatar_error: null,
         avatar_is_generated: true,
         avatar_source: source,
         avatar_prompt: prompt,
@@ -258,23 +408,56 @@ Deno.serve(async (req) => {
       })
       .eq("user_id", userId);
     if (saveErr) {
+      // The picture exists and is uploaded; only the row write failed. The
+      // attempt is still refunded, because from the member's side nothing
+      // happened and charging them for it would be wrong.
       console.error("save: " + saveErr.message);
-      return json({ error: saveErr.message }, 500);
+      await fail(admin, userId, cycle, attempts, next, "Your avatar was drawn but couldn't be saved. Try again.");
     }
-
-    return json({
-      ok: true,
-      avatarUrl,
-      attemptsUsed: next,
-      attemptsLeft: MAX_ATTEMPTS - next,
-      cycle,
-      isFallback: false,
-    });
   } catch (err) {
-    console.error(err);
-    return json({ error: String(err) }, 500);
+    const message = String(err instanceof Error ? err.message : err);
+    console.error("generate-avatar: " + message);
+    await fail(admin, userId, cycle, attempts, next, message);
   }
-});
+}
+
+// Give the try back and say what went wrong, in one statement.
+//
+// Nothing usable was produced, so nothing was charged for and the try is given
+// back. Guarded on (next, cycle) so a concurrent success is never rolled back.
+// The cycle is left at the current month rather than restored to the stale
+// one: `attempts` is already the count for this month, and re-staling the row
+// would only make the next request redo the reset.
+//
+// `avatar_status` and `avatar_error` sit inside the same guarded statement on
+// purpose. If the guard misses, some other writer owns this row — a
+// generation that succeeded while this one was failing, or the monthly
+// refresh — and stamping 'failed' over their work would tell the member their
+// perfectly good new avatar is broken.
+async function fail(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  cycle: string,
+  attempts: number,
+  next: number,
+  message: string,
+): Promise<void> {
+  const { error } = await admin
+    .from("profiles")
+    .update({
+      avatar_attempts: attempts,
+      avatar_status: "failed",
+      // Read by the member, so it is the triaged sentence from `generate`
+      // rather than a stack trace. Length-capped because the column is shown
+      // in a state line, and a 4 kB OpenAI error body is not a sentence.
+      avatar_error: message.slice(0, 300),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId)
+    .eq("avatar_attempts", next)
+    .eq("avatar_cycle", cycle);
+  if (error) console.error("refund: " + error.message);
+}
 
 // ---- OpenAI -----------------------------------------------------------
 
@@ -301,7 +484,9 @@ async function generate(bytes: Uint8Array, mediaType: string, prompt: string): P
 
     // Same triage as parse-profile-document: the model name is the setting
     // most likely to be wrong, and a generic message sends someone hunting in
-    // the wrong place.
+    // the wrong place. These sentences now land in `avatar_error` and are read
+    // by the member off their own profile row, so they still have to be
+    // sentences rather than codes.
     if (/model_not_found|does not exist|unknown model/i.test(detail)) {
       throw new Error(
         "The configured image model name isn't valid. Set OPENAI_IMAGE_MODEL in the Supabase Edge Function secrets to a model your account can use.",
@@ -347,10 +532,18 @@ async function storeFallback(
   // on this path, so there is even less to keep — but a row with a generated
   // avatar and a null timestamp is what the alert looks for, and "we didn't
   // call the model this time" is not a reason to trip it.
+  //
+  // 'ready' rather than 'idle': this request finished, and a client that has
+  // just been handed a URL should not then poll a status that says nothing is
+  // happening. The tile is not added to `avatar_gallery` — it is deterministic
+  // per member per month and can be redrawn at any time for nothing, so a
+  // history entry for it would be a slot spent on something not worth keeping.
   const { error: saveErr } = await admin
     .from("profiles")
     .update({
       avatar_url: url,
+      avatar_status: "ready",
+      avatar_error: null,
       avatar_is_generated: true,
       avatar_source: "fallback",
       avatar_theme: theme,
