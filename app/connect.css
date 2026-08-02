@@ -261,6 +261,338 @@ html.light-mode .cx-btn-primary { color: #ffffff; }
 }
 .cx-link:hover { color: var(--text); border-color: rgba(139, 92, 246, 0.45); }
 
+/* ---- EduHackAI ----
+   Three things a reader wants in this order: did they win, what did they do,
+   and when. The award badge is sized for the first of those — these profiles
+   get screenshotted and sent to the person they describe, and the placing is
+   the reason why. */
+
+.cx-hacks { display: grid; gap: 12px; }
+.cx-hack {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+/* A round they placed in gets a gold edge and tint, so an award reads from
+   across the room rather than needing to be found. */
+.cx-hack.is-award {
+  border-color: rgba(224, 168, 62, 0.6); /* 3.85:1 on the plain card */
+  background: rgba(224, 168, 62, 0.08);
+}
+/* The same tint and edge over a light page all but disappear — the composited
+   0.45 gold border measured 1.32:1 against the card — so light mode carries
+   both harder. Text on the tint is --text/--text-secondary either way, and
+   both still clear AA on the result. */
+html.light-mode .cx-hack.is-award {
+  border-color: #a3701a; /* 3.73:1 on the plain card */
+  background: rgba(224, 168, 62, 0.17);
+}
+
+.cx-hack-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; }
+.cx-hack-round {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.cx-hack-name {
+  font-size: 16.5px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.3;
+  word-break: break-word;
+}
+.cx-hack-flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 11px;
+}
+.cx-hack-what {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 11px 0 0;
+}
+.cx-hack-what strong { color: var(--text); font-weight: 700; }
+.cx-hack-when {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 7px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The award itself. The medal colours are fixed rather than themed on
+   purpose: --gold is a light #e0a83e in the dark theme and a dark #9a6413 in
+   the light one, so a gradient built from it would flip to dark ink on a dark
+   plate the moment somebody switched themes. A medal is the same colour in
+   both, and the near-black ink clears AA against the darker stop of every
+   gradient below — which is the stop that has to be scored, not the average
+   and not whatever sits behind it.
+
+   The rim is not decoration. A gold plate on the gold tint of an awarded card
+   measured 1.79:1 in light mode: the badge's own edge was the thing that had
+   disappeared, not its text. Each rim is the darker tone of its own metal and
+   clears 3:1 against the awarded card in both themes. */
+.cx-award {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 15px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #241703;
+  border: 1px solid #a3701a;
+  background: linear-gradient(135deg, #f7de9a, #dda132);
+  box-shadow: 0 2px 14px rgba(224, 168, 62, 0.3);
+}
+.cx-award-icon { width: 16px; height: 16px; flex: 0 0 auto; }
+.cx-award-2 {
+  color: #171b26;
+  border-color: #6b7285;
+  background: linear-gradient(135deg, #eef1f7, #b9c0d4);
+  box-shadow: 0 2px 14px rgba(166, 172, 194, 0.28);
+}
+.cx-award-3 {
+  color: #241203;
+  border-color: #a9622c;
+  background: linear-gradient(135deg, #f4cda6, #cf8b4e);
+  box-shadow: 0 2px 14px rgba(207, 139, 78, 0.28);
+}
+
+/* Coach and Judge. Bigger than the roster badges on hackathons.html — this is
+   a profile, not a list — and they have to hold their contrast sitting on the
+   gold tint of an awarded round as well as on a plain card. */
+.cx-badge {
+  flex: 0 0 auto;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.cx-badge.is-coach {
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  background: rgba(139, 92, 246, 0.14);
+}
+html.light-mode .cx-badge.is-coach { color: var(--violet); }
+.cx-badge.is-judge {
+  color: #67e8f9;
+  border: 1px solid rgba(34, 211, 238, 0.42);
+  background: rgba(34, 211, 238, 0.13);
+}
+/* Light mode's --cyan (#0e7490) measured 4.33:1 on the badge's own cyan tint
+   and 3.94:1 once that tint sits on an awarded card — both under AA. One step
+   darker clears it in the worse of the two. */
+html.light-mode .cx-badge.is-judge { color: #155e75; }
+
+/* Self-declared roles, shown small so they read as the participant's own
+   words rather than as anything the club assigned them. */
+.cx-roles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.cx-role {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+}
+html.light-mode .cx-role { background: rgba(0, 0, 0, 0.04); }
+
+/* "Unknown" rather than "they didn't place" is the one distinction in this
+   section that must not be read as small print, so it gets the same treatment
+   as the same sentence on hackathons.html. */
+.cx-no-placing {
+  margin: 12px 0 0;
+  padding: 10px 13px;
+  border-left: 3px solid var(--glass-border);
+  border-radius: 0 10px 10px 0;
+  background: var(--glass);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 70ch;
+}
+.cx-no-placing em { color: var(--text); font-style: normal; font-weight: 700; }
+
+/* ---- Someone's own words ----
+   `pre-line` because a bio is typed into a textarea and a prospect's is
+   written by a model in paragraphs; collapsing them runs three thoughts into
+   one block. `pre-wrap` would keep the leading spaces of an indented paste
+   too, which is a different bug. */
+
+.cx-bio {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin: 0;
+  max-width: 68ch;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* ---- How you relate, and who hasn't arrived ----
+   Two chips that have to be told apart at a glance, so they are told apart by
+   more than colour: the relevance chip is filled, the not-joined chip is
+   dashed and unfilled. A dashed outline is the same signal a form uses for
+   something not filled in yet, which is exactly what this person is.
+
+   Both are var()-driven rather than fixed hex, so light mode inherits the
+   contrast decisions styles.css already made rather than needing a second set
+   of measurements. Neither uses a gradient — a gradient would have to be
+   scored per stop, and neither of these earns that. */
+
+.cx-flags { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+
+/* The same violet plate as .cx-badge.is-coach, whose text colours are already
+   measured. Sentence case rather than the badges' uppercase: this is a
+   sentence about the reader, not a label.
+   Text measured on the composited tint: #c4b5fd 8.8:1 dark, --violet 5.25:1
+   light. The rim is where it differs from the coach badge — at 0.45 alpha the
+   violet edge composites to 1.82:1 dark and 1.73:1 light against the card, and
+   the 0.14 fill is only 1.15:1, so at that weight the chip has no visible
+   boundary at all. Solid --violet gives 4.42:1 dark and 6.17:1 light, which is
+   the same fix the award badges needed for the same reason. */
+.cx-rel {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  padding: 4px 11px;
+  border-radius: 999px;
+  color: #c4b5fd;
+  border: 1px solid var(--violet);
+  background: rgba(139, 92, 246, 0.14);
+}
+html.light-mode .cx-rel { color: var(--violet); }
+
+/* --text-muted as a dashed rim measures 5.52:1 dark and 5.03:1 light against
+   the card, and the label itself is --text-secondary at 8.28:1 / 6.46:1. */
+.cx-notyet {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 11px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  border: 1px dashed var(--text-muted);
+  background: none;
+}
+
+/* The card. Deliberately NOT dimmed: a faded card reads as "inactive member",
+   which is the one thing these people are not — they never had the chance to
+   be active. Same weight of card as everyone else, with a dashed edge instead
+   of a solid one. */
+.cx-member.is-notyet {
+  border-style: dashed;
+  border-color: var(--text-muted);
+}
+
+/* The panel that stands where Follow and Message would be on a member. It has
+   to carry the invitation, because this page gets screenshotted and sent to
+   the person it describes, so it is a panel and not a footnote. */
+.cx-notyet-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px dashed var(--text-muted);
+  background: var(--glass);
+}
+.cx-notyet-title {
+  font-size: 15.5px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: var(--text);
+  line-height: 1.35;
+}
+.cx-notyet-text {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.65;
+  margin: 0 0 10px;
+  max-width: 66ch;
+}
+.cx-notyet-text strong { color: var(--text); font-weight: 700; }
+/* The buttons inside the panel are left-aligned; .cx-state-actions centres
+   them, which is right in an empty state and wrong under a paragraph. */
+.cx-notyet-panel .cx-state-actions { justify-content: flex-start; margin-top: 14px; }
+
+/* ---- Work history ----
+   A timeline rather than a list: the rail and the dots are what make the order
+   readable without reading the dates. The rail is drawn on the list and the
+   dots on each item, so a single role still looks deliberate. */
+
+.cx-timeline { list-style: none; margin: 0; padding: 2px 0 0 22px; position: relative; }
+.cx-timeline::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--glass-border);
+}
+.cx-tl-item { position: relative; padding-bottom: 18px; }
+.cx-tl-item:last-child { padding-bottom: 0; }
+.cx-tl-item::before {
+  content: "";
+  position: absolute;
+  left: -22px;
+  top: 7px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--text-muted);
+}
+.cx-tl-item.is-current::before {
+  background: var(--violet);
+  border-color: var(--violet);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.22);
+}
+.cx-tl-role {
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 0;
+  word-break: break-word;
+}
+.cx-tl-at { font-weight: 500; color: var(--text-muted); }
+.cx-tl-now {
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: 1px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  background: rgba(139, 92, 246, 0.14);
+}
+html.light-mode .cx-tl-now { color: var(--violet); }
+.cx-tl-when {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 3px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.cx-tl-summary {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 7px 0 0;
+  max-width: 68ch;
+}
+
 /* ---- Directory ---- */
 
 .cx-filters { display: grid; gap: 10px; margin-bottom: 18px; }
@@ -275,8 +607,14 @@ html.light-mode .cx-btn-primary { color: #ffffff; }
   font-size: 15px; /* 16px-ish keeps iOS from zooming the page on focus */
   font-family: inherit;
 }
+/* Five selects now that Connect lists people who haven't joined as well as
+   members. auto-fit rather than a fixed count: at 720px five equal columns
+   would be 130px each and every label would truncate, so they wrap to two rows
+   of usable width instead and fill out to a single row when there is room. */
 .cx-select-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-@media (min-width: 720px) { .cx-select-row { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 720px) {
+  .cx-select-row { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+}
 
 .cx-count {
   font-size: 12.5px;
