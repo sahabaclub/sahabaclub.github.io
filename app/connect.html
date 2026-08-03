@@ -20,6 +20,17 @@
     }
   } catch (e) {}
 </script>
+<!-- Settles whether <html> carries sc-signed-in or sc-signed-out, before a
+     single element of this page has been parsed.
+
+     In <head> here, where the public pages load it after </header> instead.
+     That placement exists so the file has the header in the DOM to paint an
+     avatar and a name into; this page has no identity markup for it to touch,
+     so there is nothing to wait for — and the header on this page *does* have
+     a guest/member split of its own (Dashboard and Inbox against Home and
+     Join free). Running first means that split is decided before the header
+     is laid out, rather than one parser-stall away from being. -->
+<script src="../header-identity.js"></script>
 </head>
 <body>
 
@@ -34,9 +45,14 @@
       <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
     </a>
     <div class="nav-actions">
-      <a href="dashboard.html" class="nav-link">Dashboard</a>
-      <a href="inbox.html" class="nav-link">Inbox</a>
+      <!-- Dashboard and Inbox are places a visitor cannot go, so they are not
+           offered to one. Which set shows is the same class the gate below
+           uses, set before this header paints. -->
+      <a href="dashboard.html" class="nav-link" data-member-only>Dashboard</a>
+      <a href="inbox.html" class="nav-link" data-member-only>Inbox</a>
+      <a href="../index.html" class="nav-link" data-guest-only>Home</a>
       <a href="../events.html" class="nav-link">Events</a>
+      <a href="../login.html" class="btn btn-glow" data-guest-only>Join free</a>
     </div>
   </div>
 </header>
@@ -51,7 +67,55 @@
 
   <div id="self-note"></div>
 
-  <div class="cx-filters" id="filters" hidden>
+  <!-- ---- Signed out: the invitation ----
+       Not a redirect. The old behaviour sent a visitor to login.html the
+       moment the page worked out they had no session, which told them
+       nothing about what they had just been thrown out of. Connect is one of
+       the better reasons to join the club, so it now says what it is and
+       asks.
+
+       Nothing behind this panel is loaded for a visitor and nothing needs to
+       be: member_directory, prospect_directory and connect_directory are all
+       granted to `authenticated` only. This is the explanation for a door
+       that was already locked, not the lock. -->
+  <div class="sc-gate-stack" data-guest-only>
+    <!-- Shapes, not people. See .sc-tease in styles.css for why this is
+         abstract rather than a plausible-looking sample. -->
+    <div class="sc-tease" aria-hidden="true">
+      <div class="sc-tease-card"><span class="sc-tease-dot"></span><span class="sc-tease-lines"><span></span><span></span><span></span></span></div>
+      <div class="sc-tease-card"><span class="sc-tease-dot"></span><span class="sc-tease-lines"><span></span><span></span><span></span></span></div>
+      <div class="sc-tease-card"><span class="sc-tease-dot"></span><span class="sc-tease-lines"><span></span><span></span><span></span></span></div>
+      <div class="sc-tease-card"><span class="sc-tease-dot"></span><span class="sc-tease-lines"><span></span><span></span><span></span></span></div>
+    </div>
+
+    <div class="sc-gate">
+      <p class="sc-gate-eyebrow">Members only</p>
+      <h2 class="sc-gate-title">Connect opens when you join</h2>
+      <p class="sc-gate-text">
+        These are real people who chose to be findable — members, and the
+        EduHackAI builders whose history the club kept for them. We don't show
+        them to strangers, which is also the promise that makes them willing to
+        be here.
+      </p>
+      <ul class="sc-gate-list">
+        <li>Search the directory by skill, industry, country or experience</li>
+        <li>See who you shared a hackathon round or an event with</li>
+        <li>Follow someone, or send them a message</li>
+      </ul>
+      <div class="sc-gate-actions">
+        <a class="btn btn-glow btn-lg" href="../login.html">Create a free account</a>
+      </div>
+      <p class="sc-gate-alt">Already a member? <a href="../login.html">Sign in</a></p>
+      <p class="sc-gate-note">
+        Free, and free is the whole of it — there is no paid tier that unlocks
+        this. Google, Microsoft, LinkedIn, a phone number or an email address;
+        whichever you pick takes about a minute. You choose whether you appear
+        in Connect yourself, and you can change your mind.
+      </p>
+    </div>
+  </div>
+
+  <div class="cx-filters" id="filters" data-member-only hidden>
     <label class="sr-only" for="q">Search people</label>
     <input class="cx-input" type="search" id="q" placeholder="Search name, headline, or skill" autocomplete="off">
     <div class="cx-select-row">
@@ -72,15 +136,15 @@
     </div>
   </div>
 
-  <p class="cx-count" id="count" hidden></p>
-  <div id="results">
+  <p class="cx-count" id="count" data-member-only hidden></p>
+  <div id="results" data-member-only>
     <div class="cx-state"><p class="cx-state-text">Loading members…</p></div>
   </div>
 </main>
 
 <script type="module">
   import {
-    requireUser, listConnect, getActivityFor, myFollowing, follow, unfollow,
+    currentUser, listConnect, getActivityFor, myFollowing, follow, unfollow,
     shortSummary, escapeHtml, initialOf, placeOf, experienceLabel,
     subjectHref, relevanceLabel,
     CONNECT_OFF_MESSAGE, DIRECTORY_CAP,
@@ -311,8 +375,19 @@
   }
 
   (async function init() {
-    me = await requireUser("../login.html");
-    if (!me) return;
+    me = await currentUser();
+    if (!me) {
+      // The gate is already on screen — header-identity.js put the class on
+      // <html> before this page painted, and the panel has been visible since
+      // the first frame. This is the confirmation, and it only ever has work
+      // to do in the case that pass didn't cover: a token that was still in
+      // localStorage but is no longer a session. Same class, so there is one
+      // switch and not two opinions.
+      var root = document.documentElement;
+      root.classList.remove("sc-signed-in");
+      root.classList.add("sc-signed-out");
+      return;
+    }
 
     var dir = await listConnect();
     if (dir.off) {

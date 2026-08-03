@@ -376,6 +376,28 @@
   var viewCounts = {};
   var signedIn = false;
 
+  // Is the reader signed out, as far as anything can tell?
+  //
+  // Deliberately *not* the `signedIn` flag above. That one is the truth, but
+  // it arrives late: the list is drawn once as soon as the events come back
+  // and only redrawn after loadSocial() resolves, so `signedIn` is still
+  // false on that first pass for members and guests alike. Choosing the
+  // Register control from it would show every member a "Join free" link on
+  // their own events for as long as the session lookup takes — exactly the
+  // flash the header goes to such lengths to avoid.
+  //
+  // header-identity.js has already answered this question synchronously,
+  // before the first paint, and published it as a class on <html>. Reading
+  // that class is reading the same answer the header is using, so the two
+  // cannot disagree. Neither class set means "no idea", which falls through
+  // to the ungated control — the right way round, because the ticketing page
+  // that control opens is a public URL on someone else's site, and the part
+  // that does need a session (recording that you went) is already guarded by
+  // `signedIn` below and by the database behind it.
+  function guest() {
+    return document.documentElement.classList.contains("sc-signed-out");
+  }
+
   function fromRow(row) {
     return {
       id: row.id,
@@ -577,6 +599,22 @@
       var lockHref = (ACCESS.tier === "guest" && ACCESS.canSignIn) ? "login.html" : "membership.html";
       var lockText = (ACCESS.tier === "guest" && ACCESS.canSignIn) ? "Sign in" : "Premium only";
       foot.push('<a class="ev-register" href="' + lockHref + '">' + lockText + '</a>');
+    } else if (e.registerLink && guest()) {
+      // Registering is an action rather than browsing, so it asks for an
+      // account. The event itself, its date, its place and everyone else's
+      // interest in it stay readable to anyone — only the control changes.
+      //
+      // A link, not a disabled button. A disabled button is either unreachable
+      // by keyboard or reachable and inert, and both are worse than a control
+      // that goes somewhere and says where. This is an <a href> to the same
+      // login page the premium lock above already points at: it announces as a
+      // link, tabs like one, and opens in a new tab if that is what someone
+      // wants. The per-event accessible name keeps a screen reader's list of
+      // links from being twenty identical entries.
+      foot.push(
+        '<a class="ev-register" href="login.html" aria-label="Join free to register for ' +
+        escapeHtml(e.title) + '">Join free to register</a>'
+      );
     } else if (e.registerLink && status !== "registered") {
       foot.push('<button type="button" class="ev-register" data-register="' + e.id + '">Register</button>');
     }
