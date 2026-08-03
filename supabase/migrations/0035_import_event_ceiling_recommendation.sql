@@ -1,0 +1,89 @@
+-- Sahaba Club — bring import-event's recommended ceiling up to its code default
+-- ============================================================================
+--
+-- NOT APPLIED. This file has never been run against any database.
+--
+-- 0032 corrected `write-member-intro` (1200 → 4000) and `write-contact-email`
+-- (2000 → 7000) for one reason: on the gpt-5 family `max_output_tokens` is
+-- SHARED with the model's own reasoning tokens, so a ceiling sized against the
+-- visible answer alone can be spent before a single visible character arrives.
+--
+-- `import-event` had exactly the same defect and was not in 0032, because at
+-- the time it was written import-event's own ceiling was still 3000 and the
+-- seed matched the code. It no longer does. The function now sends
+-- `reasoning: { effort: "low" }` — it was the last text function that did not —
+-- and sizes its allowance for a low-effort pass over up to 24,000 characters of
+-- scraped page text:
+--
+--     VISIBLE_TOKENS      600
+--     REASONING_TOKENS  5,400
+--     MAX_OUTPUT_TOKENS 6,000     (18,000 after a truncation)
+--
+-- so 0031's seeded 3000 is now HALF what the function actually runs at.
+--
+-- Why that matters, and why it is not merely cosmetic: `loadAiConfig` resolves
+-- a stored ceiling as `ai.maxOutputTokens || MAX_OUTPUT_TOKENS`. A stored value
+-- REPLACES the code default rather than capping or supplementing it, and 3000
+-- is truthy. So a staff member who opens Admin → AI services and presses Save
+-- on the value the panel itself suggests would halve the ceiling on the one
+-- function that, until today, had no truncation detection at all — and every
+-- truncation then retries at double, so the low ceiling costs more rather than
+-- less.
+--
+-- The panel now warns about this independently (it carries the code defaults
+-- and compares against them, so it is correct whatever the database holds).
+-- This migration fixes the stored recommendation so the warning has nothing
+-- left to fire on.
+--
+-- `import-event-card` is deliberately untouched. It is the image half, and
+-- `ai_services.recommended_max_output_tokens` is null for image services —
+-- `_shared/ai-config.ts` refuses to hand a ceiling to a service that has none,
+-- which is what stops a text ceiling leaking into an image call.
+
+update public.ai_services
+   set recommended_max_output_tokens = 6000,
+       ceiling_note = 'Derived, not picked: 600 visible tokens (the event JSON — eleven capped string fields and a bounded tags array, which is all the schema now permits) plus a 5,400 reasoning allowance sized for a low-effort pass over up to 24,000 characters of scraped page text. On the gpt-5 family this ceiling is SHARED with the model''s own reasoning tokens and can be spent before the first visible character — which is what the old value of 3000 did, having been sized against the visible answer alone. Effort is capped low. A truncation retries at 18,000.'
+ where slug = 'import-event';
+
+-- ============================================================================
+-- Verification — run these, do not assume
+-- ============================================================================
+--
+-- 1. The recommendation now matches the code default. Expect one row, 6000.
+--
+-- select slug, recommended_max_output_tokens
+--   from public.ai_services
+--  where slug = 'import-event';
+--
+-- 2. No text service is left recommending less than its code default. Expect
+--    zero rows. The code defaults, read from the functions themselves:
+--      parse-profile-document  8000    promptarena-judge     13000
+--      write-member-intro      4000    write-contact-email    7000
+--      import-event            6000
+--
+-- select s.slug, s.recommended_max_output_tokens as recommended, d.code_default
+--   from public.ai_services s
+--   join (values
+--           ('parse-profile-document', 8000), ('promptarena-judge',   13000),
+--           ('write-member-intro',     4000), ('write-contact-email',  7000),
+--           ('import-event',           6000)
+--        ) as d(slug, code_default) on d.slug = s.slug
+--  where s.recommended_max_output_tokens < d.code_default;
+--
+-- 3. Image services still carry no ceiling at all. Expect zero rows.
+--
+-- select slug from public.ai_services
+--  where kind = 'image' and recommended_max_output_tokens is not null;
+--
+-- 4. Anything already ACTIVATED below the code default is a service paying for
+--    retries right now. This migration does not touch activated versions — it
+--    only fixes what the panel suggests — so this is the query that says
+--    whether anyone pressed Save before the fix landed. Expect zero rows; if
+--    not, raise the ceiling on those versions from the panel.
+--
+-- select v.service_slug, v.version, v.max_output_tokens, v.is_active
+--   from public.ai_service_versions v
+--   join public.ai_services s on s.slug = v.service_slug
+--  where v.is_active
+--    and v.max_output_tokens is not null
+--    and v.max_output_tokens < s.recommended_max_output_tokens;
