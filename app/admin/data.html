@@ -59,10 +59,21 @@
 
     <div id="dm-warnings"></div>
 
+    <!-- ⚠ Separate from `#dm-warnings`, which is a single slot the last action
+         overwrites. "You are not looking at everybody" has to survive the next
+         save message, because every count, every filter and every export on
+         this page is computed from the rows the browser actually holds. See
+         `ROW_LIMIT` in data-admin.js. -->
+    <div id="dm-truncation"></div>
+
     <div class="ad-panel-head" style="border-bottom:none;padding-left:0;padding-top:0;">
+      <!-- Two mutually exclusive choices, so `aria-pressed` rather than a
+           tablist: they do not switch between panes, they change what every
+           pane below is about. `data-admin.js` sets the state when it sets
+           `.is-active`; the initial values here have to agree with it. -->
       <div class="dm-dataset" id="dm-dataset" role="group" aria-label="Which data">
-        <button type="button" data-ds="marketing_contacts" class="is-active">Marketing contacts</button>
-        <button type="button" data-ds="profiles">Members</button>
+        <button type="button" data-ds="marketing_contacts" class="is-active" aria-pressed="true">Marketing contacts</button>
+        <button type="button" data-ds="profiles" aria-pressed="false">Members</button>
       </div>
       <div class="ad-spacer"></div>
       <span class="ad-cell-dim" id="dm-dataset-note"></span>
@@ -70,19 +81,44 @@
 
     <div class="ad-stats" id="dm-stats"></div>
 
-    <div class="dm-tabs" id="dm-tabs" role="tablist">
-      <button type="button" class="dm-tab is-active" data-tab="fix" role="tab">Microsoft 365 mapping<span class="dm-tab-count" id="dm-count-fix"></span></button>
-      <button type="button" class="dm-tab" data-tab="browse" role="tab">Browse &amp; edit</button>
-      <button type="button" class="dm-tab" data-tab="fields" role="tab">Fields</button>
-      <button type="button" class="dm-tab" data-tab="import" role="tab">Import</button>
-      <button type="button" class="dm-tab" data-tab="export" role="tab">Export</button>
-      <button type="button" class="dm-tab" data-tab="history" role="tab">Who changed what</button>
+    <!-- ⚠ THE ACTIVE TAB IS STATE, NOT A COLOUR. `role="tab"` on its own tells
+         a screen reader "this is one of six tabs" and nothing about which one
+         is open — so a person listening to this page could not tell which of
+         six panes holding 2,200 people's contact details they were in. Three
+         things are needed together and none of them is optional:
+
+           * `aria-selected` — which tab is open. Set by `showTab()` in
+             data-admin.js, in the same statement that toggles `.is-active`,
+             so the two cannot drift.
+           * `aria-controls` + `role="tabpanel"` / `aria-labelledby` on the
+             sections below — which pane each tab opens, and what to call it.
+           * ROVING TABINDEX. Exactly one tab is in the tab order at a time
+             (`tabindex="0"`); the other five are `-1` and are reached with the
+             arrow keys, which is what the tablist pattern requires. Six
+             separate tab stops would be the wrong shape and would put the
+             panel five presses away.
+
+         The initial values here describe the "fix" tab being open, because
+         that is what `.is-active` says. `showTab()` rewrites all of it. -->
+    <div class="dm-tabs" id="dm-tabs" role="tablist" aria-label="Data management sections">
+      <button type="button" class="dm-tab is-active" data-tab="fix" role="tab"
+              id="dm-tab-fix" aria-controls="dm-pane-fix" aria-selected="true" tabindex="0">Microsoft 365 mapping<span class="dm-tab-count" id="dm-count-fix"></span></button>
+      <button type="button" class="dm-tab" data-tab="browse" role="tab"
+              id="dm-tab-browse" aria-controls="dm-pane-browse" aria-selected="false" tabindex="-1">Browse &amp; edit</button>
+      <button type="button" class="dm-tab" data-tab="fields" role="tab"
+              id="dm-tab-fields" aria-controls="dm-pane-fields" aria-selected="false" tabindex="-1">Fields</button>
+      <button type="button" class="dm-tab" data-tab="import" role="tab"
+              id="dm-tab-import" aria-controls="dm-pane-import" aria-selected="false" tabindex="-1">Import</button>
+      <button type="button" class="dm-tab" data-tab="export" role="tab"
+              id="dm-tab-export" aria-controls="dm-pane-export" aria-selected="false" tabindex="-1">Export</button>
+      <button type="button" class="dm-tab" data-tab="history" role="tab"
+              id="dm-tab-history" aria-controls="dm-pane-history" aria-selected="false" tabindex="-1">Who changed what</button>
     </div>
 
     <!-- ============================================================
          The Microsoft 365 mapping — first, because it is the job
          ============================================================ -->
-    <section id="dm-pane-fix" class="dm-pane">
+    <section id="dm-pane-fix" class="dm-pane" role="tabpanel" aria-labelledby="dm-tab-fix" tabindex="0">
       <div class="ad-panel">
         <div class="ad-panel-head"><h2>Before you start typing</h2></div>
         <div class="ad-panel-body">
@@ -127,7 +163,7 @@
     <!-- ============================================================
          Browse and edit
          ============================================================ -->
-    <section id="dm-pane-browse" class="dm-pane ad-hidden">
+    <section id="dm-pane-browse" class="dm-pane ad-hidden" role="tabpanel" aria-labelledby="dm-tab-browse" tabindex="0">
       <div class="ad-panel">
         <div class="ad-panel-head">
           <input type="search" class="ad-search" id="dm-q" placeholder="Search&hellip;">
@@ -154,7 +190,7 @@
     <!-- ============================================================
          Fields — "organize the data visibility"
          ============================================================ -->
-    <section id="dm-pane-fields" class="dm-pane ad-hidden">
+    <section id="dm-pane-fields" class="dm-pane ad-hidden" role="tabpanel" aria-labelledby="dm-tab-fields" tabindex="0">
       <div class="ad-panel">
         <div class="ad-panel-head"><h2>What this reading of &ldquo;organise the data visibility&rdquo; is</h2></div>
         <div class="ad-panel-body">
@@ -196,7 +232,7 @@
     <!-- ============================================================
          Import
          ============================================================ -->
-    <section id="dm-pane-import" class="dm-pane ad-hidden">
+    <section id="dm-pane-import" class="dm-pane ad-hidden" role="tabpanel" aria-labelledby="dm-tab-import" tabindex="0">
       <div class="ad-panel">
         <div class="ad-panel-head"><h2>How importing works here</h2></div>
         <div class="ad-panel-body">
@@ -254,7 +290,7 @@
     <!-- ============================================================
          Export
          ============================================================ -->
-    <section id="dm-pane-export" class="dm-pane ad-hidden">
+    <section id="dm-pane-export" class="dm-pane ad-hidden" role="tabpanel" aria-labelledby="dm-tab-export" tabindex="0">
       <div class="ad-panel">
         <div class="ad-panel-head"><h2>Before you export</h2></div>
         <div class="ad-panel-body">
@@ -269,11 +305,20 @@
           </p>
           <p class="dm-note">
             <strong>Excel and this data do not get on.</strong> The file is UTF-8 with a byte-order mark, so
-            Arabic names open correctly rather than as mojibake. Phone numbers are the other half of the
-            problem: left as plain text, Excel turns <code>0501234567</code> into <code>501234567</code> and
-            <code>971504216499</code> into <code>9.71504E+11</code>, silently. Tick the box below and those
-            values are written in a form Excel shows exactly as stored &mdash; and this page strips the wrapper
-            again when you import the file back, so the round trip changes nothing.
+            Arabic names open correctly rather than as mojibake. Phone numbers and dates are the other half of
+            the problem: left as plain text, Excel turns <code>0501234567</code> into <code>501234567</code>,
+            <code>971504216499</code> into <code>9.71504E+11</code> and <code>03-08</code> into a date in the
+            current year, silently. Tick the box below and those values are written in a form Excel shows
+            exactly as stored &mdash; and this page strips the wrapper again when you import the file back, so
+            the round trip changes nothing.
+          </p>
+          <p class="dm-note">
+            <strong>Protection against spreadsheet formulas is not a setting and is not below.</strong> A cell
+            that begins <code>=</code>, <code>+</code>, <code>-</code> or <code>@</code> is executed by Excel,
+            LibreOffice and Google Sheets the moment the file is opened, and the names and notes in this data
+            are typed by members into a public form. Every export this page produces is guarded against that,
+            always, with nothing to switch off &mdash; so there is no version of this file that can run code on
+            the machine of whoever opens it. Ordinary negative numbers are left alone.
           </p>
         </div>
       </div>
@@ -290,9 +335,21 @@
 
       <div class="ad-panel">
         <div class="ad-panel-body">
+          <!-- ⚠ THIS TOGGLE NO LONGER GOVERNS FORMULA SAFETY, AND THE LABEL
+               MUST NOT IMPLY THAT IT DOES. The `^[=+\-@]` guard in
+               `_shared/csv.ts` is unconditional; this box controls only the
+               phone/date/leading-zero display heuristics. The old wording —
+               "recommended when you plan to edit and re-import" — told anyone
+               exporting a file merely to READ it that they could safely untick
+               it, which was true of the round trip and, at the time, false
+               about code execution. Say what it still does and nothing more. -->
           <label class="ad-check">
             <input type="checkbox" id="dm-exp-safe" checked>
-            Protect phone numbers and dates from Excel <span class="ad-cell-dim">&mdash; recommended when you plan to edit and re-import</span>
+            Stop Excel reformatting phone numbers and dates
+            <span class="ad-cell-dim">&mdash; leading zeros, long numbers and bare dates are written as
+            <code>="0501234567"</code> so Excel shows them as stored. Untick only if the file is going somewhere
+            that is not a spreadsheet, where that wrapper is visible clutter; a file exported this way imports
+            back unchanged.</span>
           </label>
           <label class="ad-check">
             <input type="checkbox" id="dm-exp-all">
@@ -319,7 +376,7 @@
     <!-- ============================================================
          The audit trail
          ============================================================ -->
-    <section id="dm-pane-history" class="dm-pane ad-hidden">
+    <section id="dm-pane-history" class="dm-pane ad-hidden" role="tabpanel" aria-labelledby="dm-tab-history" tabindex="0">
       <div class="ad-panel">
         <div class="ad-panel-head"><h2>Every change to a person&rsquo;s record</h2></div>
         <div class="ad-panel-body">
