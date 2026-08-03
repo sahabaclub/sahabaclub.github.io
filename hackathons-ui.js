@@ -51,6 +51,9 @@
   var searchInput = document.getElementById("hack-q");
   var clearBtn = document.getElementById("hack-clear-q");
   var countEl = document.getElementById("hack-count");
+  var storyEl = document.getElementById("hack-story");
+  var coachesEl = document.getElementById("hack-coaches");
+  var ctaEl = document.getElementById("hack-cta");
 
   // Register-interest dialog (static markup in hackathons.html).
   var modal = document.getElementById("hk-interest");
@@ -69,7 +72,10 @@
   var TEAMS_BY_ROUND = {};
   var ROSTER_BY_ROUND = {};
   var query = "";
-  var OPEN = {};            // slug -> true once the reader has opened it
+  // At most one round is open at a time — the accordion the owner asked for.
+  // A single slug, not a map: the map made "more than one open" representable,
+  // and a state you cannot represent is a state you cannot ship by accident.
+  var openSlug = null;
 
   var interestRound = null; // the round the dialog is currently about
   var lastFocus = null;     // the button that opened the dialog
@@ -85,7 +91,10 @@
   var medalIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="15" r="6"/><path d="M8.2 9.5 5.5 3h5l2 4M15.8 9.5 18.5 3h-5"/></svg>';
   var peopleIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 19v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 17.5V19"/><circle cx="10" cy="7.5" r="3.5"/><path d="M20 19v-1.5a3.5 3.5 0 0 0-2.6-3.4M15.5 4.2a3.5 3.5 0 0 1 0 6.6"/></svg>';
   var pinIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>';
-  var sparkIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>';
+  // The starburst that used to sit on both the "Coming soon" eyebrow and the
+  // early-bird pill is gone. At 12px, two of them stacked read as a spinner,
+  // and the top of the page looked stuck loading. Neither is replaced with a
+  // different glyph: the fix for too much ornament is less of it.
   var chevron = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
 
   // ------------------------------------------------------------
@@ -150,6 +159,82 @@
     }).join("") + "</span>";
   }
 
+  // "a, b and c" — used for venue and round lists in the history prose, so a
+  // sentence reads the same whether the database returns one of something or
+  // four of it.
+  function listSentence(items) {
+    var a = (items || []).slice();
+    if (!a.length) return "";
+    if (a.length === 1) return a[0];
+    return a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+  }
+
+  function plural(n, one, many) {
+    return n === 1 ? one : many;
+  }
+
+  // ------------------------------------------------------------
+  // Logo slots
+  // ------------------------------------------------------------
+  //
+  // Two files per mark, one per theme, swapped on html.light-mode — the same
+  // mechanism .logo-img-dark / .logo-img-light already uses in styles.css for
+  // the club wordmark. There is no second mechanism on this page.
+  //
+  // Both images start hidden in CSS and are revealed by wireLogos() only after
+  // the browser has actually decoded them. That ordering is the whole design:
+  //
+  //   * a file that is not there never paints a broken-image icon, because the
+  //     image is never displayed in the first place;
+  //   * what renders instead is the text inside .hk-logo-text — the heading
+  //     the page had before any of this existed, so the fallback is a design
+  //     rather than a hole;
+  //   * .hk-logo reserves the slot's height in CSS whether it ends up holding
+  //     an image or the text, so the swap costs no reflow either way.
+  //
+  // This is not hypothetical. assets/eduhack/round-2-light.png does not exist,
+  // so round 2 in light mode renders its text heading on the live site while
+  // rounds 1, 3, 4 and 5 render their logo. The dark file is deliberately NOT
+  // used as a stand-in: its lettering is white and would be invisible on a
+  // light page, which reads as a broken image rather than as a wrong colour.
+  //
+  // `alt` is the mark's own words, so the accessible name is identical whether
+  // the image or the text is what the reader ends up with.
+  function logoHtml(base, alt, textHtml, boxClass, w, h) {
+    var src = "assets/eduhack/" + escapeHtml(base);
+    var a = escapeHtml(alt);
+    var dims = ' width="' + w + '" height="' + h + '"';
+    return '<span class="hk-logo ' + boxClass + '">' +
+      '<img class="hk-logo-img hk-logo-dark" data-hk-logo="dark" src="' + src + '-dark.png"' +
+        ' alt="' + a + '"' + dims + '>' +
+      '<img class="hk-logo-img hk-logo-light" data-hk-logo="light" src="' + src + '-light.png"' +
+        ' alt="' + a + '"' + dims + '>' +
+      textHtml +
+    "</span>";
+  }
+
+  // Reveal each logo image once it has decoded, and never otherwise. There is
+  // deliberately no error handler: "did not load" is already the fallback, and
+  // handling the error would only be a way to re-introduce a state where
+  // something has to be un-drawn.
+  function wireLogos(root) {
+    var scope = root || document;
+    if (!scope.querySelectorAll) return;
+    var imgs = scope.querySelectorAll("img[data-hk-logo]");
+    Array.prototype.forEach.call(imgs, function (img) {
+      var box = img.parentNode;
+      var flag = img.getAttribute("data-hk-logo") === "light" ? "is-light-ready" : "is-dark-ready";
+      function ready() {
+        // complete + naturalWidth 0 is a 404, not a decode.
+        if (!img.naturalWidth) return;
+        img.classList.add("is-ready");
+        if (box && box.classList) box.classList.add(flag);
+      }
+      if (img.complete) ready();
+      else img.addEventListener("load", ready);
+    });
+  }
+
   // ------------------------------------------------------------
   // Pure logic — no DOM, unit-testable
   // ------------------------------------------------------------
@@ -205,6 +290,133 @@
       medals += t.filter(function (x) { return medalTier(x); }).length;
     });
     return { rounds: (rounds || []).length, teams: teams, builders: builders, medals: medals };
+  }
+
+  // The accordion rule, on its own so it can be reasoned about without a DOM:
+  // pressing the round that is already open closes it, pressing any other one
+  // makes that the open one. There is no state in which two are open.
+  function nextOpenRound(current, slug) {
+    if (!slug) return current || null;
+    return current === slug ? null : slug;
+  }
+
+  // assets/eduhack/coaches/<slug>.jpg — the name lowercased with every run of
+  // non-alphanumerics collapsed to a single hyphen. Kept pure because it is
+  // the one place a person's name turns into a URL, and a wrong answer here is
+  // a 404 on somebody's face.
+  function coachPhotoSlug(name) {
+    return String(name == null ? "" : name)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  // One coach per person, across every round, in the order the view handed
+  // them over — which is is_mentor first, then display_order, then name, and
+  // is where the lead coach's first place is decided. Nothing is re-sorted
+  // here, so a change to display_order in the database moves the row on the
+  // page and nothing in this file has to know about it.
+  //
+  // Matching is on the name casefolded and space-collapsed, because the same
+  // person is a row per round and those rows are what has to fold into one
+  // card. Every round they appear in is collected on the way through.
+  function dedupeCoaches(rounds, rosterBy) {
+    var seen = {};
+    var out = [];
+    (rounds || []).forEach(function (r) {
+      ((rosterBy && rosterBy[r.id]) || []).forEach(function (p) {
+        if (!p.is_mentor) return;
+        var key = String(p.full_name || "").trim().toLowerCase().replace(/\s+/g, " ");
+        if (!key) return;
+        if (!seen[key]) {
+          seen[key] = { person: p, rounds: [] };
+          out.push(seen[key]);
+        }
+        if (seen[key].rounds.indexOf(r.round_number) === -1) {
+          seen[key].rounds.push(r.round_number);
+        }
+      });
+    });
+    out.forEach(function (c) { c.rounds.sort(function (a, b) { return a - b; }); });
+    return out;
+  }
+
+  // Demo Day venues out of `location`.
+  //
+  // Migration 0036 records the Demo Day venue in `location` and prefixes every
+  // value with the words "Demo Day" precisely so it cannot be misread as where
+  // the ten days ran — the rounds themselves were online. Round 2 held two, in
+  // one field, separated by " · ".
+  //
+  // Only entries that carry that label are counted. A `location` that says
+  // something else is a location, and calling it a Demo Day would be this file
+  // asserting something the database did not.
+  function demoVenues(location) {
+    if (!location) return [];
+    return String(location).split("·").map(function (s) {
+      return s.trim();
+    }).filter(function (s) {
+      return /^demo day/i.test(s);
+    }).map(function (s) {
+      var i = s.indexOf(":");
+      return i === -1 ? "" : s.slice(i + 1).trim();
+    }).filter(Boolean);
+  }
+
+  // Everything the history section says, computed from the rows the page has
+  // already loaded. Nothing in here is a constant that a human typed, which is
+  // the point: when the database changes, the prose changes with it, and there
+  // is no sentence sitting in the markup quietly going out of date.
+  //
+  // What is deliberately NOT here: a country count. `hackathons` has no country
+  // column, and the venue strings mix a city with no country ("Mercure Hotel,
+  // Dubai") against a city with one ("Cairo, Egypt"), so a count of countries
+  // could only come from a city-to-country table written from memory. The
+  // venues are reported verbatim instead and the reader can see them.
+  function storyFacts(rounds, teamsBy, rosterBy) {
+    var list = rounds || [];
+    var starts = [], ends = [], venues = [], arabic = [];
+    var teams = 0, people = 0, demoDays = 0;
+    var seenPerson = {};
+
+    list.forEach(function (r) {
+      if (r.starts_on) starts.push(String(r.starts_on).slice(0, 10));
+      if (r.ends_on) ends.push(String(r.ends_on).slice(0, 10));
+
+      teams += ((teamsBy && teamsBy[r.id]) || []).length;
+
+      ((rosterBy && rosterBy[r.id]) || []).forEach(function (p) {
+        var key = String(p.full_name || "").trim().toLowerCase().replace(/\s+/g, " ");
+        if (!key || seenPerson[key]) return;
+        seenPerson[key] = true;
+        people++;
+      });
+
+      demoVenues(r.location).forEach(function (v) {
+        demoDays++;
+        if (venues.indexOf(v) === -1) venues.push(v);
+      });
+
+      // The database is what says a round ran in Arabic — 0036 appends the
+      // clause to round 4's own description. This reads it back rather than
+      // hard-coding which round it was.
+      if (/arabic/i.test(String(r.description || ""))) arabic.push(r.round_number);
+    });
+
+    starts.sort();
+    ends.sort();
+    arabic.sort(function (a, b) { return a - b; });
+
+    return {
+      rounds: list.length,
+      firstStart: starts.length ? starts[0] : null,
+      lastEnd: ends.length ? ends[ends.length - 1] : null,
+      teams: teams,
+      people: people,
+      demoDays: demoDays,
+      venues: venues,
+      arabicRounds: arabic
+    };
   }
 
   function validateInterest(values) {
@@ -547,9 +759,14 @@
     var id = safeId(round.slug) || ("round-" + safeId(String(round.round_number)));
     var tabId = "hk-tab-" + id;
     var panelId = "hk-panel-" + id;
-    // A search opens every round that has something to show, so results are
-    // never hidden behind a closed tab.
-    var open = OPEN[round.slug] === true || (!!query && visibleTeams.length > 0);
+    // Which rounds start open.
+    //
+    // With no search, exactly one: the accordion's. With a search running the
+    // accordion is suspended and every round holding a match opens, because a
+    // result the reader cannot see is not a result. Clearing the search puts
+    // the page straight back to at most one open — `openSlug` is never touched
+    // by searching, so whatever was open before the query is what comes back.
+    var open = query ? visibleTeams.length > 0 : openSlug === round.slug;
 
     var when = formatRange(round.starts_on, round.ends_on);
     // A completed round with a start and no end has an unrecorded end date;
@@ -589,30 +806,50 @@
       ? '<p class="hk-round-desc">' + escapeHtml(round.description) + "</p>"
       : '<p class="hk-round-desc is-empty">No description was recorded for this round.</p>';
 
+    // The round's own mark, with the name as its fallback text. The heading is
+    // a plain <h3> again rather than a button: the disclosure moved to the
+    // bottom of the card, so the title is a title.
+    var logo = logoHtml(
+      "round-" + safeId(String(round.round_number)),
+      round.name,
+      '<span class="hk-logo-text hk-round-name glow-text">' + escapeHtml(round.name) + "</span>",
+      "hk-round-logo", 300, 80
+    );
+
+    var cue = open ? "Hide details" : "Show details";
+
     return '' +
       '<section class="hk-round" id="' + escapeHtml(round.slug) + '">' +
         '<div class="hk-round-head">' +
           '<h3 class="hk-round-h">' +
-            '<button class="hk-round-toggle" type="button" id="' + tabId + '"' +
-              ' aria-expanded="' + (open ? "true" : "false") + '"' +
-              ' aria-controls="' + panelId + '" data-hk-toggle="' + escapeHtml(round.slug) + '">' +
-              '<span class="hk-round-label">' +
-                '<span class="hk-round-num">Round ' + escapeHtml(round.round_number) + "</span>" +
-                '<span class="hk-round-name glow-text">' + escapeHtml(round.name) + "</span>" +
-              "</span>" +
-              // aria-hidden: aria-expanded already announces collapsed or
-              // expanded, so this is a visual cue only and would otherwise
-              // land in the button's accessible name twice over.
-              '<span class="hk-round-cue" aria-hidden="true">' +
-                (open ? "Hide details" : "Show details") + "</span>" +
-              '<span class="hk-round-caret">' + chevron + "</span>" +
-            "</button>" +
+            '<span class="hk-round-num">Round ' + escapeHtml(round.round_number) + "</span>" +
+            logo +
           "</h3>" +
           (round.tagline ? '<p class="hk-round-tagline">' + escapeHtml(round.tagline) + "</p>" : "") +
           (when ? '<p class="hk-round-when">' + escapeHtml(when) + whenNote + "</p>" : "") +
           chipsHtml(round) +
         "</div>" +
         medalsHtml(teams) +
+        // The control sits at the bottom of the card and spans its full width,
+        // and it stays BEFORE the panel in the DOM: pressing it and then
+        // tabbing should land in what it just opened, not skip past it. When
+        // the round is collapsed — which is how at least three of the four
+        // always are — the bar is the last thing in the card, which is where
+        // the owner asked for it.
+        //
+        // aria-label rather than a bare "Show details": four identical buttons
+        // on one page are four identical announcements. It opens with the
+        // visible text so the visible label is still a prefix of the
+        // accessible name, and setOpen() rewrites both together.
+        '<button class="hk-round-toggle" type="button" id="' + tabId + '"' +
+          ' aria-expanded="' + (open ? "true" : "false") + '"' +
+          ' aria-controls="' + panelId + '"' +
+          ' data-hk-toggle="' + escapeHtml(round.slug) + '"' +
+          ' data-hk-name="' + escapeHtml(round.name) + '"' +
+          ' aria-label="' + escapeHtml(cue + " for " + round.name) + '">' +
+          '<span class="hk-round-cue" aria-hidden="true">' + cue + "</span>" +
+          '<span class="hk-round-caret">' + chevron + "</span>" +
+        "</button>" +
         '<div class="hk-round-panel" id="' + panelId + '" role="region" aria-labelledby="' + tabId + '"' +
           (open ? "" : " hidden") + ">" +
           desc +
@@ -624,28 +861,203 @@
       "</section>";
   }
 
-  // The next round, before it has dates. Everything shown here is whatever
-  // the row actually carries; the only thing this markup asserts on its own
-  // is that the dates are not set, which is exactly why it is in this list.
+  // The next round, before it has dates.
+  //
+  // Rebuilt after the owner's "not looks good at all". The panel used to open
+  // with a starburst on the eyebrow and the same starburst on the early-bird
+  // pill; at that size the pair read as a loading spinner and the top of the
+  // page looked stuck. Both glyphs are gone and neither is replaced.
+  //
+  // What is left is one statement — <round name> is coming — the benefit in
+  // plain words, the honest line that the dates are not set, and the button.
+  // Everything shown is whatever the row actually carries; the only thing this
+  // markup asserts on its own is that the dates are not set, which is exactly
+  // why the round is in this list.
   function soonHtml(round) {
     var desc = round.description
       ? '<p class="hk-soon-desc">' + escapeHtml(round.description) + "</p>"
       : "";
+    var logo = logoHtml(
+      "round-" + safeId(String(round.round_number)),
+      round.name,
+      '<span class="hk-logo-text hk-soon-name glow-text">' + escapeHtml(round.name) + "</span>",
+      "hk-soon-logo", 300, 80
+    );
     return '' +
       '<section class="hk-soon" id="' + escapeHtml(round.slug) + '">' +
-        '<span class="hk-soon-flag">' + sparkIcon + "Coming soon</span>" +
-        '<h2 class="hk-soon-name glow-text">' + escapeHtml(round.name) + "</h2>" +
+        '<p class="hk-soon-flag">The next round</p>' +
+        '<h2 class="hk-soon-h">' + logo +
+          '<span class="hk-soon-verb">is coming</span></h2>' +
         (round.tagline ? '<p class="hk-soon-tagline">' + escapeHtml(round.tagline) + "</p>" : "") +
         desc +
+        '<p class="hk-soon-note">The dates aren’t set yet. If you are interested to be with us, ' +
+          "leave your details and we’ll let you know as soon as it’s scheduled.</p>" +
         chipsHtml(round) +
-        '<span class="hk-earlybird">' + sparkIcon + "Early bird discount</span>" +
         '<div class="hk-soon-actions">' +
           '<button type="button" class="btn btn-glow btn-lg" data-hk-open="' + escapeHtml(round.slug) + '">' +
             "Register your interest</button>" +
-          '<p class="hk-soon-note">The dates aren’t set yet. If you are interested to be with us, ' +
-            "leave your details and we’ll let you know as soon as it’s scheduled.</p>" +
+          // No icon, by name: this is the pill the owner asked to strip.
+          '<span class="hk-earlybird">Early bird discount</span>' +
         "</div>" +
       "</section>";
+  }
+
+  // ------------------------------------------------------------
+  // The history of EduHackAI
+  // ------------------------------------------------------------
+
+  // Every number in this section comes out of storyFacts(), which computes it
+  // from the rows already on the page. The prose is written AROUND those
+  // values rather than alongside them, so there is no sentence here that can
+  // quietly stop being true when the data moves. Anything storyFacts() cannot
+  // derive is left unsaid rather than estimated — see the note there about why
+  // there is no count of countries.
+  function storyHtml(facts) {
+    if (!facts || !facts.rounds) return "";
+
+    // Blocks rather than a flat list of sentences, because the venue list is
+    // a <ul> that has to land between two of the paragraphs.
+    var blocks = [];
+    var range = formatRange(facts.firstStart, facts.lastEnd);
+    function para(html) { blocks.push('<p class="hk-story-p">' + html + "</p>"); }
+
+    para(
+      "EduHackAI has run <strong>" + facts.rounds + "</strong> " +
+      plural(facts.rounds, "round", "rounds") + " so far" +
+      (range ? ", between <strong>" + escapeHtml(range) + "</strong>" : "") +
+      ". Every round is the same ten days: you join a team, take the daily " +
+      "challenges, and finish with an AI application you built yourself."
+    );
+
+    if (facts.teams || facts.people) {
+      var bits = [];
+      if (facts.teams) {
+        bits.push("<strong>" + facts.teams + "</strong> " + plural(facts.teams, "team", "teams"));
+      }
+      if (facts.people) {
+        bits.push("<strong>" + facts.people + "</strong> " + plural(facts.people, "person", "people"));
+      }
+      para(
+        listSentence(bits) + " " + (bits.length > 1 ? "are named" : "is named") +
+        " in the records of those rounds — people counted once each, however " +
+        "many rounds they came back for."
+      );
+    }
+
+    // The venues are a list, not a clause. Most of them carry a comma inside
+    // the name ("Cairo, Egypt"), so joining them with commas produced a
+    // sentence in which the separators and the names were the same character.
+    if (facts.demoDays) {
+      var v = facts.venues.length;
+      para(
+        "Each round ends on Demo Day, where the teams present what they built. " +
+        "<strong>" + facts.demoDays + "</strong> " +
+        plural(facts.demoDays, "Demo Day has", "Demo Days have") + " been held" +
+        (v ? ", at <strong>" + v + "</strong> " + plural(v, "venue", "venues") + ":" : ".")
+      );
+      if (v) {
+        blocks.push('<ul class="hk-venues">' + facts.venues.map(function (name) {
+          return '<li class="hk-venue">' + escapeHtml(name) + "</li>";
+        }).join("") + "</ul>");
+      }
+    }
+
+    if (facts.arabicRounds.length) {
+      var rs = facts.arabicRounds.map(function (n) { return String(n); });
+      para(
+        plural(rs.length, "Round", "Rounds") + " " + escapeHtml(listSentence(rs)) +
+        " ran in Arabic."
+      );
+    }
+
+    return '<section class="hk-story" id="hk-story" aria-labelledby="hk-story-h">' +
+      '<h2 class="hk-story-h" id="hk-story-h">The EduHackAI story so far</h2>' +
+      blocks.join("") +
+    "</section>";
+  }
+
+  // ------------------------------------------------------------
+  // Coaches, across the whole programme
+  // ------------------------------------------------------------
+
+  // One card per coach, however many rounds they taught, with the rounds they
+  // taught named on the card.
+  //
+  // The photo is assets/eduhack/coaches/<slug>.jpg, and none of those files
+  // exist yet, so the monogram underneath is what actually renders today for
+  // every one of them. It is built to be the finished state rather than a
+  // placeholder: the same circle, the same size, the club's own violet-to-cyan
+  // wash, initials set in the page's own type. A photo landing later swaps
+  // into exactly the same box.
+  //
+  // Two coaches are recorded under a single name because that is all the
+  // database holds for them. They render like everybody else.
+  function coachCardHtml(entry) {
+    var p = entry.person;
+    var name = String(p.full_name || "").trim();
+    var slug = coachPhotoSlug(name);
+    var src = p.avatar_url || ("assets/eduhack/coaches/" + slug + ".jpg");
+
+    var rounds = entry.rounds.length
+      ? '<span class="hk-coach-rounds">' + entry.rounds.map(function (n) {
+          return '<span class="hk-coach-round">Round ' + escapeHtml(n) + "</span>";
+        }).join("") + "</span>"
+      : "";
+
+    return '<article class="hk-coach">' +
+        '<span class="hk-coach-face">' +
+          '<span class="hk-coach-mono" aria-hidden="true">' + escapeHtml(initials(name)) + "</span>" +
+          '<img class="hk-coach-photo" data-hk-face src="' + escapeHtml(src) + '"' +
+            ' alt="" loading="lazy" width="112" height="112">' +
+        "</span>" +
+        '<h3 class="hk-coach-name">' + escapeHtml(name) + "</h3>" +
+        rounds +
+      "</article>";
+  }
+
+  function coachesHtml(entries) {
+    if (!entries || !entries.length) return "";
+    return '<section class="hk-thanks" aria-labelledby="hk-thanks-h">' +
+      '<h2 class="hk-thanks-h" id="hk-thanks-h">Thanks to our coaches in EduHackAI journey</h2>' +
+      '<div class="hk-coach-grid">' + entries.map(coachCardHtml).join("") + "</div>" +
+    "</section>";
+  }
+
+  // The same reveal-on-decode rule the logos use. The monogram is underneath
+  // in the same box, so a photo that never arrives costs nothing and a photo
+  // that does arrive covers it without moving anything.
+  function wireFaces(root) {
+    var scope = root || document;
+    if (!scope.querySelectorAll) return;
+    Array.prototype.forEach.call(scope.querySelectorAll("img[data-hk-face]"), function (img) {
+      function ready() {
+        if (!img.naturalWidth) return;
+        img.classList.add("is-ready");
+      }
+      if (img.complete) ready();
+      else img.addEventListener("load", ready);
+    });
+  }
+
+  // ------------------------------------------------------------
+  // Closing call to action
+  // ------------------------------------------------------------
+
+  // The second way into the SAME dialog. It carries data-hk-open, which is the
+  // one thing that opens it, so there is no second form and no second dialog —
+  // and openInterest() records whichever button was pressed, so Escape or
+  // Close returns focus to this one when this one is what opened it.
+  function ctaHtml(round) {
+    if (!round) return "";
+    return '<section class="hk-cta" aria-labelledby="hk-cta-h">' +
+      '<h2 class="hk-cta-h" id="hk-cta-h">Be with us in ' + escapeHtml(round.name) + "</h2>" +
+      '<p class="hk-cta-text">The dates aren’t set yet. Leave your details and we’ll let you know ' +
+        "the moment it’s scheduled — and you’ll get the early bird discount when registration opens.</p>" +
+      '<div class="hk-cta-actions">' +
+        '<button type="button" class="btn btn-glow btn-lg" data-hk-open="' + escapeHtml(round.slug) + '">' +
+          "Register your interest</button>" +
+      "</div>" +
+    "</section>";
   }
 
   // Search spans the things a person would actually look for: their own
@@ -689,10 +1101,22 @@
       }).join("");
     }
     if (soonEl) soonEl.innerHTML = SOON.map(soonHtml).join("");
+
+    // The history is about the rounds that have actually run, so it is
+    // computed over PAST — a round with no dates has no teams, no people and
+    // no Demo Day, and folding it in would only pull every number down.
+    if (storyEl) storyEl.innerHTML = storyHtml(storyFacts(PAST, TEAMS_BY_ROUND, ROSTER_BY_ROUND));
+    if (coachesEl) coachesEl.innerHTML = coachesHtml(dedupeCoaches(PAST, ROSTER_BY_ROUND));
+    // Only offered when there is genuinely a round to register interest in.
+    if (ctaEl) ctaEl.innerHTML = ctaHtml(SOON[0] || null);
+
+    wireLogos(soonEl);
+    wireFaces(coachesEl);
   }
 
   function render() {
     mount.innerHTML = PAST.map(roundHtml).join("");
+    wireLogos(mount);
 
     if (countEl) {
       if (!query) {
@@ -709,33 +1133,58 @@
   // Disclosure behaviour
   // ------------------------------------------------------------
 
-  // Toggling in place rather than re-rendering: a re-render would replace
-  // the button the reader just pressed, and focus would fall back to
-  // <body> mid-interaction.
-  function setOpen(btn, willOpen) {
+  // Paint one button and its panel. No bookkeeping and no re-render: a
+  // re-render would replace the button the reader just pressed and focus would
+  // fall back to <body> mid-interaction.
+  //
+  // aria-expanded is set here on EVERY button this touches, which is the point
+  // of routing the close through the same function as the open — the round
+  // being closed has to announce that it closed, not just look closed.
+  function paintOpen(btn, willOpen) {
+    if (!btn) return;
     var panel = document.getElementById(btn.getAttribute("aria-controls"));
     btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
     if (panel) panel.hidden = !willOpen;
+    var cueText = willOpen ? "Hide details" : "Show details";
     var cue = btn.querySelector(".hk-round-cue");
-    if (cue) cue.textContent = willOpen ? "Hide details" : "Show details";
-    OPEN[btn.getAttribute("data-hk-toggle")] = willOpen;
+    if (cue) cue.textContent = cueText;
+    var name = btn.getAttribute("data-hk-name");
+    if (name) btn.setAttribute("aria-label", cueText + " for " + name);
+  }
+
+  // Open one round and close whichever was open. At most one, always.
+  function setOpen(btn, willOpen) {
+    if (!btn) return;
+    var slug = btn.getAttribute("data-hk-toggle");
+    if (willOpen && mount.querySelectorAll) {
+      Array.prototype.forEach.call(mount.querySelectorAll("[data-hk-toggle]"), function (other) {
+        if (other !== btn && other.getAttribute("aria-expanded") === "true") paintOpen(other, false);
+      });
+    }
+    paintOpen(btn, willOpen);
+    openSlug = willOpen ? slug : null;
   }
 
   mount.addEventListener("click", function (e) {
     if (!e.target || !e.target.closest) return;
     var btn = e.target.closest("[data-hk-toggle]");
     if (!btn) return;
-    setOpen(btn, btn.getAttribute("aria-expanded") !== "true");
+    var slug = btn.getAttribute("data-hk-toggle");
+    // The rule lives in nextOpenRound(), so what the page does on a click is
+    // decided by something that can be tested without a browser.
+    setOpen(btn, nextOpenRound(openSlug, slug) === slug);
   });
 
-  // A link to #eduhackai-2 should land on an open round, not a closed one.
+  // A link to #eduhackai-2 should land on an open round, not a closed one —
+  // and, now that only one round can be open, it closes whatever else was.
+  // A deep link is a request for one specific round, so it wins outright.
   function openFromHash() {
     var hash = String(window.location.hash || "").slice(1);
     if (!hash) return;
     var section = document.getElementById(hash);
     if (!section) return;
     var btn = section.querySelector ? section.querySelector("[data-hk-toggle]") : null;
-    if (btn && btn.getAttribute("aria-expanded") !== "true") setOpen(btn, true);
+    if (btn) setOpen(btn, true);
     section.scrollIntoView({ block: "start" });
   }
 
@@ -1052,8 +1501,19 @@
     fieldForCode: fieldForCode,
     nextInterestState: nextInterestState,
     formatRange: formatRange,
-    safeId: safeId
+    safeId: safeId,
+    nextOpenRound: nextOpenRound,
+    coachPhotoSlug: coachPhotoSlug,
+    dedupeCoaches: dedupeCoaches,
+    demoVenues: demoVenues,
+    storyFacts: storyFacts,
+    listSentence: listSentence
   };
+
+  // The hero's brand mark is static markup, so it is wired straight away
+  // rather than waiting on the database — there is nothing about it that
+  // depends on what comes back.
+  wireLogos(document);
 
   setStatus("Loading the EduHackAI archive…", false);
 

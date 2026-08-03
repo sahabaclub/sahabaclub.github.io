@@ -184,6 +184,7 @@ function el(id, tag) {
 
 for (const id of [
   "hack-rounds", "hack-soon", "hack-status", "hack-stats", "hack-jump",
+  "hack-story", "hack-coaches", "hack-cta",
   "hack-q", "hack-clear-q", "hack-count", "hk-interest", "hk-interest-title",
   "hk-interest-intro", "hk-interest-form", "hk-interest-submit",
   "hk-interest-done", "hk-done-text", "hk-form-error",
@@ -214,6 +215,11 @@ const document_ = {
   getElementById: (id) => registry.get(id) || null,
   addEventListener: (t, fn) => { (listeners.document[t] = listeners.document[t] || []).push(fn); },
   querySelector: () => null,
+  // wireLogos() sweeps the whole document at boot for the hero's static
+  // brand mark. Nothing here has to come back — the point of the sweep is
+  // that a logo it cannot reveal simply stays unrevealed — but the method
+  // has to EXIST, or the boot call throws before load() is ever reached.
+  querySelectorAll: () => [],
   body: el(null, "body"),
 };
 const window_ = {
@@ -249,20 +255,38 @@ await new Promise((r) => setTimeout(r, 30));
 const roundsHtml = registry.get("hack-rounds").innerHTML;
 const soonHtml = registry.get("hack-soon").innerHTML;
 const statsHtml = registry.get("hack-stats").innerHTML;
+const storyHtml = registry.get("hack-story").innerHTML;
+const coachesHtml = registry.get("hack-coaches").innerHTML;
+const ctaHtml = registry.get("hack-cta").innerHTML;
 
 ok(roundsHtml.length > 0, "rounds rendered");
 tagBalance(roundsHtml, "generated rounds markup");
 tagBalance(soonHtml, "generated coming-soon markup");
 tagBalance(statsHtml, "generated summary markup");
+tagBalance(storyHtml, "generated history markup");
+tagBalance(coachesHtml, "generated coaches markup");
+tagBalance(ctaHtml, "generated closing-CTA markup");
 
 // -- coming soon -----------------------------------------------------------
-ok(soonHtml.includes("Coming soon"), "round 5 renders as coming soon");
+ok(soonHtml.includes("is coming"), "round 5 renders as a plain statement that it is coming");
+ok(soonHtml.includes("The next round"), "the panel's eyebrow says which round this is");
 ok(soonHtml.includes('data-hk-open="eduhackai-5"'), "coming-soon panel opens the dialog for round 5");
 ok(soonHtml.includes("Early bird discount"), "coming-soon panel names the early bird discount");
 ok(soonHtml.includes("interested to be with us"), "coming-soon panel uses the owner's words");
 ok(!soonHtml.includes("undefined") && !soonHtml.includes("null"),
   "coming-soon panel survives a NULL description/tagline/location");
-ok(!roundsHtml.includes("eduhackai-5"), "round 5 is not also rendered as a past round");
+ok(!roundsHtml.includes('id="eduhackai-5"'), "round 5 is not also rendered as a past round");
+
+// The reported fault: the eyebrow and the early-bird pill carried the SAME
+// starburst, and at that size the pair read as a loading spinner. No icon of
+// any kind is allowed back into this panel — replacing one glyph with another
+// would reproduce the thing that was wrong with it.
+ok(!soonHtml.includes("<svg"), "the coming-soon panel carries no icon at all");
+{
+  const pill = (soonHtml.match(/<span class="hk-earlybird">([\s\S]*?)<\/span>/) || [null, null])[1];
+  ok(pill !== null, "the early-bird pill is rendered");
+  ok(pill !== null && !/[<>]/.test(pill), "the early-bird pill is text and nothing else", String(pill));
+}
 
 // -- disclosures -----------------------------------------------------------
 const toggles = [...roundsHtml.matchAll(/data-hk-toggle="([^"]+)"/g)].map((m) => m[1]);
@@ -281,6 +305,186 @@ ok(!/type="checkbox"/.test(roundsHtml), "no CSS-only checkbox hack");
 // The team names must be inside the panel, i.e. still rendered.
 ok(roundsHtml.includes("Team Four A") && roundsHtml.includes("Team One B"),
   "team names are still rendered in the expandable detail");
+
+// -- the disclosure moved to the bottom, full width, one at a time ---------
+ok((roundsHtml.match(/aria-expanded="true"/g) || []).length === 0,
+  "with no search and nothing opened, no round starts expanded");
+for (const slug of toggles) {
+  const start = roundsHtml.indexOf(`id="${slug}"`);
+  const end = roundsHtml.indexOf("</section>", start);
+  const card = roundsHtml.slice(start, end);
+  const head = card.indexOf("hk-round-head");
+  const toggle = card.indexOf("hk-round-toggle");
+  const panel = card.indexOf('class="hk-round-panel"');
+  ok(head !== -1 && toggle !== -1 && panel !== -1 && head < toggle && toggle < panel,
+    `${slug}: title, then the control, then the panel it controls`,
+    `head ${head}, toggle ${toggle}, panel ${panel}`);
+  // "the buttom of the card": everything that shows while the round is
+  // COLLAPSED has to come before the control, or the control is in the
+  // middle of the card rather than under it. The medals are the only other
+  // thing that renders outside the panel.
+  const medals = card.indexOf('class="hk-medals');
+  if (medals !== -1) {
+    ok(medals < toggle, `${slug}: the medals sit above the control, not below it`,
+      `medals ${medals}, toggle ${toggle}`);
+  }
+  // The control is no longer the heading — the heading is a heading again,
+  // which is what let the round's logo move into it.
+  const h3 = card.slice(card.indexOf("<h3"), card.indexOf("</h3>"));
+  ok(!h3.includes("<button"), `${slug}: the round title is not a button`);
+  ok(h3.includes("hk-round-logo"), `${slug}: the round's logo slot is in its title`);
+  // Four identical "Show details" buttons need four distinct announcements.
+  ok(card.includes(`aria-label="Show details for `),
+    `${slug}: the control names the round it belongs to`);
+}
+{
+  const bar = (roundsHtml.match(/<button class="hk-round-toggle"[\s\S]*?<\/button>/) || [""])[0];
+  ok(/aria-expanded=/.test(bar) && /aria-controls=/.test(bar) && /type="button"/.test(bar),
+    "the control is a real button with aria-expanded and aria-controls");
+}
+ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(REPO, "styles.css"), "utf8")),
+  "the control spans the full width of the card");
+
+// -- logo slots ------------------------------------------------------------
+{
+  const srcs = [...(pageHtml + roundsHtml + soonHtml).matchAll(/src="(assets\/eduhack\/[^"]+)"/g)]
+    .map((m) => m[1]);
+  ok(srcs.length >= 12, `every logo slot emits a source (${srcs.length})`);
+
+  // Light/dark must not be crossed. The two brand files differ only in the
+  // colour of the lettering, so a reversed pair does not render as a wrong
+  // colour — it renders as nothing at all, which reads as a missing file.
+  const darkImgs = [...(pageHtml + roundsHtml + soonHtml).matchAll(/class="hk-logo-img hk-logo-dark"[^>]*src="([^"]+)"/g)];
+  const lightImgs = [...(pageHtml + roundsHtml + soonHtml).matchAll(/class="hk-logo-img hk-logo-light"[^>]*src="([^"]+)"/g)];
+  ok(darkImgs.length === lightImgs.length && darkImgs.length >= 6,
+    `each slot carries both themes (${darkImgs.length} dark, ${lightImgs.length} light)`);
+  ok(darkImgs.every((m) => m[1].endsWith("-dark.png")), "every hk-logo-dark points at the -dark file");
+  ok(lightImgs.every((m) => m[1].endsWith("-light.png")), "every hk-logo-light points at the -light file");
+
+  // Intrinsic sizes, so the slot is the right shape before anything loads.
+  ok(/eduhackai-dark\.png"[^>]*width="500" height="500"/.test(pageHtml) &&
+     /eduhackai-light\.png"[^>]*width="500" height="500"/.test(pageHtml),
+    "the brand mark is declared at its intrinsic 500x500");
+  ok([...roundsHtml.matchAll(/src="assets\/eduhack\/round-[^"]+"[^>]*width="(\d+)" height="(\d+)"/g)]
+      .every((m) => m[1] === "300" && m[2] === "80"),
+    "every round mark is declared at its intrinsic 300x80");
+
+  // Every slot has a text fallback, and every alt reads as the mark itself,
+  // so the accessible name is the same whichever of the two renders.
+  const boxes = [...(pageHtml + roundsHtml + soonHtml).matchAll(/<span class="hk-logo [^"]*">([\s\S]*?)<\/span>\s*(?:<\/h1>|<\/h3>|<span class="hk-soon-verb)/g)];
+  ok(boxes.length >= 6, `logo slots are closed around their fallback text (${boxes.length})`);
+  ok((pageHtml + roundsHtml + soonHtml).match(/class="hk-logo-text/g).length >= 6,
+    "every logo slot carries the text that stands in for it");
+  ok(!/data-hk-logo[^>]*alt=""/.test(pageHtml + roundsHtml + soonHtml),
+    "no logo image has an empty alt");
+
+  // The one that is genuinely absent. If somebody later drops a file in for
+  // it this check goes quiet on its own; what it must never do is pass
+  // because the DARK artwork was pointed at the light slot, whose white
+  // lettering would be invisible on a light page.
+  const missing = srcs.filter((s) => !fs.existsSync(path.join(REPO, s)));
+  console.log(`     logo files present: ${srcs.length - missing.length}/${srcs.length}` +
+    (missing.length ? `, absent: ${[...new Set(missing)].join(", ")}` : ""));
+  const r2light = [...roundsHtml.matchAll(/class="hk-logo-img hk-logo-light"[^>]*src="([^"]+round-2[^"]+)"/g)];
+  ok(r2light.length === 1 && r2light[0][1] === "assets/eduhack/round-2-light.png",
+    "round 2's light slot points at its own light file, not at the dark one as a stand-in",
+    r2light.map((m) => m[1]).join(", "));
+  {
+    const start = roundsHtml.indexOf('id="eduhackai-2"');
+    const card = roundsHtml.slice(start, roundsHtml.indexOf("</section>", start));
+    ok(card.includes('class="hk-logo-text hk-round-name'),
+      "round 2 — whose light file does not exist — still carries its text heading");
+  }
+}
+
+// -- the history section ---------------------------------------------------
+{
+  ok(storyHtml.length > 0, "the history section renders");
+  ok(/<h2 class="hk-story-h"/.test(storyHtml), "it has a heading");
+  // Every figure below is what the fixture actually contains. They are
+  // asserted on the RENDERED prose, so a number that stopped being computed
+  // and became a literal would still have to be the right literal — and
+  // storyFacts() itself is unit-tested in section 3.
+  // Each figure is pinned to its own sentence. Asserting a bare
+  // "<strong>4</strong>" appeared somewhere passed while the round count was
+  // hard-coded to 7, because the Demo Day count is also 4 — a number in the
+  // right document is not a number in the right place.
+  ok(storyHtml.includes("EduHackAI has run <strong>4</strong> rounds"),
+    "the round count in the prose is the computed one");
+  ok(storyHtml.includes("between <strong>1 Feb – 20 Dec 2025</strong>"),
+    "the date span runs from the earliest start to the latest end");
+  ok(storyHtml.includes("<strong>9</strong> teams"), "the team total is the computed one");
+  ok(storyHtml.includes("<strong>8</strong> people"),
+    "people are counted once each across rounds");
+  // A list, not a comma-joined clause — most of these names contain a comma.
+  const venues = [...storyHtml.matchAll(/<li class="hk-venue">([^<]+)<\/li>/g)].map((m) => m[1]);
+  ok(venues.length === 3, `each Demo Day venue is its own list item (${venues.length})`);
+  ok(venues.includes("Cairo, Egypt") && venues.includes("Mercure Hotel, Dubai") &&
+     venues.includes("CodersHQ, Dubai"), "the Demo Day venues are named verbatim", venues.join(" | "));
+  ok(storyHtml.includes("<strong>4</strong> Demo Days have been held"),
+    "the Demo Day count is computed from the labelled locations");
+  ok(storyHtml.includes("Round 4 ran in Arabic."),
+    "the Arabic round is named, read back out of its own description");
+  // Nothing about countries: `hackathons` has no country column and the venue
+  // strings mix a bare city with a city-and-country, so a count could only
+  // come from knowledge this page does not have.
+  ok(!/countr/i.test(storyHtml), "no claim about countries is made");
+  ok(!/undefined|NaN|null/.test(storyHtml), "no unresolved value reaches the prose");
+}
+
+// -- coaches, across the whole programme ------------------------------------
+{
+  ok(coachesHtml.includes("Thanks to our coaches in EduHackAI journey"),
+    "the section uses the owner's title");
+  const cards = coachesHtml.match(/<article class="hk-coach">/g) || [];
+  ok(cards.length === 4, `one card per distinct coach (${cards.length})`);
+  ok((coachesHtml.match(/Ahmed Zoka/g) || []).length === 1,
+    "a coach who taught three rounds appears exactly once");
+  ok(coachesHtml.indexOf("Ahmed Zoka") < coachesHtml.indexOf("Aaron Second Coach"),
+    "the lead coach is first, in the order the view supplied");
+  {
+    const card = coachesHtml.slice(coachesHtml.indexOf("Ahmed Zoka"));
+    const end = card.indexOf("</article>");
+    const zoka = card.slice(0, end);
+    ok(zoka.includes("Round 2") && zoka.includes("Round 3") && zoka.includes("Round 4"),
+      "...and names every round they coached", zoka);
+    ok(!zoka.includes("Round 1"), "...and no round they did not");
+  }
+  // A coach recorded under a single name is rendered exactly like everybody
+  // else — same card, same monogram, no apology and no special case.
+  ok(coachesHtml.includes('<h3 class="hk-coach-name">Solo</h3>'),
+    "a coach recorded under one name renders like everybody else");
+  ok(coachesHtml.includes('<span class="hk-coach-mono" aria-hidden="true">SO</span>'),
+    "...and still gets a monogram");
+  ok(coachesHtml.includes('<span class="hk-coach-mono" aria-hidden="true">AZ</span>'),
+    "a two-part name monograms from its first and last parts");
+  ok(!coachesHtml.includes("Zed Builder") && !coachesHtml.includes("Someone Else"),
+    "competitors are not in the coaches section");
+  ok(coachesHtml.includes('src="assets/eduhack/coaches/ahmed-zoka.jpg"'),
+    "the photo path is the slugified name");
+  // None of these files exist, so the monogram is what renders. It has to be
+  // present on every card, and the photo has to be the thing that is hidden.
+  ok((coachesHtml.match(/class="hk-coach-mono"/g) || []).length === cards.length,
+    "every card carries the monogram fallback");
+  ok((coachesHtml.match(/data-hk-face/g) || []).length === cards.length,
+    "every card's photo is wired to reveal only once it decodes");
+  ok(!fs.existsSync(path.join(REPO, "assets/eduhack/coaches")),
+    "the coach photo directory is still absent — the monogram is what renders today");
+}
+
+// -- the closing CTA -------------------------------------------------------
+{
+  ok(ctaHtml.includes('data-hk-open="eduhackai-5"'),
+    "the closing CTA opens the dialog for the coming round");
+  ok(!ctaHtml.includes("<form") && !ctaHtml.includes("role=\"dialog\""),
+    "the closing CTA builds no second form and no second dialog");
+  ok((pageHtml.match(/<form/g) || []).length === 1,
+    "there is exactly one form in the document");
+  ok((pageHtml.match(/role="dialog"/g) || []).length === 1,
+    "there is exactly one dialog in the document");
+  ok((soonHtml + ctaHtml).match(/data-hk-open=/g).length === 2,
+    "both ways in are the same mechanism");
+}
 
 // -- medals ----------------------------------------------------------------
 ok(roundsHtml.includes("hk-medal is-gold") && roundsHtml.includes("hk-medal is-silver") &&
@@ -399,6 +603,89 @@ ok(T.fieldForCode("whatever", "not_a_field") === null, "an unknown explicit fiel
 ok(T.safeId("eduhackai-5") === "eduhackai-5", "safe ids pass through");
 ok(T.safeId('a b"c<d') === "abcd", "unsafe id characters are dropped");
 
+// -- the accordion rule ----------------------------------------------------
+ok(T.nextOpenRound(null, "a") === "a", "nothing open + press a -> a");
+ok(T.nextOpenRound("a", "b") === "b", "a open + press b -> b (a closes)");
+ok(T.nextOpenRound("a", "a") === null, "pressing the open one closes it");
+ok(T.nextOpenRound("a", "") === "a", "a press with no round changes nothing");
+ok(T.nextOpenRound(null, null) === null, "no state and no round is still no state");
+
+// -- coach photo paths -----------------------------------------------------
+ok(T.coachPhotoSlug("Ahmed Zoka") === "ahmed-zoka", "two names slugify");
+ok(T.coachPhotoSlug("Mohamed Mohi El-Dien") === "mohamed-mohi-el-dien",
+  "a hyphenated name collapses to single hyphens");
+ok(T.coachPhotoSlug("Solo") === "solo", "a one-word name slugifies");
+ok(T.coachPhotoSlug("  Two   Spaces  ") === "two-spaces", "runs of separators collapse to one");
+ok(T.coachPhotoSlug("") === "" && T.coachPhotoSlug(null) === "", "nothing in, nothing out");
+
+// -- Demo Day venues out of `location` -------------------------------------
+ok(T.demoVenues("Demo Day: Cairo, Egypt").join("|") === "Cairo, Egypt", "one labelled venue");
+ok(T.demoVenues("Demo Day 1: CodersHQ, Dubai · Demo Day 2: Cairo, Egypt").length === 2,
+  "two demo days in one field");
+ok(T.demoVenues("Demo Day 1: CodersHQ, Dubai · Demo Day 2: Cairo, Egypt")[0] === "CodersHQ, Dubai",
+  "...split on the separator and stripped of their labels");
+// A location that does not say "Demo Day" is a location. Counting it as one
+// would be this page asserting something the database did not. The second
+// case is the one that matters: a bare "Alexandria" is also rejected by the
+// "must have a colon" step, so it cannot tell whether the label test is
+// doing anything. A colon-bearing value that is not a Demo Day can.
+ok(T.demoVenues("Alexandria").length === 0, "an unlabelled location is not a demo day");
+ok(T.demoVenues("Venue: Alexandria").length === 0,
+  "a labelled location that is not a Demo Day is not counted as one",
+  T.demoVenues("Venue: Alexandria").join("|"));
+ok(T.demoVenues("Demo Day: X · Somewhere Else: Y").length === 1,
+  "only the Demo Day half of a mixed field counts");
+ok(T.demoVenues(null).length === 0 && T.demoVenues("").length === 0, "no location, no venues");
+
+ok(T.listSentence(["a"]) === "a", "one item");
+ok(T.listSentence(["a", "b"]) === "a and b", "two items");
+ok(T.listSentence(["a", "b", "c"]) === "a, b and c", "three items");
+ok(T.listSentence([]) === "", "no items");
+
+// -- the computed history --------------------------------------------------
+{
+  const rounds = [
+    { id: "a", round_number: 2, starts_on: "2025-06-01", ends_on: "2025-06-11",
+      location: "Demo Day: Somewhere", description: "ran in Arabic" },
+    { id: "b", round_number: 1, starts_on: "2025-01-01", ends_on: null,
+      location: null, description: "plain" },
+  ];
+  const teams = { a: [{}, {}], b: [{}] };
+  const roster = {
+    a: [{ full_name: "Same Person" }, { full_name: "Other" }],
+    b: [{ full_name: "same person" }],           // same human, different case
+  };
+  const f = T.storyFacts(rounds, teams, roster);
+  ok(f.rounds === 2, "rounds counted");
+  ok(f.firstStart === "2025-01-01", "earliest start found even when it is last in the list");
+  ok(f.lastEnd === "2025-06-11", "latest end found, ignoring the round with none");
+  ok(f.teams === 3, "teams totalled");
+  ok(f.people === 2, `people deduplicated across rounds (${f.people})`);
+  ok(f.demoDays === 1 && f.venues.length === 1, "demo days counted from labelled locations only");
+  ok(f.arabicRounds.length === 1 && f.arabicRounds[0] === 2,
+    "the Arabic round is read out of the description, not hard-coded");
+  const none = T.storyFacts([], {}, {});
+  ok(none.rounds === 0 && none.firstStart === null && none.venues.length === 0,
+    "a programme with nothing in it computes to nothing");
+}
+
+// -- coaches, deduplicated across rounds ------------------------------------
+{
+  const rounds = [{ id: "r2", round_number: 2 }, { id: "r1", round_number: 1 }];
+  const roster = {
+    r2: [{ full_name: "Lead Coach", is_mentor: true }, { full_name: "Runner", is_mentor: false }],
+    r1: [{ full_name: "lead  coach", is_mentor: true }, { full_name: "Second", is_mentor: true }],
+  };
+  const c = T.dedupeCoaches(rounds, roster);
+  ok(c.length === 2, `one entry per person (${c.length})`);
+  ok(c[0].person.full_name === "Lead Coach", "first seen wins the spelling, and the order");
+  ok(c[0].rounds.join(",") === "1,2", "every round they coached, ascending", c[0].rounds.join(","));
+  ok(c[1].rounds.join(",") === "1", "a single-round coach lists one round");
+  ok(!c.some((x) => x.person.full_name === "Runner"), "competitors are not coaches");
+  ok(T.dedupeCoaches([], {}).length === 0 && T.dedupeCoaches(null, null).length === 0,
+    "no rounds, no coaches");
+}
+
 // -- state machine ---------------------------------------------------------
 {
   const idle = { name: "idle", already: false, message: "", fields: {} };
@@ -418,6 +705,82 @@ ok(T.safeId('a b"c<d') === "abcd", "unsafe id characters are dropped");
   ok(T.nextInterestState(failed, { type: "reset" }).name === "idle", "reset -> idle");
   ok(T.nextInterestState(idle, { type: "ok" }).name === "idle", "an ok with nothing in flight is ignored");
   ok(T.nextInterestState(undefined, { type: "submit" }).name === "sending", "no prior state defaults to idle");
+}
+
+// ============================================================
+// 3b. The accordion, driven through the mount's own click handler
+// ============================================================
+section("3b. accordion behaviour");
+
+{
+  // Stand-ins for the four buttons and four panels the renderer emitted, wired
+  // the way the real ones are. The click handler under test is the one
+  // hackathons-ui.js bound to the mount at load, so what runs here is the
+  // shipped path and not a re-implementation of it.
+  const mountEl = registry.get("hack-rounds");
+  const btns = toggles.map((slug) => {
+    const panelId = `hk-panel-${slug}`;
+    const panel = el(panelId);
+    panel.hidden = true;
+    const cue = el(null, "span");
+    cue.textContent = "Show details";
+    const btn = el(`hk-tab-${slug}`, "button");
+    btn.setAttribute("aria-expanded", "false");
+    btn.setAttribute("aria-controls", panelId);
+    btn.setAttribute("data-hk-toggle", slug);
+    btn.setAttribute("data-hk-name", slug);
+    btn.setAttribute("aria-label", `Show details for ${slug}`);
+    btn._kids[".hk-round-cue"] = cue;
+    btn.closest = (sel) => (sel === "[data-hk-toggle]" ? btn : null);
+    return { slug, btn, panel, cue };
+  });
+  mountEl.querySelectorAll = (sel) =>
+    (sel === "[data-hk-toggle]" ? btns.map((b) => b.btn) : []);
+
+  const click = (mountEl._listeners.click || [])[0];
+  ok(!!click, "the mount has a click handler");
+  const press = (i) => click({ target: btns[i].btn });
+  const expanded = () => btns.filter((b) => b.btn.getAttribute("aria-expanded") === "true");
+  const shown = () => btns.filter((b) => !b.panel.hidden);
+
+  press(0);
+  ok(expanded().length === 1 && expanded()[0].slug === btns[0].slug, "pressing a round opens it");
+  ok(shown().length === 1 && !btns[0].panel.hidden, "its panel is revealed");
+  ok(btns[0].cue.textContent === "Hide details", "the bar now offers to hide it");
+  ok(btns[0].btn.getAttribute("aria-label") === `Hide details for ${btns[0].slug}`,
+    "the accessible name follows the visible one");
+
+  press(1);
+  ok(expanded().length === 1 && expanded()[0].slug === btns[1].slug,
+    "opening a second round closes the first — only one is open");
+  ok(shown().length === 1, "...and only one panel is shown");
+  ok(btns[0].btn.getAttribute("aria-expanded") === "false",
+    "the round being CLOSED updates its own aria-expanded");
+  ok(btns[0].panel.hidden === true, "...and hides its panel");
+  ok(btns[0].cue.textContent === "Show details" &&
+     btns[0].btn.getAttribute("aria-label") === `Show details for ${btns[0].slug}`,
+    "...and its label goes back");
+
+  press(2);
+  press(3);
+  ok(expanded().length === 1 && expanded()[0].slug === btns[3].slug,
+    "however many are pressed, one stays the answer");
+
+  press(3);
+  ok(expanded().length === 0 && shown().length === 0,
+    "pressing the open round closes it, leaving none open");
+
+  // A deep link is a request for one specific round, so it wins outright and
+  // closes whatever the reader had open.
+  press(0);
+  const section2 = registry.get(`hk-section-probe`) || el(`hk-section-probe`);
+  section2.querySelector = (sel) => (sel === "[data-hk-toggle]" ? btns[2].btn : null);
+  registry.set("eduhackai-probe", section2);
+  window_.location.hash = "#eduhackai-probe";
+  (listeners.window.hashchange || []).forEach((fn) => fn());
+  ok(expanded().length === 1 && expanded()[0].slug === btns[2].slug,
+    "a hash link opens its round and closes the one that was open");
+  window_.location.hash = "";
 }
 
 // ============================================================
@@ -525,6 +888,20 @@ ok(modal.hidden === true, "Escape closes the dialog");
 ok(!document_.body.classList.contains("hk-modal-open"), "the scroll lock is released");
 ok(DOC.activeElement === opener, "focus returns to the button that opened it");
 
+// The closing CTA is a second button onto the SAME dialog, so focus has to
+// come back to whichever of the two was actually pressed — not to the first
+// one, and not to the top of the page.
+{
+  const bottom = el(null, "button");
+  bottom.getAttribute = (k) => (k === "data-hk-open" ? "eduhackai-5" : null);
+  bottom.closest = (sel) => (sel === "[data-hk-open]" ? bottom : null);
+  openers.forEach((fn) => fn({ target: bottom }));
+  ok(modal.hidden === false, "the closing CTA opens the same dialog");
+  keydown({ key: "Escape", preventDefault() {} });
+  ok(DOC.activeElement === bottom,
+    "focus returns to the closing CTA when the closing CTA is what opened it");
+}
+
 // ============================================================
 // 5. CSS
 // ============================================================
@@ -549,7 +926,12 @@ braceBalance(inlineStyle, "hackathons.html inline <style>");
 const allCss = sheet + "\n" + inlineStyle;
 
 // Every hk- class the page or the renderer emits must have a rule somewhere.
-const classAttrs = [...(pageHtml + roundsHtml + soonHtml + statsHtml).matchAll(/class="([^"]*)"/g)];
+// The three sections added after the review are in this list too — leaving
+// them out meant a new class could ship with no styling at all and nothing
+// would say so.
+const allRendered = pageHtml + roundsHtml + soonHtml + statsHtml +
+  storyHtml + coachesHtml + ctaHtml;
+const classAttrs = [...allRendered.matchAll(/class="([^"]*)"/g)];
 const used = new Set();
 for (const m of classAttrs) {
   for (const c of m[1].split(/\s+/)) if (c.startsWith("hk-")) used.add(c);
@@ -568,14 +950,79 @@ for (const dead of ["hk-podium", "hk-no-placings", "hk-provenance"]) {
 
 // Reduced motion: everything new that animates has to be switchable off in
 // both the media query and the site's own html.reduce-motion class.
-const rmMedia = allCss.split("@media (prefers-reduced-motion: reduce)").slice(1).join("");
-const rmClass = allCss.split("html.reduce-motion").slice(1).join("");
-for (const sel of ["hk-medal", "hk-round-caret", "hk-spin"]) {
-  ok(rmMedia.includes(sel), `prefers-reduced-motion switches off .${sel}`);
-  ok(rmClass.includes(sel), `html.reduce-motion switches off .${sel}`);
+//
+// This used to split the sheet on the first "@media (prefers-reduced-motion"
+// and keep everything after it, which is most of the file — so the check
+// passed as long as the selector appeared ANYWHERE later, including in the
+// ordinary rule that defines the animation in the first place. Deleting a
+// reduced-motion rule outright did not fail it. The block is now extracted by
+// brace matching, and the class form is matched as an actual selector.
+function blocksOf(css, opener) {
+  const out = [];
+  const re = new RegExp(opener.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\{", "g");
+  let m;
+  while ((m = re.exec(css)) !== null) {
+    let i = m.index + m[0].length;
+    const start = i;
+    let depth = 1;
+    while (i < css.length && depth > 0) {
+      if (css[i] === "{") depth++;
+      else if (css[i] === "}") depth--;
+      i++;
+    }
+    out.push(css.slice(start, i - 1));
+  }
+  return out.join("\n");
+}
+const rmMedia = blocksOf(allCss, "@media (prefers-reduced-motion: reduce)");
+ok(rmMedia.length > 0 && rmMedia.length < allCss.length / 4,
+  "the reduced-motion media blocks are extracted, not the rest of the sheet");
+for (const sel of ["hk-medal", "hk-round-caret", "hk-round-toggle", "hk-spin"]) {
+  ok(new RegExp("\\." + sel + "\\b").test(rmMedia), `prefers-reduced-motion switches off .${sel}`);
+  ok(new RegExp("html\\.reduce-motion[^{}]*\\." + sel + "\\b[^{}]*\\{").test(allCss),
+    `html.reduce-motion switches off .${sel}`);
 }
 ok((allCss.match(/@media \(prefers-reduced-motion: reduce\)/g) || []).length >= 6,
   "the reduced-motion blocks are still all present");
+
+// The medal cards were "taking very big side". These are the sizes that
+// answer to that, held here so a later tweak cannot quietly grow them back.
+{
+  // EVERY declaration of the property in the rule, not the first one and not
+  // the last one. Reading one of them let a `width: 92px !important;` added
+  // above the real declaration go unnoticed, because the greedy match walked
+  // past it to the 54px further down.
+  const all = (selector, prop) =>
+    [...blocksOf(allCss, selector).matchAll(new RegExp(prop + ":\\s*(\\d+(?:\\.\\d+)?)px", "g"))]
+      .map((m) => parseFloat(m[1]));
+  const worst = (selector, prop) => {
+    const v = all(selector, prop);
+    return v.length ? Math.max(...v) : NaN;
+  };
+  const badge = worst(".hk-medal-badge", "width");
+  const trophy = worst(".hk-medal-trophy", "width");
+  const team = worst(".hk-medal-team", "font-size");
+  ok(badge <= 64, `the medallion is small (largest declared ${badge}px, was 92px)`);
+  ok(trophy <= 40, `the trophy is small (largest declared ${trophy}px, was 58px)`);
+  ok(team <= 16, `the team name is sized for a small card (largest declared ${team}px, was 20px)`);
+  ok(worst(".hk-medal", "padding") <= 16 || Number.isNaN(worst(".hk-medal", "padding")),
+    "the card padding is tight");
+  // Three across at every width now that they fit; the old sheet dropped to
+  // one per row on a phone purely because the cards were so tall.
+  ok(!/@media \(max-width: 720px\)[^}]*\{[^@]*\.hk-medals[^}]*grid-template-columns:\s*1fr/s.test(allCss),
+    "the phone breakpoint no longer stacks the medals one per row");
+}
+
+// The logo slots must not be an invention of this page: they use the same
+// html.light-mode swap the club wordmark already uses.
+ok(/html\.light-mode \.hk-logo-light\.is-ready\s*\{[^}]*display:\s*block/s.test(allCss) &&
+   /html\.light-mode \.hk-logo-dark\.is-ready\s*\{[^}]*display:\s*none/s.test(allCss),
+  "the logo pair swaps on html.light-mode, the same way .logo-img-dark does");
+ok(/\.hk-logo-img\s*\{[^}]*display:\s*none/s.test(allCss),
+  "logo images start hidden, so a missing file never paints a broken icon");
+ok(/\.hk-coach-photo\s*\{[^}]*display:\s*none/s.test(allCss) &&
+   /\.hk-coach-photo\.is-ready\s*\{[^}]*display:\s*block/s.test(allCss),
+  "coach photos start hidden and are revealed only once they decode");
 
 // Both themes define every medal token the cards read.
 for (const tier of ["gold", "silver", "bronze"]) {
