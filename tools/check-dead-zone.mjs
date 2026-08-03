@@ -52,6 +52,7 @@ function jsFilesIn(dir) {
 const files = [...new Set(DIRS.flatMap(jsFilesIn))];
 let failures = 0;
 let checked = 0;
+const skipped = [];
 
 for (const rel of files) {
   const lines = fs.readFileSync(path.join(ROOT, rel), "utf8").split(/\r?\n/);
@@ -63,9 +64,15 @@ for (const rel of files) {
     if (/^\s*$/.test(L)) continue;
     if (/^(\/\/|\/\*|\s|\*)/.test(L)) continue;
     if (/^(const|let|var|function|async function|class|import|export|\})/.test(L)) continue;
+    // `(function () {` and `(async () => {` are execution too. This line was
+    // missing, so `hackathons-ui.js` — an IIFE — was skipped in SILENCE and
+    // reported nothing, which reads exactly like a pass. That is worse than
+    // having no check: the whole point of this file is that the bug it hunts
+    // is invisible until the page is opened.
+    if (/^[(!+~]\s*(async\s+)?(function\b|\()/.test(L)) { firstRun = i; break; }
     if (/^(await\s|if\s*\(|[A-Za-z_$][\w$]*\s*\()/.test(L)) { firstRun = i; break; }
   }
-  if (firstRun === -1) continue;   // nothing executes at load; cannot have the bug
+  if (firstRun === -1) { skipped.push(rel); continue; }
   checked++;
 
   const late = [];
@@ -86,7 +93,14 @@ for (const rel of files) {
   }
 }
 
-console.log(`\n${checked} module(s) with top-level execution checked.`);
+// Name what was NOT checked. A silent skip is indistinguishable from a pass,
+// which is how an IIFE slipped through this check unexamined while the run
+// still printed a clean bill of health.
+if (skipped.length) {
+  console.log(`\nnot checked — nothing runs at load (cannot have this bug):`);
+  for (const s of skipped) console.log(`  ${s}`);
+}
+console.log(`\n${checked} module(s) with top-level execution checked, ${skipped.length} skipped.`);
 if (failures) {
   console.error(`${failures} binding(s) in the dead zone. This throws at load; --check will not see it.`);
   process.exit(1);
