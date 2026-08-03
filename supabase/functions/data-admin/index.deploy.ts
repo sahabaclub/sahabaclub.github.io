@@ -77,6 +77,43 @@ function csvField(value: string): string {
   return value;
 }
 
+// ============================================================
+// Two different jobs, and only one of them is optional
+// ============================================================
+//
+// ⚠ FORMULA INJECTION IS NOT A FORMATTING PREFERENCE. A cell beginning `=`,
+// `+`, `-`, `@`, a tab or a carriage return is executed by Excel, LibreOffice
+// and Google Sheets when the file is opened. `=cmd|'/c calc'!A1` in a member's
+// `full_name` is a command that runs on the machine of whoever opens the
+// export, and the fields in this dataset are typed by members into a public
+// sign-up form.
+//
+// That guard used to sit behind `options.textSafe`, and `data-admin` — the one
+// caller, the surface 2,200 people's data leaves the building through —
+// defaults it OFF. So the protection existed, was off by default, and the
+// default was chosen for a reason that has nothing to do with it: text-safety
+// was framed as "for the round trip, not for a file somebody is going to read
+// as text". That framing is right about phone numbers and wrong about
+// formulas.
+//
+// So they are separated. `needsFormulaGuard` is applied UNCONDITIONALLY by
+// `toCsv`; `needsTextSafety` keeps the phone/date/leading-zero heuristics and
+// keeps the toggle, because those genuinely are about how Excel displays a
+// value the reader already trusts.
+function needsFormulaGuard(value: string): boolean {
+  // Tab and CR are in the set because they are stripped on parse and whatever
+  // follows them is then read as the leading character.
+  if (!/^[=+\-@\t\r]/.test(value)) return false;
+
+  // ⚠ `-` and `+` also begin ordinary negative and signed numbers, and this
+  // guard is now unconditional — so without this line every negative number in
+  // every export would be wrapped as `="-5"` and stop being a number. A plain
+  // numeric literal is not a formula to any of the three spreadsheets.
+  if (/^[+-]?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(value)) return false;
+
+  return true;
+}
+
 // Values Excel will change the meaning of if it is allowed to guess.
 //
 // Deliberately generous: a false positive costs a visible `="…"` wrapper in a
@@ -84,10 +121,6 @@ function csvField(value: string): string {
 // whole point.
 function needsTextSafety(value: string): boolean {
   if (value === "") return false;
-
-  // Formula and injection prefixes. Excel, LibreOffice and Sheets all treat
-  // these as the start of an expression.
-  if (/^[=+\-@\t\r]/.test(value)) return true;
 
   // 0501234567 — a leading zero Excel discards.
   if (/^0\d+$/.test(value)) return true;
@@ -111,8 +144,14 @@ function textSafeValue(value: string): string {
 }
 
 type CsvOptions = {
-  // Wrap at-risk values so Excel shows them as typed. Off by default: it is
-  // for the round trip, not for a file somebody is going to read as text.
+  // Wrap values Excel would REFORMAT — phone numbers, leading zeroes, long
+  // digit strings, bare dates — so it shows them as typed. Off by default: it
+  // is for the round trip, not for a file somebody is going to read as text.
+  //
+  // ⚠ This does NOT control the formula guard, and used to. See
+  // `needsFormulaGuard`: that one is applied to every export whatever this
+  // says, because it is the difference between a badly formatted cell and code
+  // executing on the machine of whoever opens the file.
   textSafe?: boolean;
 };
 
@@ -126,7 +165,11 @@ function toCsv(
   for (const row of rows) {
     lines.push(columns.map((col) => {
       let v = formatCell(row[col]);
-      if (options.textSafe && needsTextSafety(v)) v = textSafeValue(v);
+      // Unconditional first, then the optional display heuristics. Either way
+      // the value is wrapped at most once.
+      if (needsFormulaGuard(v) || (options.textSafe && needsTextSafety(v))) {
+        v = textSafeValue(v);
+      }
       return csvField(v);
     }).join(","));
   }

@@ -28,6 +28,38 @@ const SITE = "https://www.sahabaclub.ai";
 const DEFAULT_BATCH = 25;
 const MAX_BATCH = 100;
 
+// ============================================================
+// Claiming, and why selecting is not enough
+// ============================================================
+//
+// ⚠ THE SELECT BELOW USED TO BE THE WHOLE OF IT: `status = 'approved'`, limit
+// 25, then send. Nothing marked those rows as spoken for, so two invocations
+// overlapping by even a second — an impatient second click, a retry after a
+// slow response, the admin screen's own loop racing itself — both read the same
+// 25 rows and both mailed them. Every person in that batch gets the letter
+// twice, and the only trace is a `sent_at` that was overwritten.
+//
+// The fix is `promptarena-judge`'s: claim first, in a guarded UPDATE, and work
+// only from the rows the database says you won. `status` moves
+// approved → sending → sent/failed/skipped, and the UPDATE that sets 'sending'
+// is guarded on the row still being 'approved'. Two workers issue that UPDATE
+// against the same row; Postgres serialises them; the second matches nothing
+// and is handed back a shorter list. It cannot mail what it did not win.
+//
+// The stale escape is not optional, for the same reason it is not optional
+// there. A function killed between claiming and sending leaves a row 'sending'
+// with nothing coming, and without this that person is never mailed again by
+// anybody. Ten minutes is comfortably longer than a batch can take — the whole
+// invocation dies at 150s — so a worker that is still running is never robbed
+// of a row it is part-way through.
+//
+// ⚠ The window this leaves is the honest one, and it is a re-send of at most
+// ONE letter: a row claimed, handed to Resend, and the process killed before
+// the 'sent' write lands. Ten minutes later it is reclaimed and sent again.
+// Closing that needs an idempotency key on the Resend call, which is a change
+// to how every send is made rather than to how rows are picked.
+const CLAIM_STALE_MS = 10 * 60_000;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -94,21 +126,62 @@ Deno.serve(async (req) => {
     }
 
     // Only approved drafts. 'generated' is not enough — that is the whole
-    // point of the review step existing.
-    const { data: recipients, error: rErr } = await admin
-      .from("campaign_recipients")
-      .select("id, contact_id, email, subject, body_text")
-      .eq("campaign_id", campaignId)
-      .eq("status", "approved")
-      .limit(batch);
-    if (rErr) return json({ error: rErr.message }, 500);
+    // point of the review step existing. Plus any row abandoned mid-send by a
+    // worker that died; see CLAIM_STALE_MS.
+    const staleBefore = new Date(Date.now() - CLAIM_STALE_MS).toISOString();
+    const claimable = `status.eq.approved,and(status.eq.sending,updated_at.lt.${staleBefore})`;
 
-    if (!recipients?.length) {
+    const { data: candidates, error: cErr } = await admin
+      .from("campaign_recipients")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .or(claimable)
+      // Oldest first, so repeated calls walk the list instead of re-reading
+      // whatever the planner happened to return. Without an order, "the next
+      // 25" is not a defined set.
+      .order("created_at", { ascending: true })
+      .limit(batch);
+    if (cErr) return json({ error: cErr.message }, 500);
+
+    // ⚠ The claim. Guarded on the same predicate that selected them, so a row
+    // another invocation took between the two statements no longer matches and
+    // is simply absent from what comes back. `.select()` returns the rows this
+    // UPDATE actually changed — that, and not the read above, is the list this
+    // function is allowed to mail.
+    let recipients: Array<{
+      id: string; contact_id: string; email: string;
+      subject: string | null; body_text: string | null;
+    }> = [];
+
+    if (candidates?.length) {
+      const { data: claimed, error: rErr } = await admin
+        .from("campaign_recipients")
+        .update({ status: "sending", updated_at: new Date().toISOString() })
+        .in("id", candidates.map((c) => c.id))
+        .or(claimable)
+        .select("id, contact_id, email, subject, body_text");
+      if (rErr) return json({ error: rErr.message }, 500);
+      recipients = claimed ?? [];
+
+      if (claimed && claimed.length < candidates.length) {
+        // Not an error: another invocation is working the same campaign and
+        // won those rows. Worth a line, because it is also what a double-click
+        // looks like from in here.
+        console.warn(
+          `send-campaign: claimed ${claimed.length} of ${candidates.length} candidates ` +
+            `for campaign ${campaignId} — another send is running`,
+        );
+      }
+    }
+
+    if (!recipients.length) {
+      // Same reasoning as the count at the end: anything still 'sending'
+      // belongs to a worker that has not finished, so the campaign is not.
       const { count: left } = await admin
         .from("campaign_recipients")
         .select("id", { count: "exact", head: true })
         .eq("campaign_id", campaignId)
-        .eq("status", "approved");
+        .in("status", ["approved", "sending"]);
       if ((left ?? 0) === 0) {
         await admin.from("campaigns")
           .update({ status: "sent", sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -181,11 +254,18 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ⚠ 'sending' counts as remaining, not as finished. Now that rows are
+    // claimed, a row another invocation is part-way through is neither
+    // 'approved' nor 'sent' — counting only 'approved' would let this worker
+    // decide the campaign was complete while a second one still had letters in
+    // its hand, stamping `sent_at` and telling the admin it was done. A row
+    // genuinely abandoned in 'sending' holds the campaign open until the stale
+    // reclaim picks it up and finishes it, which is the right way round.
     const { count: remaining } = await admin
       .from("campaign_recipients")
       .select("id", { count: "exact", head: true })
       .eq("campaign_id", campaignId)
-      .eq("status", "approved");
+      .in("status", ["approved", "sending"]);
 
     if ((remaining ?? 0) === 0) {
       await admin.from("campaigns")

@@ -77,6 +77,17 @@ const MAX_LIMIT = 50;
 // killed between the storage upload and the profile UPDATE.
 const TIME_BUDGET_MS = 110_000;
 
+// The one failure that is worth distinguishing by type rather than by reading
+// its message: it is true for the whole batch, not for the member it happened
+// to surface on, so the loop stops instead of confirming it several hundred
+// times. See `generate` and the catch in the batch loop.
+class QuotaExhausted extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "QuotaExhausted";
+  }
+}
+
 type DueRow = {
   user_id: string;
   full_name: string | null;
@@ -196,6 +207,7 @@ Deno.serve(async (req) => {
     let superseded = 0;
     const failures: Array<{ user_id: string; reason: string }> = [];
     let ranOutOfTime = false;
+    let quotaExhausted = false;
 
     for (const row of batch) {
       if (Date.now() - startedAt > TIME_BUDGET_MS) {
@@ -219,6 +231,15 @@ Deno.serve(async (req) => {
         const reason = String(err instanceof Error ? err.message : err);
         console.error("refresh-avatars " + row.user_id + ": " + reason);
         failures.push({ user_id: row.user_id, reason });
+
+        // ⚠ An exhausted balance is not this member's problem and will not
+        // clear for the next one. Working through the rest of the batch would
+        // be several hundred requests to be told the same thing, and it would
+        // bury the one line an operator needs to read.
+        if (err instanceof QuotaExhausted) {
+          quotaExhausted = true;
+          break;
+        }
       }
     }
 
@@ -232,7 +253,13 @@ Deno.serve(async (req) => {
     // people and fail the same way. Reporting done stops that loop and leaves
     // them for the next scheduled run, by which time a busy image service or
     // a bad model name will plausibly have changed.
-    const done = remaining === 0 || (processed === 0 && !ranOutOfTime);
+    //
+    // An exhausted balance joins that list for the same reason and more
+    // strongly: it is the one failure guaranteed to still be true on the next
+    // call. Without it a batch that drew twenty people and then ran dry would
+    // report `processed > 0`, the scheduler would loop, and the whole remaining
+    // membership would be walked one paid-for 429 at a time.
+    const done = remaining === 0 || quotaExhausted || (processed === 0 && !ranOutOfTime);
 
     return json({
       ok: true,
@@ -247,6 +274,7 @@ Deno.serve(async (req) => {
       remaining,
       done,
       ranOutOfTime,
+      quotaExhausted,
       failures: failures.slice(0, 20),
     });
   } catch (err) {
@@ -423,7 +451,19 @@ async function generate(bytes: Uint8Array, prompt: string, model: string): Promi
           : `the image model chosen in Admin → AI services (${model}) is not one this account can use`,
       );
     }
-    if (res.status === 401) throw new Error("OpenAI rejected OPENAI_API_KEY");
+    // ⚠ QUOTA IS MATCHED BEFORE THE 429, the same ordering the five contract
+    // functions use. OpenAI reports an exhausted balance as HTTP 429 with
+    // `insufficient_quota` in the body; nothing here matched it, so a spent
+    // balance arrived as "rate limited" — a transient-sounding reason recorded
+    // against every member in the batch in turn, each one costing a request to
+    // discover the same thing. It is thrown as its own type so the batch loop
+    // can stop rather than work through several hundred people.
+    if (/insufficient_quota|billing_hard_limit|exceeded your current quota|billing_not_active/i.test(detail)) {
+      throw new QuotaExhausted("the OpenAI account is out of credit — top it up and re-run");
+    }
+    if (res.status === 401 || res.status === 403 || /invalid_api_key|incorrect api key/i.test(detail)) {
+      throw new Error("OpenAI rejected OPENAI_API_KEY");
+    }
     if (res.status === 429) throw new Error("rate limited");
     throw new Error("OpenAI " + res.status + ": " + detail.slice(0, 200));
   }

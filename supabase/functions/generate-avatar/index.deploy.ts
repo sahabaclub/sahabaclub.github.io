@@ -1124,7 +1124,18 @@ async function generate(
           : `The image model chosen in the admin panel (${model}) isn't valid for this account. Change it under Admin → AI services → Member avatars, or reset that service to its code default.`,
       );
     }
-    if (res.status === 401) {
+    // ⚠ QUOTA IS MATCHED BEFORE THE 429, the same ordering the five contract
+    // functions use. OpenAI reports an exhausted balance as HTTP 429 with
+    // `insufficient_quota` in the body. Nothing here matched it, so a spent
+    // balance fell through to the "busy right now" sentence below and the
+    // member was invited to try again — for ever, against a balance that only
+    // an admin adding credit will change.
+    if (/insufficient_quota|billing_hard_limit|exceeded your current quota|billing_not_active/i.test(detail)) {
+      // `fail` refunds the attempt on every throw out of here, so this is a
+      // promise the code actually keeps.
+      throw new Error("The club's AI account has run out of credit — an admin needs to top it up. Your try hasn't been used up.");
+    }
+    if (res.status === 401 || res.status === 403 || /invalid_api_key|incorrect api key/i.test(detail)) {
       throw new Error("The AI service rejected our credentials. Check OPENAI_API_KEY.");
     }
     if (res.status === 429) {

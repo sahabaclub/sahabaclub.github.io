@@ -261,6 +261,19 @@ const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 const MAX_OUTPUT_TOKENS = 8000;
 const AI_SLUG = "parse-profile-document";
 
+// The escalated ceiling, used once after a truncation — see `askOnce`. The
+// ceiling is shared with the model's own reasoning tokens, and reasoning length
+// is SAMPLED rather than fixed: the same CV that fits on one draw can truncate
+// on the next, so re-asking at the same ceiling is a coin flip and re-asking
+// higher is not. Scaled from whatever base is actually in play (staff can lower
+// it from the panel) and capped at what 0031's CHECK accepts (256..128000).
+const MAX_OUTPUT_TOKENS_RETRY = 20_000;
+
+function ceilingFor(base: number, escalated: boolean): number {
+  if (!escalated) return base;
+  return Math.min(128_000, Math.max(MAX_OUTPUT_TOKENS_RETRY, base * 2));
+}
+
 // tag_suggestions is seeded from every member's existing skills and interests,
 // so it grows with the club and has no natural ceiling. The prompt only needs
 // enough of it to anchor spelling, and the most-used tags are the ones a new
@@ -457,6 +470,47 @@ Deno.serve(async (req) => {
       parts: { system: SYSTEM_PROMPT },
     });
 
+    // ⚠ Two passes at most, and the second only ever happens for a truncation.
+    // Everything else — a refusal, a bad model name, an exhausted balance — says
+    // the same thing the second time for twice the money.
+    const base = ai.maxOutputTokens || MAX_OUTPUT_TOKENS;
+    let outcome = await askOnce(ai, documentPart, countries, tags, ceilingFor(base, false));
+    if ("code" in outcome && outcome.code === "output_truncated") {
+      console.warn(
+        `parse-profile-document: truncated at ceiling ${ceilingFor(base, false)}; ` +
+          `retrying once at ${ceilingFor(base, true)}`,
+      );
+      outcome = await askOnce(ai, documentPart, countries, tags, ceilingFor(base, true));
+    }
+
+    if ("code" in outcome) {
+      return json(
+        { error: outcome.error, code: outcome.code, retryable: outcome.retryable },
+        outcome.status,
+      );
+    }
+
+    // The member sees these in a review step and can correct anything before
+    // it's saved, so the model is never the last word on their own profile.
+    return json({ ok: true, profile: reconcile(outcome.parsed, countries, tags) });
+  } catch (err) {
+    console.error(err);
+    return json({ error: String(err) }, 500);
+  }
+});
+
+// One attempt. Returns either the parsed object or a classified failure — the
+// same `code` / `retryable` contract the five contract functions use, so a
+// caller can branch on the code instead of reading the sentence.
+type Failure = { error: string; code: string; status: number; retryable: boolean };
+
+async function askOnce(
+  ai: Awaited<ReturnType<typeof loadAiConfig>>,
+  documentPart: Record<string, unknown>,
+  countries: string[],
+  tags: string[],
+  maxOutputTokens: number,
+): Promise<{ parsed: unknown } | Failure> {
     const res = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -482,7 +536,10 @@ Deno.serve(async (req) => {
         // low effort brings the latency down, the higher ceiling stops a
         // long CV truncating.
         reasoning: { effort: "low" },
-        max_output_tokens: ai.maxOutputTokens,
+        // Escalates once on truncation — see `ceilingFor`. Raising the ceiling
+        // was half the fix; the other half was that nothing retried, so a
+        // sampled truncation was final.
+        max_output_tokens: maxOutputTokens,
         input: [
           {
             role: "user",
@@ -505,24 +562,59 @@ Deno.serve(async (req) => {
 
     if (!res.ok) {
       const detail = await res.text();
-      console.error("OpenAI " + res.status + ": " + detail);
+      console.error("OpenAI " + res.status + ": " + detail.slice(0, 500));
 
       // The model name is the one setting most likely to be wrong, and the
       // generic message would send someone hunting in the wrong place.
       if (/model_not_found|does not exist|unknown model/i.test(detail)) {
-        return json({
+        return {
           // Names the setting actually in play. Since 0031 the model can come
           // from the admin panel instead of the secret, and pointing somebody
           // at the wrong one costs an afternoon.
           error: ai.model === MODEL
             ? "The configured AI model name isn't valid. Set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use."
             : `The model chosen in Admin → AI services for the CV import (${ai.model}) isn't valid for this account. Change it there, or reset that service to its code default.`,
-        }, 502);
+          code: "model_not_configured",
+          status: 503,
+          retryable: false,
+        };
       }
-      if (res.status === 401) {
-        return json({ error: "The AI service rejected our credentials. Check OPENAI_API_KEY." }, 502);
+      // ⚠ QUOTA BEFORE THE RATE LIMIT, matching the five contract functions.
+      // OpenAI reports an exhausted balance as HTTP 429 with
+      // `insufficient_quota` in the body. Nothing here matched it, so a spent
+      // balance was indistinguishable from throttling — retried, backed off,
+      // retried again and reported as "busy" for ever, when the only thing that
+      // fixes it is somebody adding credit.
+      if (/insufficient_quota|billing_hard_limit|exceeded your current quota|billing_not_active/i.test(detail)) {
+        return {
+          error: "The AI account has run out of credit. Fill the form in directly for now — an admin needs to top up the OpenAI billing account.",
+          code: "quota_exhausted",
+          status: 402,
+          retryable: false,
+        };
       }
-      return json({ error: "Couldn't read that document just now. Try again, or fill the form in directly." }, 502);
+      if (res.status === 401 || res.status === 403 || /invalid_api_key|incorrect api key/i.test(detail)) {
+        return {
+          error: "The AI service rejected our credentials. Check OPENAI_API_KEY.",
+          code: "ai_credentials",
+          status: 503,
+          retryable: false,
+        };
+      }
+      if (res.status === 429) {
+        return {
+          error: "The AI service is busy right now. Try again in a moment, or fill the form in directly.",
+          code: "rate_limited",
+          status: 429,
+          retryable: true,
+        };
+      }
+      return {
+        error: "Couldn't read that document just now. Try again, or fill the form in directly.",
+        code: "upstream_error",
+        status: 502,
+        retryable: true,
+      };
     }
 
     const data = await res.json();
@@ -533,31 +625,76 @@ Deno.serve(async (req) => {
     // A refusal comes back as its own content type with no JSON in it, so
     // reaching for output_text first would read undefined.
     if (parts.some((p: { type?: string }) => p.type === "refusal")) {
-      return json({ error: "Couldn't read that document. Try filling the form in directly." }, 422);
+      return {
+        error: "Couldn't read that document. Try filling the form in directly.",
+        code: "model_refused",
+        status: 422,
+        retryable: false,
+      };
     }
 
-    // Truncation gives back valid-looking but incomplete text; better to say
-    // so than to hand back half a profile.
+    // ⚠ THIS MESSAGE USED TO BLAME THE MEMBER'S DOCUMENT, and the comment three
+    // screens up already said it was wrong: "surfaced to the member as 'that
+    // document was too long', which sent them looking for a shorter CV when the
+    // length was never the problem." The ceiling was raised 4000 → 8000 and the
+    // effort capped, but the sentence shipped unchanged, so the member was
+    // still told to shorten a CV whose length is not what ran out.
+    //
+    // What actually happens: `max_output_tokens` is shared with the model's own
+    // reasoning, and it can be exhausted before a single visible token appears.
+    // That is our ceiling, not their CV — a one-page CV can hit it and a
+    // six-page one can sail through, because reasoning length is sampled.
     if (data.status === "incomplete") {
-      console.error("incomplete: " + JSON.stringify(data.incomplete_details));
-      return json({ error: "That document was too long to read in one go. Try a shorter CV, or fill the form in directly." }, 422);
+      const reason = data.incomplete_details?.reason ?? "unknown";
+      console.error(
+        `parse-profile-document: incomplete (${reason}) at max_output_tokens=${maxOutputTokens}; ` +
+          `reasoning tokens used: ${data.usage?.output_tokens_details?.reasoning_tokens ?? "unreported"} ` +
+          `of ${data.usage?.output_tokens ?? "unreported"} output tokens`,
+      );
+
+      // A different condition wearing the same status. No ceiling is involved
+      // and raising ours would not change the answer.
+      if (reason === "content_filter") {
+        return {
+          error: "The AI service stopped partway through that document. Try filling the form in directly.",
+          code: "content_filtered",
+          status: 422,
+          retryable: false,
+        };
+      }
+
+      return {
+        error: "The AI reader ran out of room part-way through — that's our limit, not your CV, and it often works on a second try. Try again, or fill the form in directly.",
+        code: "output_truncated",
+        status: 503,
+        retryable: true,
+      };
     }
 
     const textPart = parts.find((p: { type?: string }) => p.type === "output_text");
     if (!textPart?.text) {
-      return json({ error: "No profile fields came back — try filling the form in directly." }, 502);
+      return {
+        error: "No profile fields came back — try again, or fill the form in directly.",
+        code: "upstream_bad_response",
+        status: 502,
+        retryable: true,
+      };
     }
 
-    const profile = reconcile(JSON.parse(textPart.text), countries, tags);
-
-    // The member sees these in a review step and can correct anything before
-    // it's saved, so the model is never the last word on their own profile.
-    return json({ ok: true, profile });
-  } catch (err) {
-    console.error(err);
-    return json({ error: String(err) }, 500);
-  }
-});
+    // Guarded: an unparseable body is a 502 the member can act on, not a 500
+    // with a raw SyntaxError in it.
+    try {
+      return { parsed: JSON.parse(textPart.text) };
+    } catch {
+      console.error("parse-profile-document: unparseable model output, " + textPart.text.length + " chars");
+      return {
+        error: "The AI service's answer wasn't readable. Try again, or fill the form in directly.",
+        code: "upstream_bad_response",
+        status: 502,
+        retryable: true,
+      };
+    }
+}
 
 // Reads the two controlled vocabularies. Either may be absent — the migration
 // that creates them is applied separately from this deployment — and that is
