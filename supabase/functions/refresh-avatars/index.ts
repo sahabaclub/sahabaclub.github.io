@@ -37,21 +37,37 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
 //   OPENAI_API_KEY
 //   OPENAI_IMAGE_MODEL                       — optional, same default as generate-avatar
+//
+// Since 0031 the artwork and the image model can also be set from Admin → AI
+// services. ⚠ This function and `generate-avatar` read the SAME service row —
+// `avatar-art` — which is the whole point: the wall and the individual
+// portraits have to be the same artwork, and the panel is not able to give
+// them two. The secret above and the constants in `_shared/avatar-art.ts`
+// remain the floor for both.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { listOf, loadAiConfig, part } from "../_shared/ai-config.ts";
 import {
+  AVATAR_ART_DEFAULTS,
   AVATAR_BUCKET,
   buildPrompt,
   currentCycle,
   decodeBase64,
+  HOUSE_STYLE,
   themeForCycle,
+  THEMES,
   uploadFallback,
+  VARIANTS,
 } from "../_shared/avatar-art.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 const IMAGE_MODEL = Deno.env.get("OPENAI_IMAGE_MODEL") ?? "gpt-image-1";
+
+// ⚠ The same slug `generate-avatar` reads. Two functions, one row. See the
+// header of `_shared/avatar-art.ts`.
+const AI_SLUG = "avatar-art";
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
@@ -90,8 +106,24 @@ Deno.serve(async (req) => {
   const limit = clampLimit(params.get("limit"));
 
   const cycle = currentCycle();
-  const theme = themeForCycle(cycle);
   const startedAt = Date.now();
+
+  // Read once for the whole batch, not once per member: every avatar in one
+  // run must be drawn on one month's theme by one model, or the "wall" this
+  // job exists to keep coherent is a wall drawn by two different setups
+  // because somebody saved halfway through. Never throws — a database this
+  // job cannot read means the batch runs on the code defaults, which is a
+  // month of avatars that look right rather than a month with none.
+  const ai = await loadAiConfig(admin, AI_SLUG, {
+    model: IMAGE_MODEL,
+    parts: AVATAR_ART_DEFAULTS,
+  });
+  const imageModel = ai.model;
+  const art = {
+    house_style: part(ai, "house_style", HOUSE_STYLE),
+    variants: listOf(ai, "variants", VARIANTS),
+  };
+  const theme = themeForCycle(cycle, listOf(ai, "themes", THEMES));
 
   try {
     if (!dryRun && !OPENAI_API_KEY) {
@@ -143,6 +175,13 @@ Deno.serve(async (req) => {
         dryRun: true,
         cycle,
         theme,
+        // Which artwork this run would use, and where it came from. A dry run
+        // whose whole job is "see who is next and why" should also answer
+        // "and drawn how" — an activated house style that nobody expected is
+        // exactly the thing worth catching before several hundred images.
+        model: imageModel,
+        artSource: ai.source,
+        artVersion: ai.version || null,
         wouldProcess: batch.length,
         remaining: totalDue,
         sample: batch.slice(0, 10).map((r) => ({
@@ -165,7 +204,9 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const written = await refreshOne(admin, row, avatarUrls.get(row.user_id) ?? "", cycle, theme);
+        const written = await refreshOne(
+          admin, row, avatarUrls.get(row.user_id) ?? "", cycle, theme, art, imageModel,
+        );
         // Either way they are in this cycle now and out of the queue, so both
         // count toward `processed` — `superseded` is only there to explain a
         // month where the numbers look light.
@@ -197,6 +238,9 @@ Deno.serve(async (req) => {
       ok: true,
       cycle,
       theme,
+      model: imageModel,
+      artSource: ai.source,
+      artVersion: ai.version || null,
       processed,
       failed: failures.length,
       superseded,
@@ -221,6 +265,10 @@ async function refreshOne(
   currentUrl: string,
   cycle: string,
   theme: string,
+  // Resolved once for the batch by the handler and passed down rather than
+  // read here, so every member in one run is drawn the same way.
+  art: { house_style: string; variants: string[] },
+  imageModel: string,
 ): Promise<boolean> {
   const profile = {
     full_name: row.full_name,
@@ -264,8 +312,11 @@ async function refreshOne(
   let sourceBytes = new Uint8Array(await blob.arrayBuffer());
   if (!sourceBytes.byteLength) throw new Error("current avatar is empty");
 
-  const prompt = buildPrompt(profile, theme, "avatar");
-  const pngBytes = await generate(sourceBytes, prompt);
+  // Variant 0, as it always was: the monthly job draws one picture per member
+  // and has nothing to vary between. The rota still has to be passed, because
+  // entry 0 is one of the three staff can edit.
+  const prompt = buildPrompt(profile, theme, "avatar", 0, art);
+  const pngBytes = await generate(sourceBytes, prompt, imageModel);
 
   // Generated art rather than a photograph, but zeroed on the same principle
   // as generate-avatar: the input to an image call does not outlive the call.
@@ -346,9 +397,9 @@ async function saveRefreshed(
 // input. Errors here are read from a log by whoever is watching the batch,
 // not by a member staring at a spinner, so the triage is shorter than
 // generate-avatar's and phrased for the operator.
-async function generate(bytes: Uint8Array, prompt: string): Promise<Uint8Array> {
+async function generate(bytes: Uint8Array, prompt: string, model: string): Promise<Uint8Array> {
   const form = new FormData();
-  form.append("model", IMAGE_MODEL);
+  form.append("model", model);
   form.append("image", new Blob([bytes], { type: "image/png" }), "avatar.png");
   form.append("prompt", prompt);
   form.append("size", "1024x1024");
@@ -363,7 +414,14 @@ async function generate(bytes: Uint8Array, prompt: string): Promise<Uint8Array> 
   if (!res.ok) {
     const detail = await res.text();
     if (/model_not_found|does not exist|unknown model/i.test(detail)) {
-      throw new Error("OPENAI_IMAGE_MODEL is not a model this account can use");
+      // Names which setting is actually in play — since 0031 the model can
+      // come from the admin panel instead of the secret, and sending an
+      // operator to change a value nothing is reading wastes a batch window.
+      throw new Error(
+        model === IMAGE_MODEL
+          ? "OPENAI_IMAGE_MODEL is not a model this account can use"
+          : `the image model chosen in Admin → AI services (${model}) is not one this account can use`,
+      );
     }
     if (res.status === 401) throw new Error("OpenAI rejected OPENAI_API_KEY");
     if (res.status === 429) throw new Error("rate limited");

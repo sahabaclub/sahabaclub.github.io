@@ -10,6 +10,39 @@
 // that drifts. Everything shared between them lives here; everything about
 // *which columns get written* stays in the functions, because that part
 // genuinely differs.
+//
+// ============================================================
+// ⚠ SINCE 0031: STAFF CAN EDIT THE ARTWORK, AND STILL CANNOT SPLIT IT
+// ============================================================
+//
+// The admin panel lets Ahmed rewrite the house style, the twelve monthly
+// themes and the three variants. That does not change the sentence above; it
+// makes it stronger, and it is worth being precise about how.
+//
+//   * The stored artwork is ONE row — `ai_services.slug = 'avatar-art'` — and
+//     both functions read it under that one slug. There is no per-function
+//     prompt for either of them to hold, so there is nothing for the panel to
+//     get out of step. Giving `refresh-avatars` its own house style would take
+//     a second service row and a repointed foreign key: a migration, reviewed,
+//     not a click. 0031 §2 has a verification query that fails if one appears.
+//
+//   * The COMPOSITION stays here. `buildPrompt` still assembles the opening,
+//     the style, the member's own interests, the month's accent, the variant
+//     and the closing guard, in that order and with those joins. What the
+//     panel supplies is text for three of those slots, not a template — so an
+//     edit cannot reorder the prompt, drop the "do not reproduce the
+//     photograph" closing line, or apply to one caller and not the other.
+//
+//   * The constants below remain the defaults and the floor. `art` is a
+//     trailing optional argument on `buildPrompt` and `themeForCycle`; called
+//     without it — which is what happens whenever the database has no active
+//     version, is unreadable, or holds a malformed value — the two functions
+//     produce byte-for-byte what they produced before 0031 existed.
+//
+// `AVATAR_ART_DEFAULTS` at the bottom of this section is what the panel shows
+// as the starting text. It is a real export of the real constants rather than
+// a copy in a migration, so the "reset to the code default" button cannot show
+// something the code has not used since March.
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export const AVATAR_BUCKET = "avatars";
@@ -40,7 +73,7 @@ export function currentCycle(now: Date = new Date()): string {
 // predictable: everyone regenerated in the same month shares it, which is
 // what makes the change legible as "the wall turned over" rather than as
 // noise.
-const THEMES = [
+export const THEMES = [
   "deep winter night-sky indigo, cool and still, with faint starlight highlights",
   "soft plum and rose warmth cutting through the cool background",
   "fresh spring greens, new growth breaking through a cool palette",
@@ -57,12 +90,20 @@ const THEMES = [
 
 // Takes the cycle string rather than a Date so the caller's month and the
 // stored `avatar_theme` can never disagree.
-export function themeForCycle(cycle: string): string {
+//
+// `themes` is trailing and optional so both callers keep working untouched and
+// so an absent, short, or otherwise unusable stored rota lands on the constant
+// above rather than on an undefined entry — an index into a rota is only
+// meaningful if the rota is the length the index was written for, which is why
+// `ai-config.ts` rejects a stored list of the wrong length outright and why
+// this guard is here as well.
+export function themeForCycle(cycle: string, themes: readonly string[] = THEMES): string {
+  const rota = themes.length === THEMES.length ? themes : THEMES;
   const month = Number(String(cycle).slice(5, 7));
   // An unparseable cycle should still produce a portrait. Falling back to
   // January is a duller failure than throwing halfway through a batch.
   const index = Number.isFinite(month) && month >= 1 && month <= 12 ? month - 1 : 0;
-  return THEMES[index];
+  return rota[index] || THEMES[index];
 }
 
 // ---- The house style --------------------------------------------------
@@ -118,7 +159,7 @@ export type PromptMode = "photo" | "avatar";
 // the frame" and "clean smooth gradient background". Two prompt lines that
 // flatly contradict each other are two lines the model gets to choose between,
 // which is how you get a rota that quietly does nothing.
-const VARIANTS = [
+export const VARIANTS = [
   "a close crop — the head fills most of the frame and the shoulders only just " +
     "enter at the bottom; let the violet end of the gradient lead, with the cyan " +
     "kept back as a rim accent; the background stays a plain, smooth, unbroken " +
@@ -136,11 +177,39 @@ const VARIANTS = [
 // The attempt index (0, 1, 2) from generate-avatar, but tolerant of anything:
 // a negative, a fraction or a NaN should produce a portrait, not an exception
 // halfway through a paid image call.
-function variantTreatment(variant: number): string {
+function variantTreatment(variant: number, variants: readonly string[] = VARIANTS): string {
+  // Same reasoning as `themeForCycle`: a rota of a different length means every
+  // index means something other than what the caller meant by it, so a stored
+  // list that is not three entries is not a shorter rota, it is the wrong rota.
+  const rota = variants.length === VARIANTS.length ? variants : VARIANTS;
   const n = Number.isFinite(variant) ? Math.trunc(variant) : 0;
-  const i = ((n % VARIANTS.length) + VARIANTS.length) % VARIANTS.length;
-  return VARIANTS[i];
+  const i = ((n % rota.length) + rota.length) % rota.length;
+  return rota[i] || VARIANTS[i];
 }
+
+// ---- What the panel may replace ---------------------------------------
+//
+// The three slots, and nothing else. Exported as the real constants so the
+// admin panel's "what it is now" and "reset to the code default" both read the
+// artwork this file actually uses — no copy in a migration to drift out of
+// step with it.
+//
+// ⚠ The keys match `ai_services.parts_shape` for slug 'avatar-art' in 0031. If
+// one is renamed, rename it in both places: `ai-config.ts` merges by key and
+// silently keeps the code default for a key it does not recognise, so a
+// mismatch here shows up as "the save worked and nothing changed".
+export const AVATAR_ART_DEFAULTS = {
+  house_style: HOUSE_STYLE,
+  themes: THEMES as readonly string[],
+  variants: VARIANTS as readonly string[],
+};
+
+// What `buildPrompt` will take instead of the constants. Every field optional:
+// a stored version that only rewrote the house style must not blank the rota.
+export type AvatarArt = {
+  house_style?: string;
+  variants?: readonly string[];
+};
 
 // Built from the member's own interests, skills and industry, so that a wall
 // of avatars in one house style is still a wall of different people. The
@@ -152,12 +221,27 @@ function variantTreatment(variant: number): string {
 // with three arguments and must keep compiling untouched — the monthly job
 // draws one picture per member and has nothing to vary between, so variant 0
 // is the right answer for it and it should not have to say so.
+//
+// `art` is trailing and optional for the same reason, and for a second one:
+// called without it this function produces exactly what it produced before
+// 0031, which is what "the code default is the floor" has to mean at the point
+// where the prompt is actually assembled. What `art` can replace is the house
+// style and the variant rota — two slots in a fixed composition. It cannot
+// reorder the parts, remove the closing guard, or reach either caller without
+// reaching the other.
 export function buildPrompt(
   profile: Record<string, unknown>,
   theme: string,
   mode: PromptMode = "photo",
   variant: number = 0,
+  art: AvatarArt = {},
 ): string {
+  // Blank is not an edit. A house style saved as an empty string would produce
+  // a portrait with no style at all — the one failure mode a fallback exists
+  // to prevent — so it lands on the constant, exactly as `ai-config.ts` would
+  // have done one layer up. Both layers, because this one is also reachable
+  // from the test run in `ai-admin`.
+  const houseStyle = (art.house_style ?? "").trim() || HOUSE_STYLE;
   const interests = tidyList(profile.interests, 4);
   const skills = tidyList(profile.skills, 3);
   const industry = tidyOne(profile.industry);
@@ -186,7 +270,7 @@ export function buildPrompt(
   // them, and with the identity restated afterwards so that a rota entry
   // asking for a wider crop cannot be read as permission to change the style.
   const treatment =
-    `For this version, treat the composition as follows: ${variantTreatment(variant)}. ` +
+    `For this version, treat the composition as follows: ${variantTreatment(variant, art.variants)}. ` +
     "Where that differs in degree from the framing or background above, follow this line — " +
     "but the illustration style, the club's violet-to-cyan identity and this month's accent are unchanged.";
 
@@ -204,7 +288,7 @@ export function buildPrompt(
       // somebody else is worse than not refreshing at all.
       "Keep the same person clearly recognisable — same face, same hair, same skin tone, same apparent age. Only the lighting, palette accents and background treatment change.";
 
-  return [opening, HOUSE_STYLE, personal, context, seasonal, treatment, closing]
+  return [opening, houseStyle, personal, context, seasonal, treatment, closing]
     .filter(Boolean)
     .join(" ");
 }

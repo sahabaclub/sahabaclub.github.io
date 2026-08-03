@@ -33,8 +33,15 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
 //   OPENAI_API_KEY
 //   OPENAI_MODEL                             — optional, see below
+//
+// Since 0031 the instructions, the model and the output ceiling can also be
+// set from Admin → AI services, under the `parse-profile-document` service.
+// The constants below stay the floor: with nothing activated, or with the
+// database unreachable, this function behaves exactly as it did before. See
+// `_shared/ai-config.ts`.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { loadAiConfig, part } from "../_shared/ai-config.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -45,6 +52,11 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 // dashboard edit rather than a redeploy — the error handler below says so
 // explicitly when OpenAI rejects the name.
 const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
+
+// See the header: the code default for the ceiling, and the slug the admin
+// panel stores an override under.
+const MAX_OUTPUT_TOKENS = 8000;
+const AI_SLUG = "parse-profile-document";
 
 // tag_suggestions is seeded from every member's existing skills and interests,
 // so it grows with the club and has no natural ceiling. The prompt only needs
@@ -235,6 +247,13 @@ Deno.serve(async (req) => {
 
     const { countries, tags } = await loadVocabularies(admin);
 
+    // What staff have chosen, or the constants above. Never throws.
+    const ai = await loadAiConfig(admin, AI_SLUG, {
+      model: MODEL,
+      maxOutputTokens: MAX_OUTPUT_TOKENS,
+      parts: { system: SYSTEM_PROMPT },
+    });
+
     const res = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
@@ -242,8 +261,13 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: MODEL,
-        instructions: buildInstructions(countries, tags),
+        model: ai.model,
+        // ⚠ The vocabularies are still appended HERE, after whatever staff
+        // wrote. They are read out of the database at call time and are the
+        // thing that keeps a hundred members spelling "Power Apps" the same
+        // way; an editable prompt must not be able to drop them, so the panel
+        // is given the instructions and not the whole assembly.
+        instructions: buildInstructions(part(ai, "system", SYSTEM_PROMPT), countries, tags),
         // Reasoning tokens are spent from the SAME budget as the output, so
         // 4000 shared between them starved the JSON and returned
         // status:"incomplete" — surfaced to the member as "that document was
@@ -255,7 +279,7 @@ Deno.serve(async (req) => {
         // low effort brings the latency down, the higher ceiling stops a
         // long CV truncating.
         reasoning: { effort: "low" },
-        max_output_tokens: 8000,
+        max_output_tokens: ai.maxOutputTokens,
         input: [
           {
             role: "user",
@@ -284,7 +308,12 @@ Deno.serve(async (req) => {
       // generic message would send someone hunting in the wrong place.
       if (/model_not_found|does not exist|unknown model/i.test(detail)) {
         return json({
-          error: "The configured AI model name isn't valid. Set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.",
+          // Names the setting actually in play. Since 0031 the model can come
+          // from the admin panel instead of the secret, and pointing somebody
+          // at the wrong one costs an afternoon.
+          error: ai.model === MODEL
+            ? "The configured AI model name isn't valid. Set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use."
+            : `The model chosen in Admin → AI services for the CV import (${ai.model}) isn't valid for this account. Change it there, or reset that service to its code default.`,
         }, 502);
       }
       if (res.status === 401) {
@@ -358,8 +387,8 @@ function textColumn(rows: unknown, key: string): string[] {
 // enums. An enum would make the model pick *some* listed country for a person
 // based in Brazil; a list plus a rule lets it answer "not on the list", which
 // is the honest answer and the one the review step can fix.
-function buildInstructions(countries: string[], tags: string[]): string {
-  let instructions = SYSTEM_PROMPT;
+function buildInstructions(system: string, countries: string[], tags: string[]): string {
+  let instructions = system;
 
   if (countries.length) {
     instructions += `

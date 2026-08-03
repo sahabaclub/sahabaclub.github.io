@@ -1,0 +1,197 @@
+/* Sahaba Club — admin, AI services
+   ------------------------------------------------------------
+   Loaded after admin.css, which is where every colour comes from. Nothing here
+   introduces a hex value: the palette in admin.css is the one that has been
+   measured against WCAG AA in both themes, and a page that invents its own
+   green is a page that is only accessible until somebody changes the theme.
+
+   Tints are rgba() over the panel, and every one of them carries its text in a
+   token (--ad-text, --ad-text-2) rather than in the accent colour, so contrast
+   is the panel's contrast rather than the accent's. The only places an accent
+   carries text are the pills, which admin.css already sizes and measures. */
+
+/* ---- The service list ---- */
+
+.ai-list { display: flex; flex-direction: column; gap: 12px; }
+
+.ai-card {
+  background: var(--ad-panel);
+  border: 1px solid var(--ad-line);
+  border-radius: 11px;
+  overflow: hidden;
+}
+.ai-card.is-open { border-color: var(--ad-line-strong); }
+
+.ai-card-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 16px;
+  align-items: start;
+  padding: 15px 17px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--ad-text);
+  cursor: pointer;
+}
+.ai-card-head:hover { background: var(--ad-panel-2); }
+
+.ai-card-title { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.ai-card-title strong { font-size: 15px; font-weight: 650; }
+.ai-card-blurb {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ad-text-2);
+  max-width: 78ch;
+}
+
+/* Which Edge Functions a configuration is wired into. Sits under the title
+   rather than in a column, because for the avatars it is the single most
+   important thing on the card: you are editing two functions at once. */
+.ai-usedby {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-family: var(--ad-mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--ad-text-3);
+}
+.ai-usedby b { color: var(--ad-text-2); font-weight: 600; }
+
+.ai-card-facts {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  justify-self: end; text-align: right;
+}
+.ai-fact-label {
+  font-family: var(--ad-mono); font-size: 9.5px; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--ad-text-3);
+}
+.ai-fact-value { font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ai-fact-value.mono { font-family: var(--ad-mono); font-size: 12.5px; }
+
+@media (max-width: 720px) {
+  .ai-card-head { grid-template-columns: 1fr; }
+  .ai-card-facts { justify-self: start; text-align: left; }
+}
+
+/* ---- The editor ---- */
+
+.ai-editor { border-top: 1px solid var(--ad-line); padding: 17px; }
+.ai-editor[hidden] { display: none; }
+
+.ai-part { margin-bottom: 18px; }
+.ai-part > label {
+  display: block; font-size: 12.5px; font-weight: 600;
+  color: var(--ad-text-2); margin-bottom: 4px;
+}
+.ai-part .ad-hint { display: block; font-size: 11.5px; color: var(--ad-text-3); margin-bottom: 6px; max-width: 80ch; line-height: 1.5; }
+
+.ai-part textarea {
+  background: var(--ad-bg); border: 1px solid var(--ad-line-strong); border-radius: 8px;
+  padding: 9px 11px; color: var(--ad-text); font-size: 13px; line-height: 1.55;
+  font-family: var(--ad-mono); width: 100%; resize: vertical;
+}
+.ai-part textarea:focus {
+  outline: 2px solid var(--ad-violet); outline-offset: -1px; border-color: transparent;
+}
+
+/* A rota entry: the index is the meaning, so it is shown, not implied. */
+.ai-rota { display: flex; flex-direction: column; gap: 7px; }
+.ai-rota-row { display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: start; }
+.ai-rota-row > span {
+  font-family: var(--ad-mono); font-size: 10.5px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ad-text-3); padding-top: 10px;
+}
+@media (max-width: 560px) {
+  .ai-rota-row { grid-template-columns: 1fr; }
+  .ai-rota-row > span { padding-top: 0; }
+}
+
+.ai-controls { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(160px, 220px); gap: 13px; margin-bottom: 6px; }
+@media (max-width: 640px) { .ai-controls { grid-template-columns: 1fr; } }
+
+.ai-actions {
+  display: flex; gap: 9px; flex-wrap: wrap; align-items: center;
+  margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--ad-line);
+}
+.ai-actions .ad-spacer { flex: 1; }
+
+/* ---- The test result ---- */
+
+.ai-test {
+  margin-top: 14px; border: 1px solid var(--ad-line-strong);
+  border-radius: 9px; overflow: hidden;
+}
+/* ⚠ Deliberately NOT tinted with --ad-panel-2, and this is a measured
+   decision rather than a taste one. The pass/fail pill lives here, and
+   `.ad-pill.ok` is a 10% green tint carrying #15803d in light mode: over
+   --ad-panel that measures 4.5:1, and over --ad-panel-2 it drops to 4.22:1 —
+   under AA, on the one word on this screen that says whether a prompt is safe
+   to ship. The border below is enough separation, and it costs no contrast. */
+.ai-test-head {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 10px 13px; border-bottom: 1px solid var(--ad-line);
+  background: var(--ad-panel);
+}
+.ai-test-reason { font-size: 13px; color: var(--ad-text-2); line-height: 1.55; }
+.ai-test-body { padding: 12px 13px; }
+.ai-test-body h4 {
+  margin: 0 0 6px; font-family: var(--ad-mono); font-size: 10px;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--ad-text-3); font-weight: 600;
+}
+.ai-test-body h4 + * { margin-top: 0; }
+.ai-test pre {
+  margin: 0 0 14px; padding: 10px 12px; border-radius: 7px;
+  background: var(--ad-bg); border: 1px solid var(--ad-line);
+  font-family: var(--ad-mono); font-size: 12px; line-height: 1.55;
+  color: var(--ad-text-2);
+  max-height: 320px; overflow: auto;
+  /* Wide output must scroll inside its own box; the page never scrolls
+     sideways. */
+  white-space: pre-wrap; word-break: break-word;
+}
+.ai-test img {
+  max-width: 260px; width: 100%; height: auto; border-radius: 9px;
+  border: 1px solid var(--ad-line-strong); display: block;
+}
+
+/* ---- History ---- */
+
+.ai-history { margin-top: 18px; padding-top: 15px; border-top: 1px solid var(--ad-line); }
+.ai-history > h3 {
+  margin: 0 0 10px; font-family: var(--ad-mono); font-size: 10px;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--ad-text-3); font-weight: 600;
+}
+.ai-hist-row {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 10px 14px;
+  align-items: center; padding: 9px 0; border-bottom: 1px solid var(--ad-line);
+  font-size: 13px;
+}
+.ai-hist-row:last-child { border-bottom: none; }
+.ai-hist-when { color: var(--ad-text-3); font-size: 12.5px; }
+.ai-hist-note { color: var(--ad-text-2); min-width: 0; overflow-wrap: anywhere; }
+.ai-hist-v {
+  font-family: var(--ad-mono); font-size: 12px; color: var(--ad-text-2);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+  .ai-hist-row { grid-template-columns: 1fr; }
+}
+
+/* The digest. Shown, not hidden, because on the judge it is the thing that
+   ends up in promptarena_submissions.judge_version. */
+.ai-digest {
+  font-family: var(--ad-mono); font-size: 11.5px; color: var(--ad-text-3);
+  overflow-wrap: anywhere;
+}
+
+.ai-note { font-size: 12.5px; color: var(--ad-text-3); line-height: 1.6; max-width: 82ch; }
+.ai-note code {
+  font-family: var(--ad-mono); font-size: 11.5px;
+  background: var(--ad-panel-2); padding: 1px 5px; border-radius: 4px;
+  color: var(--ad-text-2);
+}

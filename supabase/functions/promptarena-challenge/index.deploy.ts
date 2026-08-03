@@ -1,7 +1,7 @@
-// GENERATED - do not edit. Deploy-time twin of index.ts with the ../_shared/cors.ts
-// import replaced by the corsHeaders object inline, and nothing else. The Supabase
-// dashboard editor deploys one function directory at a time and cannot reach a
-// shared parent file. Edit index.ts and regenerate; the two must stay in step.
+// GENERATED - do not edit. Deploy-time twin of index.ts with the ../_shared/cors.ts, ../_shared/ai-config.ts imports replaced by those files inline, and
+// nothing else. The Supabase dashboard editor deploys one function directory at a
+// time and cannot reach a shared parent file. Edit index.ts and regenerate; the
+// two must stay in step.
 
 // promptarena-challenge
 // ------------------------------------------------------------
@@ -76,12 +76,213 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
 //   OPENAI_API_KEY
 //   OPENAI_MODEL                             — optional, defaults below
+//
+// Since 0031 the system prompt and the model can also be set from Admin → AI
+// services, under the `promptarena-challenge` service. The constants below
+// remain the floor. The ceiling is NOT settable there — it is computed per
+// call from the batch size (see `ceilingFor`), and a single number would be
+// wrong for nine batch sizes out of ten.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // ---- inlined from ../_shared/cors.ts ----
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+// ---- inlined from ../_shared/ai-config.ts ----
+type AiDb = {
+  from(table: string): {
+    select(columns: string): {
+      eq(column: string, value: string): {
+        maybeSingle(): PromiseLike<{
+          data: Record<string, unknown> | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+  };
+};
+
+// A whole invocation reads the same configuration, and some of these functions
+// loop — `promptarena-judge` drains a queue, `refresh-avatars` walks a batch,
+// `write-contact-email` writes for up to 25 people. One read per invocation
+// rather than one per item, without making a stale cache outlive the instance
+// that made it.
+//
+// 60 seconds, not "for ever": Edge Function instances are reused between
+// requests, so a permanent memo would mean an activated prompt taking effect
+// only after the instance recycled — which is invisible, unpredictable, and
+// exactly the kind of thing that gets debugged as "the save didn't work".
+const CACHE_MS = 60_000;
+
+const cache = new Map<string, { at: number; row: StoredConfig | null }>();
+
+type StoredConfig = {
+  model: string | null;
+  max_output_tokens: number | null;
+  parts: unknown;
+  version: number | null;
+  config_digest: string | null;
+};
+
+type AiDefaults = {
+  model: string;
+  maxOutputTokens?: number;
+  parts: Record<string, unknown>;
+};
+
+type AiConfig = {
+  slug: string;
+  model: string;
+  maxOutputTokens: number;
+  parts: Record<string, unknown>;
+  version: number;
+  digest: string;
+  // 'database' means at least one field came from a stored version. Logged by
+  // some callers so a support question about a strange answer can start with
+  // "which prompt produced it".
+  source: "database" | "code";
+};
+
+// The one entry point. `slug` is `ai_services.slug`; `defaults` is what the
+// function would have used before 0031 existed.
+async function loadAiConfig(
+  admin: AiDb,
+  slug: string,
+  defaults: AiDefaults,
+): Promise<AiConfig> {
+  const base: AiConfig = {
+    slug,
+    model: defaults.model,
+    maxOutputTokens: defaults.maxOutputTokens ?? 0,
+    parts: { ...defaults.parts },
+    version: 0,
+    digest: "",
+    source: "code",
+  };
+
+  const row = await read(admin, slug);
+  if (!row) return base;
+
+  const merged: AiConfig = { ...base, parts: { ...defaults.parts } };
+  let touched = false;
+
+  const model = trimmed(row.model);
+  if (model) {
+    merged.model = model;
+    touched = true;
+  }
+
+  // Only accepted when the caller has a ceiling at all. A service that does
+  // not send `max_output_tokens` to OpenAI (the image ones) must not acquire
+  // one because a row carried a number.
+  if (defaults.maxOutputTokens && Number.isInteger(row.max_output_tokens) && (row.max_output_tokens as number) > 0) {
+    merged.maxOutputTokens = row.max_output_tokens as number;
+    touched = true;
+  }
+
+  // Part-by-part, and only keys the caller declared. A stored `parts` object
+  // carrying a key this version of the function knows nothing about is
+  // ignored rather than passed through — which is what makes rolling the code
+  // back over a newer stored configuration safe.
+  if (row.parts && typeof row.parts === "object" && !Array.isArray(row.parts)) {
+    const stored = row.parts as Record<string, unknown>;
+    for (const key of Object.keys(defaults.parts)) {
+      if (!(key in stored)) continue;
+      const fallback = defaults.parts[key];
+      const value = Array.isArray(fallback)
+        ? listPart(stored[key], fallback as unknown[])
+        : textPart(stored[key], String(fallback ?? ""));
+      if (value !== fallback) {
+        merged.parts[key] = value;
+        touched = true;
+      }
+    }
+  }
+
+  if (Number.isInteger(row.version) && (row.version as number) > 0) merged.version = row.version as number;
+  merged.digest = trimmed(row.config_digest);
+  merged.source = touched ? "database" : "code";
+  return merged;
+}
+
+// ---- Part validation --------------------------------------------------
+//
+// Strict, and deliberately so. These decide whether a stored value is good
+// enough to send to a paid model call in place of one that was written and
+// reviewed in a source file. "Present but empty" is the single most likely
+// way for a stored prompt to be wrong, and it is the one that would otherwise
+// produce a silently unguided model rather than a visible error.
+
+function textPart(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const text = value.trim();
+  return text ? text : fallback;
+}
+
+// A list part is all-or-nothing against the code's own list. The twelve
+// monthly themes and the three avatar variants are ROTAS: they are indexed by
+// month and by attempt number, so a stored list of a different length does not
+// mean "fewer themes", it means every index after the edit points somewhere
+// different from what the code that reads it expects. Length is therefore part
+// of the shape, not a preference.
+function listPart(value: unknown, fallback: unknown[]): unknown[] {
+  if (!Array.isArray(value)) return fallback;
+  if (value.length !== fallback.length) return fallback;
+  const clean = value.map((v) => (typeof v === "string" ? v.trim() : ""));
+  if (clean.some((v) => !v)) return fallback;
+  return clean;
+}
+
+// Convenience for callers whose parts are all plain strings.
+function part(cfg: AiConfig, key: string, fallback: string): string {
+  return textPart(cfg.parts[key], fallback);
+}
+
+function listOf(cfg: AiConfig, key: string, fallback: string[]): string[] {
+  const value = listPart(cfg.parts[key], fallback);
+  return value.map((v) => String(v));
+}
+
+// ---- The read ---------------------------------------------------------
+//
+// `ai_active_config` is a view over the one active version per service. It is
+// read with the service role, because every caller of this file already is one
+// — and because the view is staff-only, which a function's own JWT-less
+// service context satisfies by bypassing RLS rather than by passing it.
+async function read(admin: AiDb, slug: string): Promise<StoredConfig | null> {
+  const hit = cache.get(slug);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.row;
+
+  try {
+    const { data, error } = await admin
+      .from("ai_active_config")
+      .select("model, max_output_tokens, parts, version, config_digest")
+      .eq("slug", slug)
+      .maybeSingle();
+
+    if (error) {
+      // Logged rather than thrown. The most likely cause on a fresh
+      // environment is that 0031 has not been applied yet, and a function
+      // that refused to run until a migration landed would be a worse
+      // outcome than one that runs on its own defaults and says so.
+      console.warn(`ai-config: ${slug} unreadable (${error.message}) — using code defaults`);
+      cache.set(slug, { at: Date.now(), row: null });
+      return null;
+    }
+
+    const row = (data ?? null) as StoredConfig | null;
+    cache.set(slug, { at: Date.now(), row });
+    return row;
+  } catch (err) {
+    console.warn(`ai-config: ${slug} lookup failed (${String(err)}) — using code defaults`);
+    cache.set(slug, { at: Date.now(), row: null });
+    return null;
+  }
+}
+
+function trimmed(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -95,6 +296,36 @@ const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 // not depend on anybody remembering. ⚠ Bump it whenever the vocabularies, the
 // system prompt or the validation below change.
 const GENERATOR_VERSION = "2026-08-02.1";
+
+// ⚠ And the half of that instruction a comment cannot enforce, for the same
+// reason `promptarena-judge` spells out at length above its own `JUDGE_VERSION`:
+// staff can change the system prompt and the model from the admin panel, and
+// the person doing it is not reading this file. `generatorVersion` below
+// appends 0031's content digest — computed by a database trigger over the
+// stored prompt and model, not by anything here — so a challenge generated
+// under an override records which override produced it. "Which prompt wrote
+// this incoherent challenge" stays answerable without anybody remembering.
+const AI_SLUG = "promptarena-challenge";
+
+type ChallengeConfig = {
+  model: string;
+  systemPrompt: string;
+  generatorVersion: string;
+};
+
+async function resolveChallengeConfig(
+  admin: ReturnType<typeof createClient>,
+): Promise<ChallengeConfig> {
+  const ai = await loadAiConfig(admin, AI_SLUG, {
+    model: MODEL,
+    parts: { system: SYSTEM_PROMPT },
+  });
+  return {
+    model: ai.model,
+    systemPrompt: part(ai, "system", SYSTEM_PROMPT),
+    generatorVersion: GENERATOR_VERSION + (ai.digest ? "+" + ai.digest : ""),
+  };
+}
 
 // ============================================================
 // What "it failed" is allowed to mean
@@ -509,7 +740,13 @@ Deno.serve(async (req) => {
       requests.push(chooseAxes(body, bank, requests));
     }
 
-    const drafts = await askModel({ requests, titles: bank.titles }, startedAt);
+    // Resolved once for the whole batch: ten challenges written in one
+    // invocation must be ten challenges from one generator, or
+    // `generator_version` is a column that answers a question about the batch
+    // rather than about the row.
+    const cfg = await resolveChallengeConfig(admin);
+
+    const drafts = await askModel({ requests, titles: bank.titles, cfg }, startedAt);
 
     // ---- Validation ----
     //
@@ -535,7 +772,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, dry_run: true, generated: accepted.length, rejected, challenges: accepted });
     }
 
-    const rows = accepted.map((c) => toRow(c));
+    const rows = accepted.map((c) => toRow(c, cfg));
     const { data: inserted, error: insertErr } = await admin
       .from("promptarena_challenges")
       .insert(rows)
@@ -553,8 +790,8 @@ Deno.serve(async (req) => {
       dry_run: false,
       inserted: inserted?.length ?? 0,
       rejected,
-      model: MODEL,
-      generator_version: GENERATOR_VERSION,
+      model: cfg.model,
+      generator_version: cfg.generatorVersion,
       challenges: inserted,
     });
   } catch (err) {
@@ -888,7 +1125,7 @@ function cleanList(v: unknown, max: number, maxChars: number): string[] {
 // `created_at`: they are the same instant today, but they mean different things
 // — one is when the model wrote it and the other is when the row appeared — and
 // a backfill of previously generated challenges would separate them.
-function toRow(c: Accepted): Record<string, unknown> {
+function toRow(c: Accepted, cfg: ChallengeConfig): Record<string, unknown> {
   return {
     title: c.title,
     brief: c.brief,
@@ -898,8 +1135,8 @@ function toRow(c: Accepted): Record<string, unknown> {
     creativity: c.creativity,
     constraints: c.constraints,
     rubric: c.rubric,
-    generated_by_model: MODEL,
-    generator_version: GENERATOR_VERSION,
+    generated_by_model: cfg.model,
+    generator_version: cfg.generatorVersion,
     // ⚠ `technique` lives here and nowhere else. 0029 has no column for it, and
     // `generation_params` is deliberately absent from `promptarena_challenge_deck`
     // — which is what stops a member reading which technique they are being
@@ -944,7 +1181,9 @@ function toRow(c: Accepted): Record<string, unknown> {
 // the ceiling escalates instead: attempt one asks for `ceilingFor(n, false)`,
 // any attempt after a truncation asks for `ceilingFor(n, true)`.
 async function askModel(
-  input: { requests: AxisRequest[]; titles: string[] },
+  // `cfg` rides on the input rather than beside it, so the retry loop and the
+  // single attempt cannot end up on two different configurations.
+  input: { requests: AxisRequest[]; titles: string[]; cfg: ChallengeConfig },
   startedAt: number,
 ): Promise<Draft[]> {
   let attempt = 0;
@@ -1047,7 +1286,9 @@ function triageOpenAI(status: number, detail: string, retryAfterMs: number | nul
     return new ChallengeError(
       "model_not_configured",
       503,
-      "The configured AI model name isn't valid. Set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.",
+      // Two possible sources since 0031, so the sentence names both — this
+      // classifier sees a response, not the configuration that produced it.
+      "The configured AI model name isn't valid. Change it under Admin → AI services → PromptArena challenge writer if a model is set there, or set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.",
     );
   }
   if (/insufficient_quota|billing_hard_limit|exceeded your current quota|billing_not_active/i.test(detail)) {
@@ -1144,7 +1385,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function askModelOnce(
-  input: { requests: AxisRequest[]; titles: string[] },
+  input: { requests: AxisRequest[]; titles: string[]; cfg: ChallengeConfig },
   maxOutputTokens: number,
 ): Promise<Draft[]> {
   const lines = [
@@ -1194,8 +1435,8 @@ async function askModelOnce(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: MODEL,
-        instructions: SYSTEM_PROMPT,
+        model: input.cfg.model,
+        instructions: input.cfg.systemPrompt,
         // See `ceilingFor`: sized per challenge from the bounds `validate`
         // enforces, plus a reasoning allowance, because this ceiling is shared
         // with the model's own reasoning tokens. Escalates once on truncation.
