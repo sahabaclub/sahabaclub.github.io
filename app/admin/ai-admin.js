@@ -111,6 +111,20 @@ function belowCode(s, value) {
   return code !== null && Number.isFinite(n) && n < code;
 }
 
+// The rota index is the meaning — theme 3 is what everyone regenerated in
+// March gets, and variant 2 is a member's second try — so it is labelled
+// rather than left to be counted.
+//
+// ⚠ Declared above the top-level await, not next to `rotaLabel` where it reads
+// better. Top-level await SUSPENDS module evaluation, so every `const` below
+// this block is still in its temporal dead zone while `load()` runs — and
+// `load()` renders the avatar service, which ships a twelve-entry "themes"
+// rota. Sitting further down the file, this threw
+// `Cannot access 'MONTHS' before initialization` mid-render. The sibling page
+// lost its entire dataset to exactly this shape.
+const MONTHS = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"];
+
 const user = await requireStaff();
 if (user) {
   renderShell(user, "ai.html");
@@ -459,12 +473,6 @@ function editor(s) {
   out += "</div>";
   return out;
 }
-
-// The rota index is the meaning — theme 3 is what everyone regenerated in
-// March gets, and variant 2 is a member's second try — so it is labelled
-// rather than left to be counted.
-const MONTHS = ["January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December"];
 
 function rotaLabel(key, i) {
   if (key === "themes") return MONTHS[i] || "Entry " + (i + 1);
