@@ -114,7 +114,13 @@
 
     <label class="ad-check">
       <input type="checkbox" id="ct-unsub">
-      Unsubscribed — never email again
+      <span>Unsubscribed — never email again
+        <span class="ad-cell-dim" style="display:block;">Can be recorded from here, never undone from here. If somebody
+          asks to be put back on the list, that is a decision with a record behind it, not a tick box.</span>
+        <span class="ad-cell-dim ad-hidden" style="display:block;" id="ct-unsub-locked">Already recorded, and locked.
+          Migration 0033 refuses to clear an unsubscribe or a bounce through this path, so the box is disabled
+          rather than offering something the database would reject.</span>
+      </span>
     </label>
 
     <div class="ad-modal-actions">
@@ -344,7 +350,15 @@
 
     document.getElementById("ct-notes").value = c.notes || "";
     document.getElementById("ct-test").checked = !!c.is_test;
-    document.getElementById("ct-unsub").checked = !!c.unsubscribed_at;
+
+    // ⚠ Consent is one-way, and the box says so rather than the save doing so.
+    // `admin_update_contact` raises 'an unsubscribe or a bounce cannot be
+    // cleared from here' (0033 §6), so an untickable tick box is the honest
+    // control: it cannot offer something that is going to be refused.
+    const unsubBox = document.getElementById("ct-unsub");
+    unsubBox.checked = !!c.unsubscribed_at;
+    unsubBox.disabled = !!c.unsubscribed_at;
+    document.getElementById("ct-unsub-locked").classList.toggle("ad-hidden", !c.unsubscribed_at);
 
     modal.classList.remove("ad-hidden");
   }
@@ -356,27 +370,82 @@
     if (e.key === "Escape" && !modal.classList.contains("ad-hidden")) closeModal();
   });
 
+  // ⚠ THIS SAVE GOES THROUGH `admin_update_contact`, NEVER THROUGH A DIRECT
+  // UPDATE, and the two are not interchangeable. A PostgREST update on
+  // `marketing_contacts` writes whatever it is handed: it would let a
+  // `unsubscribed_at: null` through and silently put somebody who opted out
+  // back on a send list. The check that stops that — 0033 §6, 'an unsubscribe
+  // or a bounce cannot be cleared from here' — lives inside the function and
+  // only fires when the function is the one doing the writing.
+  //
+  // Two more things follow from using the function, and both are why the
+  // payload below is built the way it is:
+  //
+  //   * `p_patch` is {column: value-as-TEXT}. The function coerces each value
+  //     with `admin_coerce_value` using the `kind` from `data_admin_fields`, so
+  //     a boolean is "true"/"false" and a timestamp is an ISO string. Sending a
+  //     real JSON boolean would arrive as `->> 'is_test'` = "true" anyway, but
+  //     the strings are written out so it is obvious what the contract is.
+  //   * ONLY WHAT CHANGED IS SENT. A blank in a patch CLEARS the column (that
+  //     is deliberate — see the note in 0033 about a blank meaning different
+  //     things in a form and in an import), so blind-sending `notes` and
+  //     `is_test` from whatever the modal happened to hold would overwrite
+  //     another staff member's edit with stale state and write an audit row
+  //     naming fields nobody touched. Every field not in the object is left
+  //     exactly as it is.
+  //
+  // `updated_at` is deliberately NOT sent: it is not in `data_admin_fields`, so
+  // the function would reject the whole patch with 'unknown field', and it is
+  // set by the function's own UPDATE anyway.
   document.getElementById("ct-save").addEventListener("click", async () => {
     if (!current) return;
     const btn = document.getElementById("ct-save");
+
+    const patch = {};
+
+    const notes = document.getElementById("ct-notes").value.trim();
+    if (notes !== (current.notes || "")) patch.notes = notes;
+
+    const isTest = document.getElementById("ct-test").checked;
+    if (isTest !== !!current.is_test) patch.is_test = isTest ? "true" : "false";
+
+    // Recorded, never cleared. The box is disabled once it is set, so the only
+    // transition that can reach here is off → on.
+    const unsub = document.getElementById("ct-unsub").checked;
+    if (unsub && !current.unsubscribed_at) patch.unsubscribed_at = new Date().toISOString();
+
+    if (!Object.keys(patch).length) {
+      showMessage("ct-msg", "Nothing changed.", "info");
+      return;
+    }
+
     btn.disabled = true;
     showMessage("ct-msg", "Saving…", "info");
 
-    const unsub = document.getElementById("ct-unsub").checked;
-    const payload = {
-      notes: document.getElementById("ct-notes").value.trim() || null,
-      is_test: document.getElementById("ct-test").checked,
-      // Preserve the original opt-out date if it is already set; a re-save
-      // should not look like they unsubscribed again today.
-      unsubscribed_at: unsub ? (current.unsubscribed_at || new Date().toISOString()) : null,
-      updated_at: new Date().toISOString(),
-    };
+    const { error } = await supabase.rpc("admin_update_contact", {
+      p_contact_id: current.id,
+      p_patch: patch,
+    });
 
-    const { error } = await supabase.from("marketing_contacts").update(payload).eq("id", current.id);
     btn.disabled = false;
     if (error) { showMessage("ct-msg", "Couldn't save: " + error.message, "err"); return; }
 
-    Object.assign(current, payload);
+    // Read back the row the database actually holds rather than assuming the
+    // patch landed verbatim — the function coerces, and `notes: ""` becomes
+    // NULL rather than an empty string. If the read-back fails the save still
+    // happened, so the local copy is corrected optimistically instead.
+    const fresh = await supabase.from("marketing_contacts")
+      .select("notes, is_test, unsubscribed_at, updated_at")
+      .eq("id", current.id).maybeSingle();
+
+    if (!fresh.error && fresh.data) {
+      Object.assign(current, fresh.data);
+    } else {
+      if ("notes" in patch) current.notes = patch.notes || null;
+      if ("is_test" in patch) current.is_test = isTest;
+      if ("unsubscribed_at" in patch) current.unsubscribed_at = patch.unsubscribed_at;
+    }
+
     closeModal();
     render();
     showMessage("ad-msg", "Saved.", "ok");

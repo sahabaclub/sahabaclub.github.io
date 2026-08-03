@@ -154,14 +154,23 @@
       <div class="ad-panel">
         <div class="ad-panel-head"><strong>Who is it going to?</strong></div>
 
+        <p class="ad-hint" style="margin:0 0 14px;">
+          <strong>Include, then take away.</strong> A segment on its own only ever grows the list. Two of them
+          &mdash; <em>Never emailed before</em> and <em>Has a mailbox but never joined the site</em> &mdash; are
+          defined by an absence, so anybody newly added to the contact list matches them by construction, whether
+          or not this campaign is meant for them. The exclusions below are how you say who this letter is
+          <em>not</em> for, and the count under them is the number the send will actually reach.
+        </p>
+
         <div class="ad-row-2">
           <div class="ad-field">
-            <label for="cp-seg">Segment</label>
+            <label for="cp-seg">Include</label>
             <select id="cp-seg">
               <option value="warm">Warm — 2 or more engagements</option>
               <option value="all">Everyone mailable</option>
               <option value="event">Everyone from one event</option>
               <option value="country">Everyone in one country</option>
+              <option value="how_heard">Where they came from</option>
               <option value="unlinked_mailbox">Has a mailbox but never joined the site</option>
               <option value="never_emailed">Never emailed before</option>
             </select>
@@ -172,11 +181,35 @@
           </div>
         </div>
 
+        <div class="ad-row-2">
+          <div class="ad-field">
+            <label for="cp-ex-kind">Exclude <span class="ad-hint">nobody matching these gets a letter</span></label>
+            <select id="cp-ex-kind">
+              <option value="how_heard">Where they came from</option>
+              <option value="event">Everyone from one event</option>
+              <option value="country">Everyone in one country</option>
+              <option value="warm">Warm — 2 or more engagements</option>
+              <option value="unlinked_mailbox">Has a mailbox but never joined the site</option>
+              <option value="never_emailed">Never emailed before</option>
+            </select>
+          </div>
+          <div class="ad-field" id="cp-ex-value-wrap" style="display:none;">
+            <label for="cp-ex-value">Which one</label>
+            <select id="cp-ex-value"></select>
+          </div>
+        </div>
+
+        <div class="ad-modal-actions" style="margin-bottom:6px;">
+          <button class="ad-btn ad-btn-sm" id="cp-ex-add">Add this exclusion</button>
+        </div>
+        <div id="cp-ex-list"></div>
+
         <p class="ad-hint" id="cp-seg-count">—</p>
 
         <div class="ad-modal-actions">
           <button class="ad-btn" id="cp-preview-seg">Count them</button>
           <button class="ad-btn ad-btn-primary" id="cp-resolve">Add these people to the campaign</button>
+          <button class="ad-btn ad-btn-danger" id="cp-ex-purge">Take excluded people off this campaign</button>
         </div>
         <div id="cp-seg-msg"></div>
       </div>
@@ -344,13 +377,23 @@
     el("cp-from-name").value = data.from_name;
     el("cp-from-email").value = data.from_email;
     el("cp-reply").value = data.reply_to || "";
-    if (data.segment?.kind) {
-      el("cp-seg").value = data.segment.kind;
-      onSegChange();
-      if (data.segment.value) el("cp-seg-value").value = data.segment.value;
-    }
-
+    // ⚠ The options have to exist before a value can be selected on them. The
+    // previous order set `cp-seg-value.value` against an empty <select>, which
+    // silently left it as "" — so reopening a campaign built for one event
+    // showed the right segment kind and the wrong (blank) event.
+    exclusions = Array.isArray(data.segment?.exclude) ? data.segment.exclude : [];
+    renderExclusions();
+    if (data.segment?.kind) el("cp-seg").value = data.segment.kind;
+    onSegChange();
+    onExKindChange();
     await loadSegmentOptions();
+    await loadExclusionOptions();
+    if (data.segment?.value) {
+      const sel = el("cp-seg-value");
+      if ([...sel.options].some(o => o.value === data.segment.value)) sel.value = data.segment.value;
+    }
+    el("cp-seg-count").textContent = "—";
+
     await refresh();
   }
 
@@ -421,25 +464,134 @@
 
   // ---------------------------------------------------------- audience
 
+  // ⚠ AN AUDIENCE IS AN INCLUSION MINUS A SET OF EXCLUSIONS, and the second
+  // half is not decoration. Three of the six segment kinds are defined by an
+  // ABSENCE — `never_emailed` is `last_emailed_at is null`, `unlinked_mailbox`
+  // is a mailbox with no account — so every person newly added to
+  // `marketing_contacts` matches them the moment they arrive, whatever they
+  // were added for. Meanwhile the consent-correlated kinds (`warm`, `event`)
+  // read `contact_engagements`, which a bulk backfill does not necessarily
+  // write, so the same people are INVISIBLE to the segments a careful operator
+  // would reach for and CAUGHT by the ones they would not.
+  //
+  // `how_heard` is the axis that distinguishes them. It records, per person,
+  // where they came from, and until now nothing in this page read it when
+  // choosing recipients. It is offered on both sides: include a provenance, or
+  // exclude one.
+  //
+  // The exclusions apply to the COUNT and to the ADD. They are stored on the
+  // campaign next to the segment so that reopening it shows the same audience
+  // that was chosen, and so "who was this sent to" has an answer later.
+
+  const SEG_LABEL = {
+    warm: "Warm — 2 or more engagements",
+    all: "Everyone mailable",
+    event: "Everyone from one event",
+    country: "Everyone in one country",
+    how_heard: "Where they came from",
+    unlinked_mailbox: "Has a mailbox but never joined the site",
+    never_emailed: "Never emailed before",
+  };
+
+  // Kinds that need a value picked alongside them.
+  const NEEDS_VALUE = { event: true, country: true, how_heard: true };
+
+  let exclusions = [];
+
   function onSegChange() {
-    const kind = el("cp-seg").value;
-    el("cp-seg-value-wrap").style.display = (kind === "event" || kind === "country") ? "" : "none";
+    el("cp-seg-value-wrap").style.display = NEEDS_VALUE[el("cp-seg").value] ? "" : "none";
+  }
+  function onExKindChange() {
+    el("cp-ex-value-wrap").style.display = NEEDS_VALUE[el("cp-ex-kind").value] ? "" : "none";
   }
   el("cp-seg").addEventListener("change", () => { onSegChange(); loadSegmentOptions(); });
+  el("cp-ex-kind").addEventListener("change", () => { onExKindChange(); loadExclusionOptions(); });
+
+  // The distinct values available for a value-taking kind. Read once per kind
+  // and cached, because the exclusion picker and the include picker ask for the
+  // same lists and a campaign is built by flipping between them.
+  const optionCache = {};
+
+  async function valuesFor(kind) {
+    if (optionCache[kind]) return optionCache[kind];
+    let names = [];
+
+    if (kind === "event") {
+      const { data } = await supabase.from("contact_engagements").select("event_name").limit(5000);
+      names = [...new Set((data || []).map(d => d.event_name).filter(Boolean))].sort();
+    } else if (kind === "country") {
+      const { data } = await supabase.from("marketing_contacts").select("country").limit(5000);
+      names = [...new Set((data || []).map(d => d.country).filter(Boolean))].sort();
+    } else if (kind === "how_heard") {
+      // text[], so the column is flattened rather than deduplicated as-is.
+      const { data } = await supabase.from("marketing_contacts").select("how_heard").limit(5000);
+      const flat = [];
+      (data || []).forEach(r => (r.how_heard || []).forEach(v => { if (v) flat.push(v); }));
+      names = [...new Set(flat)].sort();
+    }
+
+    optionCache[kind] = names;
+    return names;
+  }
+
+  function fillSelect(sel, names, keep) {
+    sel.innerHTML = names.map(n =>
+      '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join("");
+    if (keep && names.indexOf(keep) !== -1) sel.value = keep;
+  }
 
   async function loadSegmentOptions() {
     const kind = el("cp-seg").value;
-    const sel = el("cp-seg-value");
-    if (kind === "event") {
-      const { data } = await supabase.from("contact_engagements").select("event_name").limit(5000);
-      const names = [...new Set((data || []).map(d => d.event_name).filter(Boolean))].sort();
-      sel.innerHTML = names.map(n => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join("");
-    } else if (kind === "country") {
-      const { data } = await supabase.from("marketing_contacts").select("country").limit(2000);
-      const names = [...new Set((data || []).map(d => d.country).filter(Boolean))].sort();
-      sel.innerHTML = names.map(n => '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>').join("");
-    }
+    if (!NEEDS_VALUE[kind]) return;
+    const keep = el("cp-seg-value").value;
+    fillSelect(el("cp-seg-value"), await valuesFor(kind), keep);
   }
+
+  async function loadExclusionOptions() {
+    const kind = el("cp-ex-kind").value;
+    if (!NEEDS_VALUE[kind]) return;
+    const keep = el("cp-ex-value").value;
+    fillSelect(el("cp-ex-value"), await valuesFor(kind), keep);
+  }
+
+  function ruleLabel(rule) {
+    return (SEG_LABEL[rule.kind] || rule.kind) + (rule.value ? ": " + rule.value : "");
+  }
+
+  function renderExclusions() {
+    el("cp-ex-list").innerHTML = exclusions.length
+      ? '<p class="ad-hint" style="margin-bottom:8px;">Excluded:</p>' +
+        exclusions.map((r, i) =>
+          '<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px;">' +
+            '<span class="ad-pill danger">' + escapeHtml(ruleLabel(r)) + '</span>' +
+            '<button class="ad-btn ad-btn-sm" type="button" data-ex-remove="' + i + '">Remove</button>' +
+          '</div>').join("")
+      : '<p class="ad-hint" style="margin-bottom:8px;">No exclusions. Everyone the segment matches will be added.</p>';
+
+    el("cp-ex-list").querySelectorAll("[data-ex-remove]").forEach(b =>
+      b.addEventListener("click", () => {
+        exclusions.splice(Number(b.getAttribute("data-ex-remove")), 1);
+        renderExclusions();
+        el("cp-seg-count").textContent = "— (exclusions changed; count them again)";
+      }));
+  }
+
+  el("cp-ex-add").addEventListener("click", async () => {
+    clearMessage("cp-seg-msg");
+    const kind = el("cp-ex-kind").value;
+    const value = NEEDS_VALUE[kind] ? el("cp-ex-value").value : null;
+    if (NEEDS_VALUE[kind] && !value) {
+      showMessage("cp-seg-msg", "Choose which one to exclude first.", "warn");
+      return;
+    }
+    if (exclusions.some(r => r.kind === kind && (r.value || null) === (value || null))) {
+      showMessage("cp-seg-msg", "That exclusion is already on the list.", "info");
+      return;
+    }
+    exclusions.push({ kind: kind, value: value });
+    renderExclusions();
+    el("cp-seg-count").textContent = "— (exclusions changed; count them again)";
+  });
 
   // The mailable rule lives in one place. Every path that builds an audience
   // goes through this, so there is no route by which someone who unsubscribed
@@ -453,41 +605,106 @@
       .is("bounced_at", null);
   }
 
-  async function resolveSegment() {
+  // Narrow a `marketing_contacts` query by one rule. Shared by the include side
+  // and the exclude side so that "everyone from the hackathon" cannot mean two
+  // different things depending on which box it was typed into.
+  function applyRule(q, kind, value) {
+    if (kind === "warm") return q.gte("engagement_count", 2);
+    if (kind === "country") return q.eq("country", value);
+    if (kind === "how_heard") return q.contains("how_heard", [value]);
+    if (kind === "unlinked_mailbox") return q.not("sahaba_mailbox", "is", null).is("linked_user_id", null);
+    if (kind === "never_emailed") return q.is("last_emailed_at", null);
+    return q;
+  }
+
+  // Contact ids matching one rule, WITHOUT the mailable filter. An exclusion is
+  // "do not write to this person", and whether they were mailable is beside the
+  // point — a rule that only excluded mailable people would leave the rest on
+  // the list to be added by the next segment.
+  async function idsMatching(kind, value) {
+    if (kind === "event") {
+      const { data, error } = await supabase.from("contact_engagements")
+        .select("contact_id").eq("event_name", value).limit(10000);
+      if (error) throw error;
+      return new Set((data || []).map(e => e.contact_id));
+    }
+    if (kind === "all") {
+      const { data, error } = await supabase.from("marketing_contacts").select("id").limit(10000);
+      if (error) throw error;
+      return new Set((data || []).map(r => r.id));
+    }
+    const { data, error } = await applyRule(
+      supabase.from("marketing_contacts").select("id"), kind, value).limit(10000);
+    if (error) throw error;
+    return new Set((data || []).map(r => r.id));
+  }
+
+  async function excludedIds() {
+    const out = new Set();
+    for (const rule of exclusions) {
+      const ids = await idsMatching(rule.kind, rule.value);
+      ids.forEach(id => out.add(id));
+    }
+    return out;
+  }
+
+  // The include side, before exclusions.
+  async function includedPeople() {
     const kind = el("cp-seg").value;
     const value = el("cp-seg-value").value;
 
     if (kind === "event") {
       const { data: engs, error } = await supabase.from("contact_engagements")
-        .select("contact_id").eq("event_name", value).limit(5000);
+        .select("contact_id").eq("event_name", value).limit(10000);
       if (error) throw error;
       const ids = [...new Set((engs || []).map(e => e.contact_id))];
       if (!ids.length) return [];
-      const { data, error: e2 } = await mailableQuery().in("id", ids);
-      if (e2) throw e2;
-      return data || [];
+      const out = [];
+      for (let i = 0; i < ids.length; i += 300) {
+        const { data, error: e2 } = await mailableQuery().in("id", ids.slice(i, i + 300));
+        if (e2) throw e2;
+        out.push.apply(out, data || []);
+      }
+      return out;
     }
 
-    let q = mailableQuery();
-    if (kind === "warm") q = q.gte("engagement_count", 2);
-    else if (kind === "country") q = q.eq("country", value);
-    else if (kind === "unlinked_mailbox") q = q.not("sahaba_mailbox", "is", null).is("linked_user_id", null);
-    else if (kind === "never_emailed") q = q.is("last_emailed_at", null);
-
-    const { data, error } = await q.limit(2000);
+    const { data, error } = await applyRule(mailableQuery(), kind, value).limit(5000);
     if (error) throw error;
     return data || [];
   }
 
+  // Returns the whole picture rather than just the survivors, so the preview
+  // can say how many were taken away as well as how many are left. A number
+  // that only ever goes down with no explanation is how somebody convinces
+  // themselves the exclusion did not work.
+  async function resolveSegment() {
+    const people = await includedPeople();
+    const excluded = await excludedIds();
+    const kept = people.filter(p => !excluded.has(p.id));
+    return { matched: people.length, removed: people.length - kept.length, people: kept };
+  }
+
+  function countSentence(r) {
+    return r.matched + " " + (r.matched === 1 ? "person matches" : "people match") +
+      " the segment. " +
+      (exclusions.length
+        ? r.removed + " excluded by " + exclusions.length +
+          (exclusions.length === 1 ? " rule" : " rules") + ". "
+        : "No exclusions set. ") +
+      r.people.length + " would be written to. " +
+      "Unsubscribed, bounced, invalid and test records are never included.";
+  }
+
   el("cp-preview-seg").addEventListener("click", async () => {
     clearMessage("cp-seg-msg");
+    const btn = el("cp-preview-seg");
+    btn.disabled = true;
     try {
-      const people = await resolveSegment();
-      el("cp-seg-count").textContent = people.length +
-        " mailable " + (people.length === 1 ? "person" : "people") +
-        " match. Unsubscribed, bounced, invalid and test records are already excluded.";
+      el("cp-seg-count").textContent = countSentence(await resolveSegment());
     } catch (err) {
       showMessage("cp-seg-msg", String(err.message || err), "err");
+    } finally {
+      btn.disabled = false;
     }
   });
 
@@ -496,9 +713,14 @@
     const btn = el("cp-resolve");
     btn.disabled = true;
     try {
-      const people = await resolveSegment();
+      const r = await resolveSegment();
+      const people = r.people;
       if (!people.length) {
-        showMessage("cp-seg-msg", "Nobody matches that segment.", "warn");
+        showMessage("cp-seg-msg",
+          r.matched
+            ? "Every one of the " + r.matched + " people the segment matched is excluded, so nobody was added."
+            : "Nobody matches that segment.",
+          "warn");
         return;
       }
 
@@ -518,11 +740,61 @@
       }
 
       await supabase.from("campaigns").update({
-        segment: { kind: el("cp-seg").value, value: el("cp-seg-value").value || null },
+        segment: {
+          kind: el("cp-seg").value,
+          value: el("cp-seg-value").value || null,
+          exclude: exclusions,
+        },
         updated_at: new Date().toISOString(),
       }).eq("id", campaign.id);
 
-      showMessage("cp-seg-msg", "Added " + rows.length + " people.", "ok");
+      showMessage("cp-seg-msg",
+        "Added " + rows.length + " people" +
+        (r.removed ? ", and left out " + r.removed + " the exclusions caught" : "") + ".",
+        "ok");
+      await refresh();
+    } catch (err) {
+      showMessage("cp-seg-msg", String(err.message || err), "err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ⚠ An exclusion added AFTER people were put on the campaign does nothing to
+  // them on its own — they are already rows in `campaign_recipients`. This is
+  // the button that reconciles the two, and it is the one that matters when a
+  // segment turned out to match people it should not have. Anything already
+  // sent is left alone: a send that happened is a fact, not a list entry.
+  el("cp-ex-purge").addEventListener("click", async () => {
+    clearMessage("cp-seg-msg");
+    if (!exclusions.length) {
+      showMessage("cp-seg-msg", "Add an exclusion first — there is nothing to take off.", "warn");
+      return;
+    }
+    const btn = el("cp-ex-purge");
+    btn.disabled = true;
+    try {
+      const excluded = await excludedIds();
+      const { data: current, error } = await supabase.from("campaign_recipients")
+        .select("id, contact_id, status").eq("campaign_id", campaign.id).limit(10000);
+      if (error) throw error;
+
+      const doomed = (current || []).filter(x =>
+        excluded.has(x.contact_id) && x.status !== "sent" && x.status !== "sending");
+
+      if (!doomed.length) {
+        showMessage("cp-seg-msg", "Nobody on this campaign matches the exclusions.", "info");
+        return;
+      }
+      if (!confirm("Take " + doomed.length + " people off this campaign? Anything already sent stays.")) return;
+
+      for (let i = 0; i < doomed.length; i += 300) {
+        const { error: e2 } = await supabase.from("campaign_recipients")
+          .delete().in("id", doomed.slice(i, i + 300).map(x => x.id));
+        if (e2) throw e2;
+      }
+
+      showMessage("cp-seg-msg", "Removed " + doomed.length + " people from this campaign.", "ok");
       await refresh();
     } catch (err) {
       showMessage("cp-seg-msg", String(err.message || err), "err");
