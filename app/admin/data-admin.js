@@ -82,6 +82,18 @@ const state = {
 // declaration is evaluated. See the note above `loadDataset` itself.
 const ROW_LIMIT = 3000;
 
+// PostgREST caps one response at its own max-rows (1000 here) whatever `limit`
+// asks for, so reads are paged in batches of this size up to ROW_LIMIT.
+const PAGE_ROWS = 1000;
+
+// Only read from the keyboard handler, so it was never actually reachable
+// during module evaluation — but it lives here anyway so that
+// `tools/check-dead-zone.mjs` can enforce one flat rule with no judgement
+// calls: every module constant is declared before anything runs. Two
+// dead-zone bugs in this file in one afternoon is enough evidence that
+// "is this one reachable?" is not a question worth asking each time.
+const TAB_ORDER = ["fix", "browse", "fields", "import", "export", "history"];
+
 const user = await requireStaff();
 if (user) {
   state.user = user;
@@ -133,8 +145,10 @@ if (user) {
 // Paging explicitly is the fix. A stable sort key is required or `range()`
 // windows can overlap and miss rows between requests — the same defect 0028
 // paid for with `sort_id`.
-const PAGE_ROWS = 1000;
-
+//
+// PAGE_ROWS lives up with ROW_LIMIT, above the top-level await, for the reason
+// written there. It was declared here first and threw the same dead-zone error
+// the constant above had just been moved to escape.
 async function readAllRows(table, orderBy) {
   const rows = [];
   for (let from = 0; from < ROW_LIMIT; from += PAGE_ROWS) {
@@ -1251,8 +1265,6 @@ function showTab(name, opts) {
   document.querySelectorAll(".dm-pane").forEach((p) =>
     p.classList.toggle("ad-hidden", p.id !== "dm-pane-" + name));
 }
-
-const TAB_ORDER = ["fix", "browse", "fields", "import", "export", "history"];
 
 // Left/Right move between tabs and open as they go — the pattern's
 // "automatic activation", which is right here because every pane is already
