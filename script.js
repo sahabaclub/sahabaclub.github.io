@@ -620,23 +620,41 @@
   });
 })();
 
-// One-time cleanup: the old admin panel saved a GitHub token in this
-// browser. Nothing reads it any more, so remove it rather than leaving a
-// credential sitting in local storage on every machine that used it.
+// One-time cleanup: the old root admin.html saved a GitHub personal access
+// token — repository write scope — in this browser. That page has been
+// deleted, but deleting it does not reach into the local storage of every
+// machine that ever opened it, and the credential does not expire on its own.
+//
+// Kept deliberately as a one-release migration rather than removed with the
+// page. It costs one localStorage call on pages that already run this file,
+// it cannot break anything, and it is the only mechanism that clears the key
+// from a browser that has it. Safe to delete after one release has been live
+// long enough for the people who used that panel to have loaded the site once
+// — and worth deleting then, because a key nothing writes any more is just
+// noise. (The token should also be revoked on GitHub; clearing the copy in a
+// browser is not the same as making it powerless.)
 (function () {
   try { localStorage.removeItem("sc_admin_gh_token"); } catch (e) {}
 })();
 
-// Sign-in links on the public pages, in three states:
+// Sign-in links on the public pages: the "Supabase isn't set up yet" fallback,
+// and nothing else.
 //
-//   Supabase not set up yet  → the original "email us" link (unchanged)
-//   Set up, signed out       → the real login page
-//   Set up, signed in        → straight to the dashboard
+// This block used to do the whole job — rewrite the href to login.html, then
+// wait on a network getSession() and relabel the link "Dashboard". Both halves
+// ran at the end of the document, after the page had painted, which put the
+// primary auth control in the wrong state for as long as the import and the
+// round trip took: a signed-in member saw "Sign in", and a signed-out visitor
+// saw a mailto: they could click before it was fixed, which opens a mail
+// client rather than the login page.
 //
-// The links ship pointing at the email address, so this repo can go live
-// before the Supabase project exists without leaving a dead button on the
-// site. Marked with data-signin-link in the HTML; app/ pages have none of
-// these, so this whole block no-ops there (their paths differ anyway).
+// header-identity.js already answers "is anyone signed in?" synchronously,
+// before first paint, and publishes it as html.sc-signed-in / .sc-signed-out.
+// So the swap is now pure CSS (`[data-identity-join]`, styles.css) and the
+// markup ships pointing at login.html — the true state in every case except
+// one. That one is this: a clone of this repo published before its Supabase
+// project exists, where login.html cannot work and "email us" is the only
+// honest link. Marked with data-signin-link in the HTML.
 (function () {
   var links = Array.prototype.slice.call(
     document.querySelectorAll("[data-signin-link]")
@@ -644,18 +662,13 @@
   if (!links.length) return;
 
   import("./lib/supabase-client.js").then(function (mod) {
-    if (!mod.isConfigured) return null;
-    links.forEach(function (link) { link.href = "login.html"; });
-    return import("./lib/auth.js").then(function (auth) { return auth.getSession(); });
-  }).then(function (session) {
-    if (!session) return;
+    if (mod.isConfigured) return;
     links.forEach(function (link) {
-      // "Join free" and friends become "Dashboard" too — once you're in,
-      // every one of these is pointing at somewhere you've already been.
-      link.textContent = "Dashboard";
-      link.href = "app/dashboard.html";
+      link.href = "mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in";
     });
   }).catch(function () {
-    // Offline, or the CDN is unreachable — leave the email links alone.
+    // Offline, or the module CDN is unreachable. Supabase being configured is
+    // the overwhelmingly likely case, and login.html is where these already
+    // point, so the markup's own state is the right one to leave standing.
   });
 })();

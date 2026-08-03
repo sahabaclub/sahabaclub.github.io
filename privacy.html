@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy — Sahaba Club</title>
+<meta name="description" content="What Sahaba Club holds about you, who can see it, what leaves the club, and how to change or remove it.">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Apply saved theme before first paint so the page never flashes dark.
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+    if (localStorage.getItem("sc_reduce_motion") === "1") {
+      document.documentElement.classList.add("reduce-motion");
+    }
+  } catch (e) {}
+</script>
+<style>
+  /* Scoped to this page, the way login.html keeps its own. Nothing here is
+     reused elsewhere, so it doesn't earn a place in styles.css. */
+  .legal-wrap { max-width: 760px; margin: 0 auto; padding: 56px 20px 90px; }
+  .legal-hero { margin-bottom: 34px; }
+  .legal-hero h1 { font-size: 40px; margin: 0 0 14px; line-height: 1.1; }
+  .legal-hero p { font-size: 16.5px; color: var(--text-secondary); margin: 0 0 10px; line-height: 1.7; }
+  .legal-updated { font-size: 13px; color: var(--text-muted); margin-top: 16px; }
+
+  .legal-summary {
+    background: var(--glass); border: 1px solid var(--glass-border);
+    border-radius: var(--radius); padding: 22px 24px; margin-bottom: 40px;
+  }
+  .legal-summary h2 { font-size: 17px; margin: 0 0 12px; }
+  .legal-summary ul { margin: 0; padding-left: 20px; }
+  .legal-summary li { font-size: 14.5px; color: var(--text-secondary); line-height: 1.75; margin-bottom: 7px; }
+  .legal-summary li:last-child { margin-bottom: 0; }
+
+  .legal-wrap section { margin-bottom: 42px; }
+  .legal-wrap h2 { font-size: 25px; margin: 0 0 16px; line-height: 1.25; }
+  .legal-wrap h3 { font-size: 17px; margin: 26px 0 10px; color: var(--text); }
+  .legal-wrap p, .legal-wrap li { font-size: 15px; color: var(--text-secondary); line-height: 1.8; }
+  .legal-wrap p { margin: 0 0 14px; }
+  .legal-wrap ul { margin: 0 0 14px; padding-left: 22px; }
+  .legal-wrap li { margin-bottom: 8px; }
+  .legal-wrap strong { color: var(--text); font-weight: 600; }
+  .legal-wrap a { color: var(--cyan); }
+
+  .legal-table { width: 100%; border-collapse: collapse; margin: 4px 0 18px; }
+  .legal-table th, .legal-table td {
+    text-align: left; padding: 11px 12px; font-size: 14.5px;
+    border-bottom: 1px solid var(--glass-border); vertical-align: top;
+  }
+  .legal-table th { color: var(--text); font-weight: 600; }
+  .legal-table td { color: var(--text-secondary); line-height: 1.6; }
+  .legal-table-wrap { overflow-x: auto; }
+
+  .legal-note {
+    border-left: 3px solid var(--violet); padding: 4px 0 4px 16px; margin: 0 0 18px;
+  }
+  .legal-note p:last-child { margin-bottom: 0; }
+
+  @media (max-width: 600px) {
+    .legal-hero h1 { font-size: 31px; }
+    .legal-wrap h2 { font-size: 21px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="events.html" class="nav-link">Events</a>
+      <a href="hackathons.html" class="nav-link">Hackathons</a>
+      <a href="app/promptarena.html" class="nav-link">PromptArena</a>
+      <a href="app/connect.html" class="nav-link">Connect</a>
+      <a href="podcast.html" class="nav-link">Podcast</a>
+      <a href="app/dashboard.html" class="nav-identity-me" data-identity-me aria-label="Your dashboard">
+        <span class="nav-identity-avatar" data-identity-avatar aria-hidden="true"></span>
+        <span class="nav-identity-name" data-identity-name></span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- Runs synchronously, before first paint, so a signed-in member never sees
+     the Join CTA flash before their avatar. See the file for why not a module. -->
+<script src="header-identity.js"></script>
+
+<main class="legal-wrap">
+
+  <div class="legal-hero">
+    <h1 class="glow-text">Privacy</h1>
+    <p>Most of what Sahaba Club does only works because people are willing to be
+      themselves here — to put a real headline on a real profile, to say what
+      they are trying to learn, to be findable by someone they have not met yet.
+      That willingness is the thing this page is about. It is worth writing down
+      exactly what we hold, exactly who can see it, and exactly what leaves the
+      club, so that nobody has to take it on trust.</p>
+    <p>Everything below describes what the software actually does. The site is
+      open source and public, so it can be checked rather than believed.</p>
+    <p class="legal-updated">Last reviewed 3 August 2026 · Questions:
+      <a href="mailto:info@sahabaclub.com">info@sahabaclub.com</a></p>
+  </div>
+
+  <div class="legal-summary">
+    <h2>The short version</h2>
+    <ul>
+      <li><strong>Your email address and phone number are never shown to another
+        member.</strong> Not on a profile, not in the directory, not in a message
+        header. They are not in any of the tables other members can read.</li>
+      <li><strong>Nothing about a member is readable by someone who is not signed
+        in</strong> — with one named exception, the EduHackAI roster, which is
+        set out below.</li>
+      <li><strong>Avatars are drawings.</strong> A photo you supply is used to
+        make one and is then destroyed. It is never stored.</li>
+      <li><strong>A CV or LinkedIn PDF is read once and thrown away.</strong> You
+        review what was extracted before anything is saved. The document itself
+        is never kept.</li>
+      <li><strong>No analytics, no tag manager, no advertising pixel.</strong>
+        There is nothing on this site whose job is to watch you.</li>
+      <li><strong>There is no self-service delete button yet.</strong> We would
+        rather say so than pretend. Email us and a person will do it.</li>
+    </ul>
+  </div>
+
+  <section>
+    <h2>What we hold about you</h2>
+
+    <h3>If you have an account</h3>
+    <p>Your profile is the part you write. It can hold your name, a headline, a
+      short bio, your city and country, your industry, your company and position,
+      how many years you have been at it, your experience level, your skills,
+      interests and goals, what you are open to, your language and timezone, your
+      work history, and links you choose to add — LinkedIn, GitHub, a site of your
+      own. Every one of those is optional and every one of them is yours to change
+      or empty at any time.</p>
+
+    <p>Alongside it we keep your membership tier, and — if you have one — your
+      Sahaba Club Microsoft 365 mailbox address and the dates its licence runs
+      between.</p>
+
+    <h3>Your email address and phone number</h3>
+    <p>These sit in the authentication system, separately from your profile, and
+      they are deliberately not in the tables and views that members read from
+      each other. That is not a setting; it is how the database is built. A query
+      that tried to show another member your email would not return the wrong
+      answer, it would fail.</p>
+
+    <h3>What you do here</h3>
+    <p>The club records the things it needs in order to be a club: which events
+      you saved, which you said you were going to, and which you opened; who you
+      follow; the messages you send to other members; your posts, likes and
+      comments on the member feed; and — if you use PromptArena — the prompts you
+      submitted, the score, and the written feedback on each one.</p>
+    <p>The record of which events you opened exists for one purpose, which is to
+      put better suggestions in front of you. It is a count and a date per event,
+      it is readable only by you and by staff, and it is not shown to anybody.</p>
+
+    <h3>If you do not have an account</h3>
+    <p>A separate list holds people who gave us their details at an event, an
+      intern intake or a hackathon and never went on to sign up. Depending on
+      which form it came from, that can include a name, an email address, a phone
+      number, a city and country, a date of birth, a LinkedIn or GitHub link, a
+      university or employer, and an occupation — plus a record of which events
+      they came to.</p>
+    <p>That list is not part of the membership directory, no member can see it,
+      and nothing in it is used to build a public profile. It is used to invite
+      people to things. Every email sent from it carries an unsubscribe link, and
+      more on that below.</p>
+  </section>
+
+  <section>
+    <h2>Who can see it</h2>
+
+    <h3>Someone who is not signed in: nothing</h3>
+    <p>Every view that carries a member's details is granted to signed-in members
+      only, and access for anonymous visitors is explicitly revoked. This is not a
+      hidden button or a lock drawn in the page — it is enforced in the database,
+      underneath the site, so it holds whatever a browser is told to do.</p>
+    <p>As <a href="app/connect.html">Connect</a> puts it to anyone who lands on it
+      signed out: these are real people who chose to be findable, and we don't
+      show them to strangers, which is also the promise that makes them willing to
+      be here.</p>
+
+    <h3>Another signed-in member</h3>
+    <p>If you have <strong>Show me in Connect</strong> switched on, other members
+      can see your name, avatar, headline, city and country, industry, company and
+      position, experience, work history, skills, interests, links, and the events
+      you have attended. That is the profile — it is meant to be read, by members.</p>
+    <p>They cannot see your email address, your phone number, or your Microsoft 365
+      mailbox, whichever way any setting is turned. Members reach each other
+      through the club inbox or not at all.</p>
+
+    <h3>What each switch does</h3>
+    <div class="legal-table-wrap">
+      <table class="legal-table">
+        <thead>
+          <tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">What it controls</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Show me in Connect</td><td>On</td>
+            <td>Whether you appear in the member directory at all. Off, and no other member can find you, open your profile, or message you.</td>
+          </tr>
+          <tr>
+            <td>Let members message me</td><td>On</td>
+            <td>Whether the Message button appears on your profile. Off, and new messages to you are refused by the database, not just hidden. Conversations you already have stay where they are.</td>
+          </tr>
+          <tr>
+            <td>Show me in who's going</td><td>On</td>
+            <td>Whether your name and avatar appear on an event card among the people attending.</td>
+          </tr>
+          <tr>
+            <td>Newsletter</td><td>On</td>
+            <td>Whether you are in the audience for club newsletters.</td>
+          </tr>
+          <tr>
+            <td>PromptArena leaderboard</td><td><strong>Off</strong></td>
+            <td>Whether you are ranked publicly. Off unless you switch it on. Turned on it shows your name, avatar, rating, challenges completed and highest score — and nothing else. Your prompts, the judge's feedback and when you play are never shown to anyone either way.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Messages</h3>
+    <p>A message is readable by the two people in the conversation and by nobody
+      else — staff included. "Delete" on a conversation hides it from your side;
+      it does not destroy the other person's copy, and the page says so rather
+      than implying otherwise.</p>
+
+    <h3>The one thing that is public</h3>
+    <div class="legal-note">
+      <p>The <a href="hackathons.html">EduHackAI roster</a> can be read without
+        signing in. It carries participants' <strong>full names</strong>, their
+        team, and whether they mentored or judged — including for people who never
+        created an account. It carries no email address, no phone number and no
+        employer or university. A participant's avatar, headline and link to their
+        profile appear only if they have an account and have switched Connect on.</p>
+      <p>It is public because a hackathon result that nobody can point at is not a
+        result. If you were on that roster and would rather not be named, email
+        <a href="mailto:info@sahabaclub.com">info@sahabaclub.com</a> and we will
+        take you off it.</p>
+    </div>
+
+    <h3>Staff</h3>
+    <p>Club staff can read member profiles and the marketing contact list, because
+      running the club needs it. Changes staff make to people's records are
+      written to an audit log, and so is every export, including whether the export
+      contained email addresses or phone numbers. Staff cannot read members'
+      messages to each other.</p>
+  </section>
+
+  <section>
+    <h2>Avatars are drawings, not photographs</h2>
+    <p>The circular picture next to a member's name is illustrated art in the club
+      style. It is generated from a photo you supply — uploaded, or taken from the
+      account you signed in with — and the photo does not survive the process.</p>
+    <p>Concretely: the image arrives in the request, is held in memory, is sent to
+      OpenAI's image API to be redrawn, and the memory holding it is wiped. It is
+      never written to storage and never written to a column. Only the drawing is
+      kept, and the moment the drawing is saved the record notes that the source
+      was destroyed. There is nowhere in this system a photograph of you could be
+      sitting.</p>
+    <p>Avatars can be regenerated three times a month. Past that you get a drawn
+      pattern instead, made in your browser with nothing sent anywhere.</p>
+    <div class="legal-note">
+      <p><strong>One honest exception.</strong> If you sign in with Google,
+        Microsoft or LinkedIn and that provider hands us a profile picture, we
+        store the <em>link</em> to it — the picture stays on their server, we do
+        not copy it — and use it until you generate a club avatar. So until you
+        do, the image other members see beside your name may be a real photograph
+        held by the provider you signed in with. Generating an avatar, or clearing
+        the picture on your profile, replaces it.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>CVs and LinkedIn exports</h2>
+    <p>Onboarding offers to fill in your profile from a CV or a LinkedIn "Save to
+      PDF" export, so you do not have to retype a career you have already written
+      down once.</p>
+    <p>That document is sent to OpenAI to have the fields read out of it, and the
+      result comes straight back to the form for you to check and correct. The
+      extraction step writes nothing to your profile — <em>you</em> do, when you
+      press save, and you can edit every field first. The document itself is never
+      stored: there is no bucket for it and no column that holds one.</p>
+    <p>Worth being plain about one thing: the LinkedIn import is the PDF you
+      export yourself. Nothing here reads your LinkedIn page, and signing in with
+      LinkedIn gives the club your name, email and picture and nothing more —
+      no positions, no skills, no connections.</p>
+  </section>
+
+  <section>
+    <h2>Email we send, and stopping it</h2>
+
+    <h3>If you have an account</h3>
+    <p>Signing up gets you a welcome email. After that, the newsletter is a switch
+      on your profile — <strong>Send me the Sahaba Club newsletter</strong> —
+      which starts on and which you can turn off at any time and back on again
+      later. Newsletters go out one message per person, so no recipient ever sees
+      another person's address.</p>
+    <p>Messages about your own membership — your mailbox, your licence, a password
+      reset — are not marketing and are not covered by that switch.</p>
+
+    <h3>If you do not have an account</h3>
+    <p>Every campaign email carries an unsubscribe link, and the one-click
+      unsubscribe header that mail clients use to put the button in their own
+      interface. Following the link opens
+      <a href="unsubscribe.html">unsubscribe.html</a>, which asks you to confirm
+      rather than acting the moment the page loads — mail clients and security
+      scanners fetch links automatically, and a page that acted on being opened
+      would unsubscribe people who never read the message.</p>
+    <p>The opt-out is checked again at the moment of sending, not only when the
+      list is built, so unsubscribing while a campaign is going out still stops
+      it reaching you.</p>
+  </section>
+
+  <section>
+    <h2>Who else touches your details</h2>
+    <p>This is the complete list, and it is short because there is no advertising
+      or analytics anywhere in this site.</p>
+    <div class="legal-table-wrap">
+      <table class="legal-table">
+        <thead>
+          <tr><th scope="col">Who</th><th scope="col">What for</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Supabase</td><td>The database, sign-in, file storage and the server-side functions. Everything the club knows lives here.</td></tr>
+          <tr><td>OpenAI</td><td>Drawing avatars, reading CVs, judging PromptArena submissions, and writing drafts staff review before sending.</td></tr>
+          <tr><td>Microsoft</td><td>Creating and licensing your <em>@sahabaclub.com</em> mailbox. Only your name is sent — no email address, no phone number, nothing from your profile.</td></tr>
+          <tr><td>Resend</td><td>Delivering email: welcome messages, credentials, newsletters and campaigns.</td></tr>
+          <tr><td>Google, Microsoft, LinkedIn</td><td>Only if you choose one of them to sign in with. They confirm who you are and hand back your name, email and picture.</td></tr>
+          <tr><td>Google Fonts</td><td>One typeface, loaded by your browser on every page.</td></tr>
+          <tr><td>YouTube</td><td>Video embeds. The homepage uses the no-cookie player; the podcast page uses the standard one.</td></tr>
+          <tr><td>esm.sh</td><td>Serves the database client library to your browser. It carries no data of yours; it is code, not content.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Outbound links to event organisers, our social accounts and members' own
+      sites are ordinary links. Following one takes you to somebody else's site
+      under somebody else's rules, and nothing about you goes with you.</p>
+  </section>
+
+  <section>
+    <h2>Changing or removing your details</h2>
+
+    <h3>Change anything</h3>
+    <p>Open <a href="app/profile.html">your profile</a>. Every field on it is
+      editable, including clearing one entirely.</p>
+
+    <h3>Disappear without leaving</h3>
+    <p>Turn off <strong>Show me in Connect</strong> and you are out of the
+      directory immediately: no member can find you, open your profile or start a
+      conversation with you. Your account, your events and your history stay
+      exactly as they are.</p>
+
+    <h3>Delete the account</h3>
+    <div class="legal-note">
+      <p><strong>There is no delete-my-account button yet.</strong> We would
+        rather write that down than build a page implying otherwise.</p>
+      <p>What to do instead: email
+        <a href="mailto:info@sahabaclub.com">info@sahabaclub.com</a> from the
+        address on the account, or from your club mailbox, and say you want it
+        deleted. A member of staff does it by hand. Deleting the account removes
+        your profile, your registrations, favourites, follows, messages, feed
+        posts and PromptArena history along with it — that is a cascade in the
+        database, not a list somebody has to remember to work through.</p>
+      <p>Two things it does <em>not</em> reach, so that nobody is surprised. Your
+        Microsoft 365 mailbox is an account in Microsoft's directory and has to be
+        closed separately — say in the same email if you want that too. And if you
+        were sent a club newsletter or campaign before you asked, the record that
+        it was sent stays in the sending log.</p>
+    </div>
+
+    <h3>If you never signed up</h3>
+    <p>Unsubscribing stops the email. If you would rather we deleted the record
+      altogether, ask at
+      <a href="mailto:info@sahabaclub.com">info@sahabaclub.com</a> and we will.</p>
+
+    <h3>A profile written about you before you joined</h3>
+    <p>Some EduHackAI participants have a profile the club assembled from what
+      they typed into the hackathon's own forms, waiting for them to claim it.
+      Nothing in it was invented and nothing was fetched from anywhere else — a
+      LinkedIn address somebody typed into a form is an address, not a page we
+      read. If one of those is yours and you would like it changed or taken down,
+      whether or not you want to join, email
+      <a href="mailto:info@sahabaclub.com">info@sahabaclub.com</a>.</p>
+  </section>
+
+  <section>
+    <h2>What this page does not tell you</h2>
+    <p>It describes the system as built, and it stops there deliberately. We have
+      not set fixed retention periods, so this page does not claim any — records
+      are kept until they are deleted, and the paragraphs above say how to get
+      that done. If you need something more formal than this for your own
+      compliance, ask and we will answer a specific question honestly rather than
+      publish a generic one.</p>
+    <p>If any of this turns out to be wrong, that is a bug and we would like to
+      know. <a href="mailto:info@sahabaclub.com">info@sahabaclub.com</a>.</p>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-top">
+    <div class="footer-links">
+      <a href="index.html#about">About</a>
+      <a href="events.html">Events</a>
+      <a href="membership.html">Membership</a>
+      <a href="mailto:info@sahabaclub.com">Contact</a>
+      <a href="privacy.html" aria-current="page">Privacy</a>
+    </div>
+    <div class="footer-social">
+      <a href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="LinkedIn">LinkedIn</a>
+      <a href="https://youtube.com/@sahabaclub" target="_blank" rel="noopener" aria-label="YouTube">YouTube</a>
+      <a href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
+      <a href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
+      <a href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
+    </div>
+  </div>
+  <div class="footer-theme">
+    <span class="footer-theme-label" id="footer-theme-label">Appearance</span>
+    <div class="theme-choice" role="group" aria-labelledby="footer-theme-label">
+      <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+      <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+    </div>
+  </div>
+  <p class="footer-signature">We Don&rsquo;t Teach Tech, We Coach IT&hellip;</p>
+  <p class="footer-watermark">Developed by Sahaba Club Technologies</p>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>

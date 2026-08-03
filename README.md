@@ -14,7 +14,7 @@ now backed by Supabase for anything that needs a real database.
 - `membership.html` — public Standard vs Premium comparison
 - `lib/` — Supabase client, auth helpers, tier-gating (shared by every page)
 - `app/` — pages behind login (`onboarding.html`, `dashboard.html`, `profile.html`, `newsletter.html`)
-- `admin.html` — event management (GitHub-token based), now also sets each event's Premium-only flag
+- `app/admin/` — staff tools (events, members, campaigns, data), behind `lib/admin-guard.js`
 - `supabase/` — database migrations and Edge Functions (mailbox provisioning, transactional email)
 
 See [SETUP.md](SETUP.md) for the accounts and keys needed to make the
@@ -26,8 +26,12 @@ those are filled in.
 Page content still lives directly in the HTML files — open one, find the
 text, edit, save, re-upload to GitHub (or edit in GitHub's web editor).
 
-Events are managed from `admin.html` rather than by hand-editing
+Events are managed from `app/admin/events.html` rather than by hand-editing
 `events-data.js`, though that file is still plain JS if you'd rather.
+
+(The old root `admin.html` is gone. It was unlinked but live, had no auth
+guard of any kind, and asked whoever opened it to paste a GitHub token with
+write access to this repository — which it then kept in `localStorage`.)
 
 This site is published with GitHub Pages — that continues to serve every
 page here as before; Supabase only supplies the pieces GitHub Pages can't

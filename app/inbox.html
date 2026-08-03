@@ -121,9 +121,17 @@
         (t.userId === openWith ? " is-active" : "") +
         '" data-thread="' + escapeHtml(t.userId) + '">' +
         avatarHtml(t.userId) +
+        // The inbox is the one surface where two members write free prose to
+        // each other, and much of this community writes Arabic — so dir="auto"
+        // matters more here than anywhere else in the app. Without it an
+        // Arabic preview renders left-to-right with its punctuation thrown to
+        // the wrong end. The "You: " prefix is deliberately outside the
+        // auto-directed span: it is our word, in English, and letting it
+        // decide the direction of an Arabic preview would defeat the point.
         '<span class="cx-thread-body">' +
-          '<span class="cx-thread-name">' + escapeHtml(nameOf(t.userId)) + "</span>" +
-          '<span class="cx-thread-preview">' + escapeHtml(prefix + last.body) + "</span>" +
+          '<span class="cx-thread-name" dir="auto">' + escapeHtml(nameOf(t.userId)) + "</span>" +
+          '<span class="cx-thread-preview">' + escapeHtml(prefix) +
+            '<span dir="auto">' + escapeHtml(last.body) + "</span></span>" +
         "</span>" +
         '<span class="cx-thread-side">' +
           '<span class="cx-thread-time">' + escapeHtml(relativeTime(last.created_at)) + "</span>" +
@@ -159,8 +167,12 @@
     var bubbles = messages.length
       ? messages.map(function (m) {
           var mine = m.sender_id === me.id;
+          // dir="auto" on the message itself, not on the bubble: the
+          // timestamp inside it is ours and always reads left-to-right, and
+          // letting it vote on the direction of an Arabic message would be
+          // the wrong way round.
           return '<div class="cx-bubble' + (mine ? " is-mine" : "") + '">' +
-            escapeHtml(m.body) +
+            '<span dir="auto">' + escapeHtml(m.body) + "</span>" +
             '<span class="cx-bubble-time">' + escapeHtml(relativeTime(m.created_at)) +
             (mine && m.read_at ? " · read" : "") + "</span>" +
           "</div>";
@@ -180,9 +192,9 @@
           '<button type="button" class="cx-icon-btn" id="btn-back">&larr; All</button>' +
           avatarHtml(openWith) +
           '<span class="cx-convo-head-text">' +
-            '<span class="cx-convo-title">' + escapeHtml(nameOf(openWith)) + "</span>" +
+            '<span class="cx-convo-title" dir="auto">' + escapeHtml(nameOf(openWith)) + "</span>" +
             (person && person.headline
-              ? '<span class="cx-convo-sub">' + escapeHtml(person.headline) + "</span>"
+              ? '<span class="cx-convo-sub" dir="auto">' + escapeHtml(person.headline) + "</span>"
               : "") +
           "</span>" +
           (person ? '<a class="cx-icon-btn" href="member.html?u=' +
@@ -193,11 +205,15 @@
         (canReply
           ? '<form class="cx-compose" id="send-form">' +
               '<label class="sr-only" for="send-body">Message</label>' +
-              '<textarea id="send-body" maxlength="4000" placeholder="Write a message…" required></textarea>' +
+              '<textarea id="send-body" dir="auto" maxlength="4000" placeholder="Write a message…" required></textarea>' +
               '<button type="submit" class="cx-btn cx-btn-primary" id="btn-send">Send</button>' +
             "</form>"
           : '<p class="cx-note">' + escapeHtml(why) + "</p>") +
-        '<div id="convo-status"></div>' +
+        // role="status": a send that fails, or a Connect switched off, is
+        // reported only here. Without it the member presses Send, nothing is
+        // announced, and the only evidence is a line of text they have no
+        // reason to go looking for.
+        '<div id="convo-status" role="status"></div>' +
       "</div>";
 
     var scroll = document.getElementById("convo-scroll");
@@ -262,6 +278,10 @@
     var box = document.getElementById("send-body");
     var btn = document.getElementById("btn-send");
     var body = box.value;
+    // Read before anything is disabled: disabling the button a member pressed
+    // already drops focus to <body>, so asking afterwards would always say no.
+    var formEl = document.getElementById("send-form");
+    var wasInForm = Boolean(formEl && formEl.contains(document.activeElement));
     btn.disabled = true;
 
     var res = await sendMessage(openWith, body);
@@ -282,7 +302,18 @@
       return new Date(b.last.created_at) - new Date(a.last.created_at);
     });
     renderThreads();
+
+    // renderConvo() replaces the whole card, textarea included, so the element
+    // that had focus stops existing and focus falls to <body>. In a chat that
+    // means every message sent costs a keyboard user a fresh hunt for the box
+    // they were already typing in. Put them back in it — but only if they were
+    // in the compose form to begin with, so nothing is snatched back from
+    // someone who tabbed away while the send was in flight.
     renderConvo();
+    if (wasInForm) {
+      var fresh = document.getElementById("send-body");
+      if (fresh) fresh.focus();
+    }
   }
 
   async function onHide() {
@@ -340,14 +371,23 @@
       return;
     }
 
-    // Names and photos for everyone in the list, one lookup each. A member who
-    // has since left the directory comes back null and is handled as such.
+    // Names and photos for everyone in the list, one lookup each — but all at
+    // once. These were awaited in a `for` loop, so twenty threads meant twenty
+    // serialized round trips before the inbox appeared at all; they do not
+    // depend on each other, so nothing was being bought with the wait. A
+    // member who has since left the directory comes back null and is handled
+    // as such, and one failed lookup must not take the others down with it,
+    // which is why each result is unwrapped on its own rather than by
+    // destructuring a settled array.
     var ids = threads.map(function (t) { return t.userId; });
     if (startWith && ids.indexOf(startWith) === -1) ids.push(startWith);
-    for (var i = 0; i < ids.length; i++) {
-      var res = await getMember(ids[i]);
-      people[ids[i]] = res.data || null;
-    }
+    var found = await Promise.all(ids.map(function (id) {
+      return getMember(id).then(
+        function (res) { return res.data || null; },
+        function () { return null; }
+      );
+    }));
+    ids.forEach(function (id, i) { people[id] = found[i]; });
 
     inboxEl.hidden = false;
     pageStatus.innerHTML = "";

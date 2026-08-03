@@ -121,7 +121,12 @@
       <a href="app/connect.html" class="nav-link">Connect</a>
       <a href="podcast.html" class="nav-link">Podcast</a>
       <a href="app/admin/index.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
-      <a href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in" class="btn btn-ghost" data-signin-link>Sign in</a>
+      <!-- Ships pointing at the real login page and marked data-identity-join,
+           so a signed-in member never sees it: the CSS in styles.css hides it
+           on html.sc-signed-in, which header-identity.js sets before first
+           paint. script.js only downgrades the href to a mailto if Supabase
+           isn't configured at all. -->
+      <a href="login.html" class="btn btn-ghost" data-signin-link data-identity-join>Sign in</a>
     </div>
     <p class="nav-slogan" aria-label="We don't teach tech, we coach IT">
       <span>We Don&rsquo;t Teach Tech,</span>
@@ -154,7 +159,7 @@
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
 <nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
   <div class="mobile-menu-panel">
-    <a class="mobile-menu-item" href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in" data-signin-link>Sign in</a>
+    <a class="mobile-menu-item" href="login.html" data-signin-link data-identity-join>Sign in</a>
     <a class="mobile-menu-item is-primary" href="login.html" data-identity-join>Join the Club</a>
     <a class="mobile-menu-item" href="index.html">Home</a>
     <a class="mobile-menu-item" href="events.html">Events</a>
@@ -296,10 +301,13 @@
 <footer class="footer">
   <div class="footer-top">
     <div class="footer-links">
-      <a href="index.html">About</a>
+      <a href="index.html#about">About</a>
       <a href="events.html">Events</a>
       <a href="membership.html">Membership</a>
       <a href="mailto:info@sahabaclub.com">Contact</a>
+      <!-- This footer had no Privacy link at all, on the one public page that
+           asks people to pay. Added with the other four. -->
+      <a href="privacy.html">Privacy</a>
     </div>
     <div class="footer-social">
       <a href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="LinkedIn">LinkedIn</a>

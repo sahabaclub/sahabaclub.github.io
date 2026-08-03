@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="color-scheme" content="dark light">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sign in — Sahaba Club</title>
+<title>Join or sign in — Sahaba Club</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -88,8 +88,14 @@
 <script src="header-identity.js"></script>
 
 <main class="auth-wrap">
+  <!-- The heading covers both arrivals on purpose. Every gate on the site
+       offers "Create a free account" and "Already a member? Sign in" as two
+       choices, and both resolve to this one page — so a heading that said
+       "Sign in" told half the people who got here that they had come to the
+       wrong place. There is only one flow underneath: whichever provider
+       somebody uses, Supabase creates the account on first use. -->
   <div class="auth-hero">
-    <h1 class="glow-text">Sign in to Sahaba Club</h1>
+    <h1 class="glow-text">Join Sahaba Club, or sign in</h1>
     <p>New here? Signing in creates your free Standard account automatically — including your Microsoft 365 setup, right after.</p>
   </div>
 
@@ -117,37 +123,58 @@
       </button>
     </div>
 
-    <div class="auth-phone-field auth-hidden" id="email-panel" style="margin-top:16px;">
+    <!-- Real <form> elements with real submit buttons, all three of them.
+         These were <div>s full of type="button", which meant pressing Enter in
+         the email or password field did nothing at all — no handler, no
+         implicit submission, no feedback. The most ordinary way anybody signs
+         in was silently inert. It also cost the password manager its cue:
+         offering to save a credential, and offering to fill one, both hang off
+         a form being submitted rather than off a click somewhere on the page.
+
+         The SMS-code form is a sibling of the phone form rather than nested
+         inside it, because a form inside a form is not a thing HTML has: the
+         parser drops the inner one and its button ends up submitting the
+         outer. Both keep their own ids, so the show/hide logic is unchanged.
+
+         novalidate on the email form: the messages this page writes are
+         specific and land in one place with role="status". The browser's own
+         bubble would compete with them. -->
+    <form class="auth-phone-field auth-hidden" id="email-panel" style="margin-top:16px;" novalidate>
       <label for="email-input" style="font-size:13px; color:var(--text-secondary);">Email</label>
       <input type="email" id="email-input" placeholder="you@example.com" autocomplete="email">
 
       <label for="password-input" style="font-size:13px; color:var(--text-secondary);">Password</label>
       <input type="password" id="password-input" placeholder="At least 8 characters" autocomplete="current-password">
 
-      <button type="button" class="auth-btn" id="btn-email-go">Sign in</button>
+      <button type="submit" class="auth-btn" id="btn-email-go">Sign in</button>
 
       <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; font-size:12.5px;">
         <button type="button" class="auth-link-btn" id="btn-email-mode">New here? Create an account</button>
         <button type="button" class="auth-link-btn" id="btn-email-reset">Forgot password?</button>
       </div>
-    </div>
+    </form>
 
-    <div class="auth-phone-field auth-hidden" id="phone-panel" style="margin-top:16px;">
+    <form class="auth-phone-field auth-hidden" id="phone-panel" style="margin-top:16px;" novalidate>
       <label for="phone-input" style="font-size:13px; color:var(--text-secondary);">Phone number</label>
       <input type="tel" id="phone-input" placeholder="+971 5X XXX XXXX" autocomplete="tel">
-      <button type="button" class="auth-btn" id="btn-send-code">Send code</button>
+      <button type="submit" class="auth-btn" id="btn-send-code">Send code</button>
+    </form>
 
-      <div class="auth-hidden" id="code-panel" style="margin-top:6px;">
-        <label for="code-input" style="font-size:13px; color:var(--text-secondary);">Enter the code we texted you</label>
-        <input type="text" id="code-input" inputmode="numeric" placeholder="123456" autocomplete="one-time-code">
-        <button type="button" class="auth-btn" id="btn-verify-code">Verify &amp; continue</button>
-      </div>
-    </div>
+    <form class="auth-phone-field auth-hidden" id="code-panel" style="margin-top:10px;" novalidate>
+      <label for="code-input" style="font-size:13px; color:var(--text-secondary);">Enter the code we texted you</label>
+      <input type="text" id="code-input" inputmode="numeric" placeholder="123456" autocomplete="one-time-code">
+      <button type="submit" class="auth-btn" id="btn-verify-code">Verify &amp; continue</button>
+    </form>
 
-    <div id="auth-status"></div>
+    <div id="auth-status" role="status" aria-live="polite"></div>
   </div>
 
-  <p class="auth-fine-print">By continuing you agree to receive a welcome email and, unless you opt out later, occasional Sahaba Club updates.</p>
+  <!-- The link is the point of this sentence. Asking somebody to agree to
+       something on the page where they hand over an email address, with no way
+       to read what they are agreeing to until after they have agreed, is not
+       consent — and Privacy was a dead href="#" on every public footer until
+       privacy.html existed. -->
+  <p class="auth-fine-print">By continuing you agree to receive a welcome email and, unless you opt out later, occasional Sahaba Club updates. <a href="privacy.html">What we do with your details</a>.</p>
 </main>
 
 <footer class="footer footer-slim">
@@ -163,15 +190,26 @@
 <script type="module">
   import { signInWithGoogle, signInWithMicrosoft, signInWithLinkedIn, sendPhoneCode, verifyPhoneCode,
            signUpWithEmail, signInWithEmail, sendPasswordReset, enabledProviders,
-           getSession, hasCompletedOnboarding } from "./lib/auth.js";
+           getSession, hasCompletedOnboarding,
+           stashNextPath, takeNextPath } from "./lib/auth.js";
 
   var statusEl = document.getElementById("auth-status");
   function clearStatus() {
-    statusEl.innerHTML = "";
+    statusEl.replaceChildren();
   }
 
+  // Every message that lands here is built with textContent, never innerHTML.
+  // Three of the callers pass text this page does not control: the OAuth
+  // failure replay reads error_description straight out of the URL, and the two
+  // phone paths surface Supabase's own error string. Interpolating any of those
+  // into markup is a reflected XSS on the one page that handles authentication,
+  // where the session lives in origin-scoped localStorage. There is no CSP to
+  // fall back on — GitHub Pages cannot set the header.
   function showStatus(msg, kind) {
-    statusEl.innerHTML = '<div class="auth-status ' + kind + '">' + msg + "</div>";
+    var box = document.createElement("div");
+    box.className = "auth-status " + kind;
+    box.textContent = msg;
+    statusEl.replaceChildren(box);
   }
 
   // A provider that fails — not switched on, consent declined, misconfigured
@@ -196,14 +234,55 @@
     history.replaceState(null, "", window.location.pathname);
   })();
 
+  // ---- Where to go afterwards ----
+  //
+  // The gates on the app pages append ?next=<encoded relative path> so that
+  // finishing here lands somebody on the page they were actually trying to
+  // open. Read it once, now, before anything can navigate.
+  //
+  // Kept in sessionStorage rather than in a variable, because the three OAuth
+  // buttons leave this page entirely and come back to a fresh load of it: the
+  // redirect target is registered with Supabase and with each provider as a
+  // fixed string and cannot carry a parameter. Per tab, so two half-finished
+  // sign-ins in two tabs don't send each other to the wrong place.
+  //
+  // The URL is deliberately NOT cleaned up afterwards. Supabase's PKCE flow
+  // returns its authorization code in the query string, and detectSessionInUrl
+  // reads it asynchronously after this module's imports have run — rewriting
+  // location here would take the code away before the client had it, which
+  // breaks every OAuth sign-in. Leaving ?next= in place costs nothing:
+  // stashing it twice writes the same value.
+  //
+  // Validation lives in lib/auth.js. Anything that isn't a plain relative path
+  // on this origin is dropped without comment; an open redirect on the page
+  // that mints sessions is the one bug this feature could introduce.
+  stashNextPath(window.location.search);
+
+  // One routing decision, used by all three sign-in paths, so they cannot
+  // drift apart on where somebody ends up.
+  //
+  // Onboarding wins. A member who has not finished it is sent there whatever
+  // they were trying to reach, and — the part that matters — the stash is left
+  // untouched on that branch, so their original destination is still waiting
+  // when onboarding is done. Only the branch that actually lands somewhere
+  // consumes it.
+  async function routeAfterAuth(userId) {
+    var done = await hasCompletedOnboarding(userId);
+    if (!done) {
+      window.location.href = "app/onboarding.html";
+      return;
+    }
+    var next = takeNextPath();
+    window.location.href = next || "app/dashboard.html";
+  }
+
   // Already signed in (or just came back from an OAuth redirect)? Skip
   // straight to onboarding or the dashboard rather than showing the
   // provider buttons again.
   (async function routeIfAlreadySignedIn() {
     var session = await getSession();
     if (!session) return;
-    var done = await hasCompletedOnboarding(session.user.id);
-    window.location.href = done ? "app/dashboard.html" : "app/onboarding.html";
+    await routeAfterAuth(session.user.id);
   })();
 
   document.getElementById("btn-google").addEventListener("click", function () {
@@ -225,7 +304,7 @@
   // is rejected at Supabase's authorize endpoint, which answers with raw JSON
   // instead of redirecting back here — so no amount of error handling on this
   // page can rescue it. Better not to show the button at all.
-  (async function hideDisabledProviders() {
+  var providersReady = (async function hideDisabledProviders() {
     var on = await enabledProviders();
     var map = {
       "btn-google": on.google,
@@ -238,6 +317,19 @@
       var btn = document.getElementById(id);
       if (btn && !map[id]) btn.remove();
     });
+    // The panels go with their buttons, or ?new=1 below could open an email
+    // form for a provider this project has switched off. Looked up here rather
+    // than through the variables declared further down — those are `var`s that
+    // this function would only ever see filled in by accident of scheduling.
+    var panels = { email: ["email-panel"], phone: ["phone-panel", "code-panel"] };
+    Object.keys(panels).forEach(function (key) {
+      if (on[key]) return;
+      panels[key].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.remove();
+      });
+    });
+    return on;
   })();
 
   // ---- Email + password ----
@@ -248,20 +340,45 @@
   var emailMode = document.getElementById("btn-email-mode");
   var creating = false;
 
+  function setEmailMode(wantCreate) {
+    creating = !!wantCreate;
+    emailGo.textContent = creating ? "Create account" : "Sign in";
+    emailMode.textContent = creating ? "Already have an account? Sign in" : "New here? Create an account";
+    passwordInput.setAttribute("autocomplete", creating ? "new-password" : "current-password");
+  }
+
   document.getElementById("btn-email-toggle").addEventListener("click", function () {
     emailPanel.classList.toggle("auth-hidden");
     if (!emailPanel.classList.contains("auth-hidden")) emailInput.focus();
   });
 
   emailMode.addEventListener("click", function () {
-    creating = !creating;
-    emailGo.textContent = creating ? "Create account" : "Sign in";
-    emailMode.textContent = creating ? "Already have an account? Sign in" : "New here? Create an account";
-    passwordInput.setAttribute("autocomplete", creating ? "new-password" : "current-password");
+    setEmailMode(!creating);
     clearStatus();
   });
 
-  emailGo.addEventListener("click", async function () {
+  // ?new=1 — "I do not have an account".
+  //
+  // The gates offer two links, "Create a free account" and "Already a member?
+  // Sign in", and until now both landed on an identical page whose email form
+  // was collapsed and, when opened, said "Sign in". This is the only thing
+  // that tells the two apart, and it is additive on purpose: the parameter is
+  // absent for every existing link and every bookmark, and absent means
+  // exactly what it means today — panel closed, sign-in mode. Nothing has to
+  // be coordinated for those to keep working.
+  //
+  // Waits for the provider check so it cannot reveal a form for a provider
+  // that isn't switched on.
+  providersReady.then(function (on) {
+    if (!on || !on.email) return;
+    var wantsNew = new URLSearchParams(window.location.search).get("new") === "1";
+    if (!wantsNew) return;
+    setEmailMode(true);
+    emailPanel.classList.remove("auth-hidden");
+  }).catch(function () {});
+
+  emailPanel.addEventListener("submit", async function (event) {
+    event.preventDefault();
     var email = emailInput.value.trim();
     var password = passwordInput.value;
 
@@ -295,8 +412,7 @@
       return;
     }
 
-    var done = await hasCompletedOnboarding(res.data.user.id);
-    window.location.href = done ? "app/dashboard.html" : "app/onboarding.html";
+    await routeAfterAuth(res.data.user.id);
   });
 
   document.getElementById("btn-email-reset").addEventListener("click", async function () {
@@ -352,27 +468,48 @@
 
   document.getElementById("btn-phone-toggle").addEventListener("click", function () {
     phonePanel.classList.remove("auth-hidden");
+    phoneInput.focus();
   });
 
-  document.getElementById("btn-send-code").addEventListener("click", function () {
+  // Both phone paths now launder their errors through friendlyAuthError, the
+  // same as the email path always did. They used to print `res.error.message`
+  // as it arrived: a string this page does not author and does not control,
+  // straight from Supabase and from whichever SMS provider is behind it. That
+  // has two problems and this fixes the second one. The first — that it was
+  // being interpolated into markup — is already gone; showStatus builds with
+  // textContent now. What is left is that the raw string is frequently
+  // useless: an unconfigured SMS provider answers with an empty object, which
+  // rendered as a red box reading "{}", and a 4xx from the carrier reads like
+  // a stack trace. friendlyAuthError already knows how to turn all of that
+  // into a sentence, including the "we got nothing back at all" case.
+  phonePanel.addEventListener("submit", function (event) {
+    event.preventDefault();
     var phone = phoneInput.value.trim();
     if (!phone) { showStatus("Enter a phone number first.", "err"); return; }
     showStatus("Sending code…", "info");
     sendPhoneCode(phone).then(function (res) {
-      if (res.error) { showStatus(res.error.message, "err"); return; }
+      if (res.error) { showStatus(friendlyAuthError(res.error), "err"); return; }
       codePanel.classList.remove("auth-hidden");
       showStatus("Code sent — check your texts.", "ok");
+      codeInput.focus();
     });
   });
 
-  document.getElementById("btn-verify-code").addEventListener("click", function () {
+  codePanel.addEventListener("submit", function (event) {
+    event.preventDefault();
     var phone = phoneInput.value.trim();
     var code = codeInput.value.trim();
     if (!code) { showStatus("Enter the code first.", "err"); return; }
     showStatus("Verifying…", "info");
     verifyPhoneCode(phone, code).then(function (res) {
-      if (res.error) { showStatus(res.error.message, "err"); return; }
-      window.location.href = "app/onboarding.html";
+      if (res.error) { showStatus(friendlyAuthError(res.error), "err"); return; }
+      // Through the same router as every other path. This used to go straight
+      // to onboarding on the assumption that a phone sign-in is always a new
+      // account — it isn't, and a returning member was being sent back through
+      // a form they had already filled in, losing their ?next= on the way.
+      var user = res.data && res.data.user;
+      if (!user) { window.location.href = "app/onboarding.html"; return; }
+      routeAfterAuth(user.id);
     });
   });
 </script>

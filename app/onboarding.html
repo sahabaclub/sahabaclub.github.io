@@ -92,6 +92,23 @@
      the worst (cyan) stop. */
   html.light-mode .onb-btn-primary { color: #fff; }
   .onb-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* Work history rows. Read-only text with one destructive control each —
+     deliberately not a form, because half an editor invites edits it cannot
+     save. */
+  .onb-work-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 12px; border: 1px solid var(--glass-border); border-radius: 10px;
+    margin-bottom: 8px; background: rgba(255,255,255,0.03);
+  }
+  .onb-work-body { flex: 1; min-width: 0; }
+  .onb-work-role { margin: 0; font-size: 14px; font-weight: 600; }
+  .onb-work-when, .onb-work-summary { margin: 2px 0 0; font-size: 12.5px; color: var(--text-secondary); }
+  .onb-work-x {
+    background: none; border: 1px solid var(--glass-border); border-radius: 8px;
+    color: var(--text-secondary); font-family: inherit; font-size: 12.5px;
+    padding: 4px 10px; cursor: pointer; flex: none;
+  }
+  .onb-work-x:hover { color: #fca5a5; border-color: rgba(239,68,68,0.5); }
 </style>
 </head>
 <body>
@@ -244,22 +261,52 @@
           <input type="text" id="f-language" placeholder="e.g. English">
         </div>
       </div>
+      <!-- Chips, not comma-separated boxes. This is the first and most-used
+           place interests are entered and they drive newsletter and event
+           matching, so it is the place where "Power Apps", "power apps" and
+           "PowerApps" becoming three unrelated tags does the most damage.
+           Same control, same suggestions and same text[] storage as the
+           dashboard form. -->
       <div class="onb-field">
-        <label for="f-skills">Skills (comma-separated)</label>
-        <input type="text" id="f-skills" placeholder="Power Apps, Copilot Studio, Python">
+        <label for="f-skills-input">Skills</label>
+        <div id="f-skills"></div>
       </div>
       <div class="onb-field">
-        <label for="f-interests">Interests (comma-separated)</label>
-        <input type="text" id="f-interests" placeholder="Agentic AI, Hackathons, Low-code">
+        <label for="f-interests-input">Interests</label>
+        <div id="f-interests"></div>
       </div>
       <div class="onb-field">
-        <label for="f-goals">What are you hoping to get out of Sahaba Club? (comma-separated)</label>
-        <input type="text" id="f-goals" placeholder="Break into AI, find a coach, ship a side project">
+        <label for="f-goals-input">What are you hoping to get out of Sahaba Club?</label>
+        <div id="f-goals"></div>
+      </div>
+
+      <!-- Work history. Read off a CV by parse-profile-document and, until
+           now, dropped on the floor between the banner that said "here's what
+           we read" and the save — while member.html rendered it publicly as a
+           job timeline. A read-only list with Remove is the minimum that makes
+           the banner true: a member can at least take a wrong employer or a
+           hallucinated date off their public profile here. Full editing lives
+           on the dashboard profile form. -->
+      <div class="onb-field onb-hidden" id="work-field">
+        <label id="lbl-work">Work history we read from your document</label>
+        <div id="f-work" role="group" aria-labelledby="lbl-work"></div>
       </div>
       <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--text-secondary); margin-bottom:18px;">
         <input type="checkbox" id="f-newsletter" checked style="width:auto;">
         Send me the Sahaba Club newsletter, tailored to my interests
       </label>
+      <!-- There is no photo control and no headline field on this step, and
+           `missingForConnect` wants both a photo and a bio-or-headline before
+           a profile is listed. So finishing here does NOT put anyone in
+           Connect, and saying nothing about that is how members ended up
+           wondering why they could not find themselves. This says it, and
+           says where the photo lives. -->
+      <p class="onb-note" style="margin-bottom:18px;">
+        One more thing: Connect only lists profiles that have a photo. There's no
+        photo control on this step &mdash; add one from
+        <strong>Dashboard &rarr; Your profile</strong> whenever you like, and you'll
+        appear in Connect from then on.
+      </p>
       <button type="submit" class="onb-btn-primary" id="btn-save-profile">Finish &amp; go to my dashboard</button>
       <p style="margin:14px 0 0; font-size:13px;">
         <button type="button" class="onb-back" id="skip-profile" style="margin:0;">I&rsquo;ll do this later &rarr;</button>
@@ -272,6 +319,9 @@
 <script type="module">
   import { supabase } from "../lib/supabase-client.js";
   import { getSession } from "../lib/auth.js";
+  import {
+    loadTagSuggestions, suggestionsFor, createTagPicker, saveErrorMessage,
+  } from "../lib/profile-form.js";
 
   var stepMs365 = document.getElementById("step-ms365");
   var stepProfile = document.getElementById("step-profile");
@@ -279,6 +329,9 @@
   var dot2 = document.getElementById("dot-2");
 
   var session;
+  var profileRow = {};
+  var pickers = {};
+  var workHistory = [];
 
   (async function init() {
     session = await getSession();
@@ -287,6 +340,26 @@
       return;
     }
     dot1.classList.add("is-active");
+
+    // The row as it stands. Two things need it: whether onboarding has
+    // already been marked done (so a second visit doesn't rewrite the date),
+    // and any work history already stored, which the save must carry rather
+    // than blank out.
+    var profileRes = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("user_id", session.user.id)
+      .maybeSingle();
+    profileRow = profileRes.data || {};
+    if (Array.isArray(profileRow.work_history)) {
+      workHistory = profileRow.work_history;
+      renderWorkHistory();
+    }
+
+    // Suggestions are advisory: an empty or missing table must not stop
+    // anyone finishing the form, so it falls back to [].
+    var tagRows = await loadTagSuggestions();
+    buildPickers(tagRows);
 
     // Already provisioned? Skip straight to the profile step.
     var { data } = await supabase
@@ -299,8 +372,50 @@
     }
   })();
 
+  // textContent, not innerHTML. Several of these carry text that came back
+  // from a server — a mailbox, an Edge Function's own wording — and one form
+  // every member has to complete is the last place to be pasting remote
+  // strings into markup.
   function showStatus(elId, msg, kind) {
-    document.getElementById(elId).innerHTML = '<div class="onb-status ' + kind + '">' + msg + "</div>";
+    var slot = document.getElementById(elId);
+    slot.textContent = "";
+    var box = document.createElement("div");
+    box.className = "onb-status " + kind;
+    box.textContent = msg;
+    slot.appendChild(box);
+  }
+
+  // ---- Leaving onboarding ----------------------------------------------
+  //
+  // `onboarding_completed_at` is what dashboard.html tests before deciding
+  // whether to send someone back here. Every way out of this page therefore
+  // has to set it, or the way out is a loop: "I'll do this later" used to
+  // flicker to the dashboard and come straight back to "Build your profile",
+  // and so did linking an existing mailbox and the already_provisioned reply.
+  //
+  // The date means "has been through onboarding once", not "has a complete
+  // profile" — the dashboard's own Connect hint is what says what is still
+  // missing, and it says it without throwing anybody out of the page.
+  //
+  // `?from=onboarding` is a belt to the braces. If the write fails (a missing
+  // column, a missing grant, an offline moment) the dashboard would otherwise
+  // bounce them back here for ever; the flag makes this one arrival stick
+  // whatever the database did.
+  async function finishOnboarding(dest) {
+    if (!profileRow.onboarding_completed_at) {
+      var res = await supabase
+        .from("profiles")
+        .update({ onboarding_completed_at: new Date().toISOString() })
+        .eq("user_id", session.user.id);
+      if (res.error) console.error("onboarding_completed_at not written", res.error);
+      else profileRow.onboarding_completed_at = true;
+    }
+    var target = dest || "dashboard.html";
+    var hash = "";
+    var cut = target.indexOf("#");
+    if (cut !== -1) { hash = target.slice(cut); target = target.slice(0, cut); }
+    window.location.href =
+      target + (target.indexOf("?") === -1 ? "?" : "&") + "from=onboarding" + hash;
   }
 
   // ---- Step 1: Microsoft 365 ----
@@ -361,7 +476,7 @@
     // thing they just linked actually lives, so that is where they go; the
     // profile is a link away and no longer a gate.
     showStatus("ms365-status", "Linked. Sign in to Microsoft 365 with the password you already use. Taking you to your dashboard…", "ok");
-    setTimeout(function () { window.location.href = "dashboard.html#ms365"; }, 1400);
+    setTimeout(function () { finishOnboarding("dashboard.html#ms365"); }, 1400);
   });
 
   document.getElementById("choice-forgot-password").addEventListener("click", async function () {
@@ -418,7 +533,7 @@
       if (body && body.code === "already_provisioned") {
         showStatus("ms365-status",
           "You already have " + body.mailbox + " — taking you to your dashboard…", "ok");
-        setTimeout(function () { window.location.href = "dashboard.html#ms365"; }, 1600);
+        setTimeout(function () { finishOnboarding("dashboard.html#ms365"); }, 1600);
         return;
       }
     }
@@ -458,9 +573,13 @@
 
   // The profile is worth having but it is not a toll gate. Someone who wants
   // to look around first should be able to, and come back to it from their
-  // dashboard whenever they like.
+  // dashboard whenever they like. finishOnboarding is what makes that true —
+  // without it the dashboard reads an unset onboarding_completed_at and sends
+  // them straight back, so the button promised a way out and delivered a loop.
   document.getElementById("skip-profile").addEventListener("click", function () {
-    window.location.href = "dashboard.html";
+    var btn = document.getElementById("skip-profile");
+    btn.disabled = true;
+    finishOnboarding("dashboard.html");
   });
 
   document.getElementById("btn-create-mailbox").addEventListener("click", function () {
@@ -475,8 +594,110 @@
   }
 
   // ---- Step 2: profile ----
-  function splitTags(value) {
-    return value.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+
+  function buildPickers(tagRows) {
+    pickers.skills = createTagPicker({
+      root: document.getElementById("f-skills"), inputId: "f-skills-input",
+      suggestions: suggestionsFor(tagRows, "skill"),
+      placeholder: "Search skills, or type your own",
+    });
+    pickers.interests = createTagPicker({
+      root: document.getElementById("f-interests"), inputId: "f-interests-input",
+      suggestions: suggestionsFor(tagRows, "interest"),
+      placeholder: "Search interests, or type your own",
+    });
+    pickers.goals = createTagPicker({
+      root: document.getElementById("f-goals"), inputId: "f-goals-input",
+      suggestions: [],
+      placeholder: "e.g. Break into AI, find a coach",
+    });
+    pickers.skills.set(profileRow.skills || []);
+    pickers.interests.set(profileRow.interests || []);
+    pickers.goals.set(profileRow.goals || []);
+  }
+
+  // ---- Work history -----------------------------------------------------
+  //
+  // profiles.work_history (0023). parse-profile-document reads a member's
+  // whole career off their CV, and member.html renders it publicly as a job
+  // timeline — so it cannot be read under "here's what we read from your
+  // document" and then quietly dropped between the banner and the save.
+  // It is carried through, shown, and each row can be removed. Objects are
+  // passed through untouched: the extractor has already normalised, capped
+  // and ordered them, and nothing on this side knows their shape.
+  // (Declared with the other module state above, because init() writes it.)
+
+  function jobText(value) {
+    return typeof value === "string" ? value.trim() : "";
+  }
+
+  function jobWhen(job) {
+    var start = jobText(job.start_date) || jobText(job.started_on) || jobText(job.from);
+    var end = jobText(job.end_date) || jobText(job.ended_on) || jobText(job.to);
+    var current = job.is_current === true || job.current === true;
+    if (current && start) return "From " + start + " — current";
+    if (current) return "Current";
+    if (start && end) return start + " – " + end;
+    if (start) return "From " + start;
+    if (end) return "Until " + end;
+    return "";
+  }
+
+  function renderWorkHistory() {
+    var field = document.getElementById("work-field");
+    var slot = document.getElementById("f-work");
+    field.classList.toggle("onb-hidden", !workHistory.length);
+    slot.textContent = "";
+
+    workHistory.forEach(function (job, i) {
+      var row = document.createElement("div");
+      row.className = "onb-work-row";
+
+      var body = document.createElement("div");
+      body.className = "onb-work-body";
+
+      var position = jobText(job.position);
+      var company = jobText(job.company);
+      var role = document.createElement("p");
+      role.className = "onb-work-role";
+      role.dir = "auto";
+      role.textContent =
+        position && company ? position + " at " + company
+          : (position || company || "Role not recorded");
+      body.appendChild(role);
+
+      var when = jobWhen(job);
+      if (when) {
+        var whenEl = document.createElement("p");
+        whenEl.className = "onb-work-when";
+        whenEl.dir = "auto";
+        whenEl.textContent = when;
+        body.appendChild(whenEl);
+      }
+
+      var summary = jobText(job.summary);
+      if (summary) {
+        var sumEl = document.createElement("p");
+        sumEl.className = "onb-work-summary";
+        sumEl.dir = "auto";
+        sumEl.textContent = summary;
+        body.appendChild(sumEl);
+      }
+
+      var x = document.createElement("button");
+      x.type = "button";
+      x.className = "onb-work-x";
+      x.textContent = "Remove";
+      x.setAttribute("aria-label", "Remove " + role.textContent);
+      x.addEventListener("click", function () {
+        workHistory.splice(i, 1);
+        renderWorkHistory();
+      });
+
+      row.appendChild(body);
+      row.appendChild(x);
+      slot.appendChild(row);
+    });
   }
 
   var intakeChoice = document.getElementById("intake-choice");
@@ -515,9 +736,13 @@
     document.getElementById("f-industry").value = profile.industry || "";
     document.getElementById("f-timezone").value = profile.timezone || "";
     document.getElementById("f-language").value = profile.language || "";
-    document.getElementById("f-skills").value = (profile.skills || []).join(", ");
-    document.getElementById("f-interests").value = (profile.interests || []).join(", ");
-    document.getElementById("f-goals").value = (profile.goals || []).join(", ");
+    if (pickers.skills) pickers.skills.set(profile.skills || []);
+    if (pickers.interests) pickers.interests.set(profile.interests || []);
+    if (pickers.goals) pickers.goals.set(profile.goals || []);
+    if (Array.isArray(profile.work_history) && profile.work_history.length) {
+      workHistory = profile.work_history.slice();
+    }
+    renderWorkHistory();
   }
 
   document.getElementById("btn-parse-document").addEventListener("click", function () {
@@ -547,6 +772,16 @@
 
       fillForm(data.profile);
       profileSource = file.name.toLowerCase().indexOf("linkedin") !== -1 ? "linkedin_pdf" : "cv";
+      // The banner has to describe what is actually on screen. It used to
+      // promise "fix anything that's off" over a form that had silently
+      // dropped the work history it had just read.
+      reviewBanner.textContent = workHistory.length
+        ? "Here's what we read from your document, including " + workHistory.length +
+          (workHistory.length === 1 ? " past role" : " past roles") + ". Check it over and " +
+          "fix anything that's off — the roles can be removed here, and edited in full from " +
+          "your dashboard afterwards. Nothing is saved until you finish below."
+        : "Here's what we read from your document. Check it over and fix anything that's " +
+          "off — nothing is saved until you finish below.";
       reviewBanner.classList.remove("onb-hidden");
       showForm();
     };
@@ -558,28 +793,47 @@
 
   document.getElementById("profile-form").addEventListener("submit", async function (e) {
     e.preventDefault();
+    var saveBtn = document.getElementById("btn-save-profile");
+    saveBtn.disabled = true;
     showStatus("profile-status", "Saving…", "info");
 
-    var { error } = await supabase.from("profiles").update({
+    // A tag left half-typed in a picker is a tag the member meant to add.
+    Object.keys(pickers).forEach(function (k) { pickers[k].flush(); });
+
+    var patch = {
       full_name: document.getElementById("f-name").value.trim(),
       bio: document.getElementById("f-bio").value.trim(),
       experience_level: document.getElementById("f-experience").value,
       industry: document.getElementById("f-industry").value.trim(),
       timezone: document.getElementById("f-timezone").value.trim(),
       language: document.getElementById("f-language").value.trim(),
-      skills: splitTags(document.getElementById("f-skills").value),
-      interests: splitTags(document.getElementById("f-interests").value),
-      goals: splitTags(document.getElementById("f-goals").value),
+      skills: pickers.skills ? pickers.skills.get() : [],
+      interests: pickers.interests ? pickers.interests.get() : [],
+      goals: pickers.goals ? pickers.goals.get() : [],
       newsletter_opt_in: document.getElementById("f-newsletter").checked,
       profile_source: profileSource,
       onboarding_completed_at: new Date().toISOString(),
-    }).eq("user_id", session.user.id);
+    };
+    // Only sent when there is something to send. If migration 0023 has not
+    // been applied the column does not exist, and including an empty array
+    // would fail the whole save over a field nobody filled in.
+    if (workHistory.length) patch.work_history = workHistory;
+
+    var { error } = await supabase.from("profiles").update(patch).eq("user_id", session.user.id);
 
     if (error) {
-      showStatus("profile-status", "Couldn't save: " + error.message, "err");
+      // error.message is the database talking to whoever wrote the query
+      // ("permission denied for column work_history of relation profiles").
+      // saveErrorMessage turns the failures that actually happen here into
+      // something a member can act on, and logs the original for whoever has
+      // to fix it. This is the one form every member must complete.
+      console.error("onboarding profile save failed", error);
+      saveBtn.disabled = false;
+      showStatus("profile-status", saveErrorMessage(error), "err");
       return;
     }
-    window.location.href = "dashboard.html";
+    profileRow.onboarding_completed_at = true;
+    finishOnboarding("dashboard.html");
   });
 </script>
 <script src="../script.js"></script>

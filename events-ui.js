@@ -458,12 +458,13 @@
     });
   }
 
-  var ACCESS = { tier: "guest", canSignIn: false };
+  // `canSignIn` used to live here too, so a locked card could offer "Sign in"
+  // to a guest. It doesn't any more — see buildCard — and nothing else read it.
+  var ACCESS = { tier: "guest" };
 
   function refreshAccess() {
     return import("./lib/supabase-client.js").then(function (client) {
       if (!client.isConfigured) return null;
-      ACCESS.canSignIn = true;
       return import("./lib/tier-gate.js").then(function (m) { return m.getAccessLevel(); });
     }).then(function (level) {
       if (level) ACCESS.tier = level.tier;
@@ -596,9 +597,19 @@
     else if (status === "interested") foot.push('<span class="ev-status is-interested">Interested</span>');
 
     if (locked) {
-      var lockHref = (ACCESS.tier === "guest" && ACCESS.canSignIn) ? "login.html" : "membership.html";
-      var lockText = (ACCESS.tier === "guest" && ACCESS.canSignIn) ? "Sign in" : "Premium only";
-      foot.push('<a class="ev-register" href="' + lockHref + '">' + lockText + '</a>');
+      // One destination, whoever is reading. This used to send a signed-out
+      // visitor to login.html under the label "Sign in" — which is a promise
+      // the page cannot keep: signing in creates a free Standard account, and
+      // a Standard account does not unlock a Premium event. They came back to
+      // the same card now reading "Premium only", having done exactly what it
+      // asked. The lock is about tier, not about having an account, so the
+      // control says tier and goes to the page that sells it. Someone who is
+      // signed out and needs an account will be asked for one there, at the
+      // point it is actually the next step.
+      foot.push(
+        '<a class="ev-register" href="membership.html" aria-label="' +
+        escapeHtml(e.title) + ' needs Premium membership — see plans">Premium only</a>'
+      );
     } else if (e.registerLink && guest()) {
       // Registering is an action rather than browsing, so it asks for an
       // account. The event itself, its date, its place and everyone else's
