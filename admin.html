@@ -91,15 +91,6 @@
     </a>
     <div class="nav-actions">
       <a href="events.html" class="nav-link">View Events Page</a>
-      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
-        <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="4.2"/>
-          <path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/>
-        </svg>
-        <svg class="theme-icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20.5 13.4A8.4 8.4 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z"/>
-        </svg>
-      </button>
     </div>
   </div>
 </header>
@@ -264,6 +255,16 @@
   </section>
 
 </main>
+
+<footer class="footer footer-slim">
+  <div class="footer-theme">
+    <span class="footer-theme-label" id="footer-theme-label">Appearance</span>
+    <div class="theme-choice" role="group" aria-labelledby="footer-theme-label">
+      <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+      <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+    </div>
+  </div>
+</footer>
 
 <script>
 (function () {
@@ -674,5 +675,31 @@
 })();
 </script>
 
+<script>
+  // The footer Dark/Light pair, wired the same way script.js wires it on the
+  // public pages: one class on <html>, one localStorage key, both buttons
+  // re-synced after every change.
+  (function () {
+    var KEY = "sc_light_mode";
+    var root = document.documentElement;
+    var buttons = document.querySelectorAll("[data-theme]");
+    function sync() {
+      var light = root.classList.contains("light-mode");
+      Array.prototype.forEach.call(buttons, function (b) {
+        var match = b.getAttribute("data-theme") === (light ? "light" : "dark");
+        b.classList.toggle("is-active", match);
+        b.setAttribute("aria-pressed", match ? "true" : "false");
+      });
+    }
+    Array.prototype.forEach.call(buttons, function (b) {
+      b.addEventListener("click", function () {
+        root.classList.toggle("light-mode", b.getAttribute("data-theme") === "light");
+        try { localStorage.setItem(KEY, root.classList.contains("light-mode") ? "1" : "0"); } catch (e) {}
+        sync();
+      });
+    });
+    sync();
+  })();
+</script>
 </body>
 </html>

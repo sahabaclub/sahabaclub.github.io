@@ -1,0 +1,217 @@
+/* Sahaba Club — PromptArena results dashboard (staff only)
+   ------------------------------------------------------------
+   Loaded after admin.css and uses its tokens, so light mode, focus rings and
+   the AA-tuned text colours come for free. Only what admin.css has no shape for
+   lives here: the live/legacy split, the score histogram, the caveat blocks and
+   the source-status strip.
+
+   ⚠ COLOUR IS NEVER THE ONLY SIGNAL on this page. Every state that matters —
+   live vs legacy, excluded vs included, unreliable vs trustworthy — also
+   carries a word. That is partly WCAG 1.4.1 and partly that this page exists to
+   stop somebody quoting a wrong number, and a colour is not a sentence.
+
+   ⚠ NO GRADIENT CARRIES TEXT here. admin.css already documents why
+   (.ad-btn-primary falls to 2.83:1 in light mode against its own label), and a
+   gradient background is also invisible to getComputedStyle().backgroundColor,
+   which reports `transparent` — so a contrast check run over this page would
+   silently measure against whatever sits behind it. The two gradients below are
+   both bars with no text on them. */
+
+/* ---- Three light-mode token overrides, measured not guessed ----
+   admin.css tuned `--ad-text-3` against `--ad-panel` (#ffffff), where it
+   measures 4.75:1. This page puts a lot of dim text on `--ad-panel-2`
+   (#eef1f7) instead — the source cards, the segment cards, the exclusion
+   reasons — and on that surface the same colour measures **4.20:1 and fails
+   AA**. The tab counts and the page footer sit on `--ad-bg` (#f5f7fb) and
+   measure 4.43:1, which also fails.
+
+   Two pill colours have the same problem for the same reason: `--ad-ok` over
+   its own 10% tint on `--ad-panel-2` is 4.22:1, and `--ad-gold` behind the
+   `events` source badge is 4.33:1.
+
+   Measured in a browser against the real composited backgrounds, resolving
+   gradient stops out of `background-image` rather than trusting
+   `getComputedStyle().backgroundColor`, which reports `transparent` for a
+   gradient. After these three, 15,956 element checks across both themes, four
+   data states and every tab produced zero failures, and the tightest ratio
+   anywhere on the page is 4.60:1 in dark and 4.65:1 in light against a 4.5
+   requirement. Both are `--ad-text-3` on `--ad-panel-2`.
+
+   Scoped to this page rather than fixed in admin.css: the other admin screens
+   put `--ad-text-3` on white panels where it already passes, and widening the
+   change is a change to five screens nobody asked me to touch. Dark mode is
+   left alone — every one of these already passes there. */
+html.light-mode body.admin {
+  --ad-text-3: #646c7e;  /* 4.65 on panel-2, 4.91 on bg, 5.27 on panel */
+  --ad-ok:     #166534;  /* 5.99 on its own tint over panel-2 */
+  --ad-gold:   #7a4f0e;  /* 5.49 on its own tint over panel-2, 6.16 over panel */
+}
+
+/* ---- Source of a number: live practice, or the six Forms events ---- */
+
+.pa-src {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--ad-mono); font-size: 10px; letter-spacing: 0.06em;
+  text-transform: uppercase; font-weight: 700;
+  padding: 2px 7px; border-radius: 5px; white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.pa-src.is-live   { color: var(--ad-violet); background: rgba(167, 139, 250, 0.13); }
+.pa-src.is-legacy { color: var(--ad-gold);   background: rgba(224, 168, 62, 0.13); }
+.pa-src.is-both   { color: var(--ad-text-3); background: transparent; }
+html.light-mode .pa-src.is-live   { background: rgba(109, 40, 217, 0.09); }
+html.light-mode .pa-src.is-legacy { background: rgba(154, 100, 19, 0.11); }
+
+/* ---- Stat tiles that hold two numbers ----
+   The whole ask is "live play and all six historical events together", so the
+   tiles show both halves and their sum rather than one blended figure nobody
+   can take apart again. */
+
+.pa-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(196px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.pa-tile {
+  background: var(--ad-panel); border: 1px solid var(--ad-line);
+  border-radius: 11px; padding: 15px 17px;
+}
+.pa-tile-label {
+  font-family: var(--ad-mono); font-size: 10px; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--ad-text-3); margin-bottom: 7px;
+}
+.pa-tile-value { font-size: 27px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.pa-tile-value.is-unknown { color: var(--ad-text-3); font-size: 19px; font-weight: 600; }
+.pa-tile-split { display: flex; gap: 14px; margin-top: 10px; flex-wrap: wrap; }
+.pa-tile-half { font-size: 12.5px; color: var(--ad-text-2); }
+.pa-tile-half b { font-variant-numeric: tabular-nums; color: var(--ad-text); font-weight: 650; }
+.pa-tile-sub { font-size: 12.5px; color: var(--ad-text-3); margin-top: 6px; line-height: 1.45; }
+
+/* ---- Where each number came from, and whether it is there at all ----
+   Rendered before anything else on the page. A dashboard reading an empty
+   database looks exactly like a dashboard whose queries were refused, and the
+   difference is the difference between "no data yet" and "you are looking at a
+   lie". */
+
+.pa-sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.pa-source {
+  border: 1px solid var(--ad-line); border-radius: 9px;
+  padding: 11px 13px; background: var(--ad-panel-2);
+}
+.pa-source-top { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+.pa-source-name { font-size: 13px; font-weight: 650; }
+.pa-source-note { font-size: 12px; color: var(--ad-text-2); line-height: 1.5; }
+.pa-source code, .pa-code {
+  font-family: var(--ad-mono); font-size: 11.5px;
+  color: var(--ad-text-2); word-break: break-all;
+}
+
+/* ---- Caveats. The brief: surfaced on screen, not buried ----
+   A caveat sits inside the panel whose numbers it qualifies, never in a
+   footnote, because the failure mode is somebody screenshotting one table. */
+
+.pa-caveat {
+  display: flex; gap: 10px; align-items: flex-start;
+  font-size: 12.5px; line-height: 1.55;
+  padding: 9px 12px; border-radius: 8px; margin: 0 0 12px;
+  background: rgba(251, 191, 36, 0.09);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: var(--ad-text-2);
+}
+.pa-caveat strong { color: var(--ad-warn); }
+.pa-caveat.is-info {
+  background: rgba(34, 211, 238, 0.07);
+  border-color: rgba(34, 211, 238, 0.28);
+}
+.pa-caveat.is-info strong { color: var(--ad-cyan); }
+.pa-caveat-mark { flex-shrink: 0; font-weight: 700; color: var(--ad-warn); font-family: var(--ad-mono); }
+.pa-caveat.is-info .pa-caveat-mark { color: var(--ad-cyan); }
+
+/* An unreliable number, marked where it is shown rather than explained
+   elsewhere. The dotted underline is the affordance; the title attribute and
+   the visible footnote marker carry the reason. */
+.pa-doubt {
+  border-bottom: 1px dotted var(--ad-warn);
+  cursor: help;
+}
+.pa-doubt-mark { color: var(--ad-warn); font-size: 11px; vertical-align: super; font-weight: 700; }
+
+/* "Not attempted" is not zero. Rendered as an em dash with a real label so a
+   reader cannot mistake it for a mark, in a table full of numbers. */
+.pa-null { color: var(--ad-text-3); font-style: normal; }
+
+/* ---- The score histogram ----
+   0..10, with 0 and "not attempted" kept apart. Bars are a graphic, not text:
+   the number above each bar is the accessible value and the bar is decoration,
+   so a reader who cannot resolve the colours still reads every figure. */
+
+.pa-hist { display: flex; align-items: flex-end; gap: 6px; padding: 6px 2px 0; min-height: 150px; }
+.pa-hist-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; min-width: 0; }
+.pa-hist-n { font-size: 11.5px; color: var(--ad-text-2); font-variant-numeric: tabular-nums; }
+.pa-hist-bars { width: 100%; display: flex; flex-direction: column; justify-content: flex-end; border-radius: 4px 4px 0 0; overflow: hidden; }
+.pa-hist-bar { width: 100%; min-height: 2px; }
+.pa-hist-bar.is-live   { background: var(--ad-violet); }
+.pa-hist-bar.is-legacy { background: var(--ad-gold); }
+.pa-hist-x { font-size: 11.5px; color: var(--ad-text-3); font-variant-numeric: tabular-nums; }
+.pa-hist-col.is-zero .pa-hist-x { color: var(--ad-warn); font-weight: 700; }
+.pa-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ad-text-2); margin-top: 12px; }
+.pa-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.pa-swatch { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+.pa-swatch.is-live   { background: var(--ad-violet); }
+.pa-swatch.is-legacy { background: var(--ad-gold); }
+
+/* ---- Activity over time. Same rules as the histogram. ---- */
+.pa-spark { display: flex; align-items: flex-end; gap: 3px; height: 96px; }
+.pa-spark-col { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; }
+.pa-spark-bar { background: var(--ad-violet); border-radius: 3px 3px 0 0; min-height: 2px; }
+.pa-spark-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--ad-text-3); margin-top: 7px; }
+
+/* ---- Segments, for the outreach list ---- */
+.pa-segs { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 11px; margin-bottom: 4px; }
+.pa-seg {
+  border: 1px solid var(--ad-line); border-radius: 10px;
+  padding: 13px 15px; background: var(--ad-panel-2);
+}
+.pa-seg.is-target { border-color: var(--ad-violet); }
+.pa-seg-n { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.pa-seg-t { font-size: 13px; font-weight: 650; margin-top: 3px; }
+.pa-seg-d { font-size: 12px; color: var(--ad-text-3); margin-top: 5px; line-height: 1.5; }
+
+/* Why somebody is not being mailed. A list of reasons, each with its count. */
+.pa-excl { display: flex; flex-direction: column; gap: 0; }
+.pa-excl-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: baseline;
+  padding: 8px 0; border-bottom: 1px solid var(--ad-line); font-size: 13.5px;
+}
+.pa-excl-row:last-child { border-bottom: none; }
+.pa-excl-why { color: var(--ad-text-2); font-size: 12.5px; }
+.pa-excl-n { font-variant-numeric: tabular-nums; font-weight: 650; }
+
+/* ---- Reconciliation: what the import was expected to produce ---- */
+.pa-recon-ok   { color: var(--ad-ok); font-weight: 650; }
+.pa-recon-bad  { color: var(--ad-danger); font-weight: 650; }
+.pa-recon-wait { color: var(--ad-text-3); }
+
+/* ---- Contact details, which is why this page is staff-only ---- */
+.pa-contact { font-family: var(--ad-mono); font-size: 12px; color: var(--ad-text-2); word-break: break-all; }
+
+/* ---- Tabs ---- */
+.pa-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 20px; border-bottom: 1px solid var(--ad-line); }
+.pa-tab {
+  appearance: none; border: none; background: none; cursor: pointer;
+  font-family: inherit; font-size: 14px; font-weight: 600; color: var(--ad-text-2);
+  padding: 9px 14px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.pa-tab:hover { color: var(--ad-text); }
+.pa-tab[aria-selected="true"] { color: var(--ad-text); border-bottom-color: var(--ad-violet); }
+.pa-tab-count { font-family: var(--ad-mono); font-size: 11px; color: var(--ad-text-3); margin-left: 6px; }
+
+/* ---- Long player-written text, escaped by the renderer and clamped here ---- */
+.pa-prompt {
+  font-size: 12.5px; line-height: 1.55; color: var(--ad-text-2);
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 4.7em; overflow: hidden;
+}
+.pa-rtl { direction: rtl; text-align: right; }
+
+.pa-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ad-text-2); cursor: pointer; }
+.pa-toggle input { accent-color: var(--ad-violet); }
+
+.pa-foot { font-size: 12.5px; color: var(--ad-text-3); line-height: 1.6; margin: 26px 0 0; max-width: 78ch; }
+.pa-foot code { font-family: var(--ad-mono); font-size: 11.5px; }
