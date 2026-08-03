@@ -67,6 +67,7 @@ const state = {
   fields: [],            // from data_field_stats()
   rows: [],              // the table itself
   linkStatus: [],        // contact_link_status, contacts only
+  linkStatusOk: false,   // did that read SUCCEED? empty and failed are not the same
   columns: [],           // which columns the table shows
   limit: 100,
   total: null,           // rows in the table itself, from data_field_stats
@@ -140,12 +141,26 @@ async function loadDataset() {
   state.total = state.fields.length ? Number(state.fields[0].total) : null;
   state.columns = ds.defaultColumns.filter((c) => state.fields.some((f) => f.column_name === c));
 
+  // ⚠ Whether this read SUCCEEDED is not the same question as whether it
+  // returned rows, and this panel is the one place where confusing the two is
+  // dangerous. An empty list renders as "Nobody in this state. That is the
+  // good outcome." — a sentence that must never be produced by a failed read.
+  // `contact_link_status` is `where public.is_staff()` over the whole contact
+  // table, so it returns everything or nothing; nothing is far more likely to
+  // mean "the view is missing or the predicate was false" than "every record
+  // is healthy".
+  state.linkStatusOk = false;
   if (state.dataset === "marketing_contacts") {
     const link = await supabase.from("contact_link_status").select("*").limit(ROW_LIMIT);
     if (link.error) {
-      warn("Couldn't read the Microsoft 365 mapping: " + link.error.message, "warn");
+      warn(
+        "Couldn't read the Microsoft 365 mapping: " + link.error.message +
+        " — if this says the relation does not exist, migration 0033 is not fully applied.",
+        "err",
+      );
     } else {
       state.linkStatus = link.data || [];
+      state.linkStatusOk = true;
     }
   }
 
@@ -210,16 +225,21 @@ function renderStats() {
   let tiles;
 
   if (state.dataset === "marketing_contacts") {
-    const withBox = state.linkStatus.filter((c) => c.sahaba_mailbox).length;
-    const needsEmail = needsEmailRows().length;
-    const orphanAccounts = state.linkStatus.filter((c) => c.link_state === "account_exists").length;
+    // Three of these five are computed from `contact_link_status`. If that read
+    // failed they are not zero, they are unknown — and a tile reading 0 next to
+    // the words "needs a personal email" is an all-clear nobody measured.
+    const ok = state.linkStatusOk;
+    const withBox = ok ? state.linkStatus.filter((c) => c.sahaba_mailbox).length : "—";
+    const needsEmail = ok ? needsEmailRows().length : "—";
+    const orphanAccounts = ok
+      ? state.linkStatus.filter((c) => c.link_state === "account_exists").length : "—";
     tiles = [
       // The one tile that can be honest whatever the browser holds: it is the
       // database's own count, not a length of a truncated array.
       { l: "contacts", v: state.total === null ? state.rows.length : state.total },
       { l: "has a mailbox", v: withBox },
-      { l: "needs a personal email", v: needsEmail, warn: needsEmail > 0 },
-      { l: "signed up, not linked", v: orphanAccounts, warn: orphanAccounts > 0 },
+      { l: "needs a personal email", v: needsEmail, warn: ok && needsEmail > 0 },
+      { l: "signed up, not linked", v: orphanAccounts, warn: ok && orphanAccounts > 0 },
       { l: "unsubscribed", v: state.rows.filter((r) => r.unsubscribed_at).length },
     ];
   } else {
@@ -265,6 +285,18 @@ function renderFix() {
   if (state.dataset !== "marketing_contacts") {
     wrap.innerHTML = '<p class="ad-empty">This only applies to marketing contacts.</p>';
     document.getElementById("dm-fix-count").textContent = "";
+    document.getElementById("dm-count-fix").textContent = "";
+    return;
+  }
+
+  // Never let a failed read wear the clothes of a clean bill of health.
+  if (!state.linkStatusOk) {
+    wrap.innerHTML = msg(
+      "The Microsoft 365 mapping could not be read, so this list is not empty — it is unknown. " +
+      "See the message at the top of this page. Nothing here should be taken as \"nobody needs fixing\".",
+      "err",
+    );
+    document.getElementById("dm-fix-count").textContent = "unknown";
     document.getElementById("dm-count-fix").textContent = "";
     return;
   }
