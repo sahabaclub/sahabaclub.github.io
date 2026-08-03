@@ -28,20 +28,55 @@
 // at all, pass 1 does nothing and the markup's own signed-out state stands.
 // That is the common case: these are public pages, and most people reading
 // them have never signed in.
+//
+// ---- Why this file also answers "is anyone signed in?" -------------------
+//
+// The registration gates (the event Register control, Connect, PromptArena)
+// need the same answer this file already works out, at the same moment: before
+// the first paint. A second mechanism would be a second chance to disagree,
+// and the way it would disagree is the expensive way round — a member seeing a
+// lock on something they already have. So the answer is published once, as a
+// class on <html>, and everything else reads it through CSS:
+//
+//   html.sc-signed-in    a session is believed to exist
+//   html.sc-signed-out   no session
+//   neither              this page never loaded this file
+//
+// One of the two is set by pass 1, synchronously, from the tag that sits
+// immediately after </header> — which is before the browser has parsed a
+// single gated element, let alone painted one. There is no window in which a
+// member's page is laid out under the wrong class.
+//
+// "Neither" is the ungated state, on purpose: no lock is drawn until
+// something says one belongs there. That is safe because these gates are not
+// what keeps anyone's data private. Every table and view behind them is
+// granted to `authenticated` only with `anon` revoked, so a signed-out
+// visitor gets nothing from the database whatever this class says. The gate
+// is an invitation; the lock is in Postgres.
 (function () {
   "use strict";
 
   var CACHE_KEY = "sc_identity";
   var SIGNED_IN_CLASS = "sc-signed-in";
+  var SIGNED_OUT_CLASS = "sc-signed-out";
   var root = document.documentElement;
+
+  // Where this file is, so the dynamic imports below resolve against it rather
+  // than against whichever page pulled it in. app/connect.html and
+  // app/promptarena.html load it one directory down, and "./lib/..." read from
+  // there would be app/lib/... — a 404, caught silently, leaving pass 2 to
+  // never run and pass 1's guess to stand for the whole visit.
+  var here = (document.currentScript && document.currentScript.src) || "";
+  function moduleUrl(path) {
+    return here ? new URL(path, here).toString() : "./" + path;
+  }
 
   // Every element that belongs to one state or the other, header and mobile
   // drawer alike. Marked with data attributes rather than looked up by id,
   // because the drawer and the header both carry a Join affordance and both
-  // have to move together.
-  var joins = document.querySelectorAll("[data-identity-join]");
+  // have to move together. A page with neither — an app page that has no Join
+  // CTA to swap — still runs everything else here for the class alone.
   var mes = document.querySelectorAll("[data-identity-me]");
-  if (!joins.length && !mes.length) return;
 
   function each(list, fn) { Array.prototype.forEach.call(list, fn); }
   function trim(value) { return String(value == null ? "" : value).trim(); }
@@ -128,8 +163,10 @@
     if (!identity) {
       painted = null;
       root.classList.remove(SIGNED_IN_CLASS);
+      root.classList.add(SIGNED_OUT_CLASS);
       return;
     }
+    root.classList.remove(SIGNED_OUT_CLASS);
     if (sameAs(identity)) {
       root.classList.add(SIGNED_IN_CLASS);
       return;
@@ -199,17 +236,21 @@
     // Signed out somewhere else — another tab, or the dashboard. Their name
     // should not be sitting in this browser waiting to be drawn again.
     writeCache(null);
+    // Supabase keeps its session in localStorage, so a browser that will not
+    // give us localStorage cannot be holding a session either. "No stored
+    // token" and "no storage at all" are the same answer here.
+    root.classList.add(SIGNED_OUT_CLASS);
   }
 
   // ---- Pass 2: asynchronous, from Supabase ------------------------------
 
   Promise.resolve()
-    .then(function () { return import("./lib/supabase-client.js"); })
+    .then(function () { return import(moduleUrl("lib/supabase-client.js")); })
     .then(function (client) {
       // The repo can be published before the Supabase project exists. Without
       // config there is no session to have, so the signed-out header is right.
       if (!client.isConfigured) return null;
-      return import("./lib/auth.js")
+      return import(moduleUrl("lib/auth.js"))
         .then(function (auth) { return auth.getSession(); })
         .then(function (session) {
           return session ? { client: client, session: session } : null;
@@ -224,7 +265,7 @@
       // initialOf and safeUrl come from lib/connect.js rather than being
       // written again here — the rule about what a missing name looks like,
       // and about which URLs are safe to render, belongs in one place.
-      return import("./lib/connect.js").then(function (helpers) {
+      return import(moduleUrl("lib/connect.js")).then(function (helpers) {
         return context.client.supabase
           .from("profiles")
           .select("full_name, avatar_url")

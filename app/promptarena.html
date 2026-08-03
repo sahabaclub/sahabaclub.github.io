@@ -17,6 +17,17 @@
     }
   } catch (e) {}
 </script>
+<!-- Settles whether <html> carries sc-signed-in or sc-signed-out, before a
+     single element of this page has been parsed.
+
+     In <head> here, where the public pages load it after </header> instead.
+     That placement exists so the file has the header in the DOM to paint an
+     avatar and a name into; this page has no identity markup for it to touch,
+     so there is nothing to wait for — and the header on this page *does* have
+     a guest/member split of its own (Dashboard against Home and Join free).
+     Running first means that split is decided before the header is laid out,
+     rather than one parser-stall away from being. -->
+<script src="../header-identity.js"></script>
 </head>
 <body class="pa-body">
 
@@ -31,9 +42,14 @@
       <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
     </a>
     <div class="nav-actions">
-      <a href="dashboard.html" class="nav-link">Dashboard</a>
+      <!-- Dashboard is a place a visitor cannot go, so it isn't offered to
+           one. Connect stays in the list either way: it now explains itself
+           to a visitor rather than bouncing them. -->
+      <a href="dashboard.html" class="nav-link" data-member-only>Dashboard</a>
+      <a href="../index.html" class="nav-link" data-guest-only>Home</a>
       <a href="connect.html" class="nav-link">Connect</a>
       <a href="../events.html" class="nav-link">Events</a>
+      <a href="../login.html" class="btn btn-glow" data-guest-only>Join free</a>
     </div>
   </div>
 </header>
@@ -64,16 +80,59 @@
 
   <div id="page-status"></div>
 
+  <!-- ---- Signed out: the invitation ----
+       This page used to call window.location.replace("../login.html") the
+       instant it found no session. A visitor who followed "PromptArena" from
+       the nav landed on a sign-in form having never been told what
+       PromptArena was, which is a bounce dressed up as a redirect. The hero
+       above it now stays and does its job, and this says what the door is.
+
+       Everything past it is guarded by the database anyway — the challenge
+       deck, the attempts and the leaderboard are all granted to
+       `authenticated` only. -->
+  <section class="pa-section" data-guest-only>
+    <div class="sc-gate">
+      <p class="sc-gate-eyebrow">Free to play · members only</p>
+      <h2 class="sc-gate-title">Take the first challenge</h2>
+      <p class="sc-gate-text">
+        An account is the only thing between you and the arena — the play
+        itself is <strong>free and always has been</strong>. It exists so your
+        rating, your streak and the judge's notes on every prompt you write
+        are still there next week.
+      </p>
+      <ul class="sc-gate-list">
+        <li>A fresh brief, a blank box, and a score in seconds</li>
+        <li>The judge's reasoning, not just a number — what worked, what to try next</li>
+        <li>Every attempt kept, and a leaderboard you can stay off if you'd rather</li>
+      </ul>
+      <div class="sc-gate-actions">
+        <a class="btn btn-glow btn-lg" href="../login.html">Create a free account</a>
+      </div>
+      <p class="sc-gate-alt">Already a member? <a href="../login.html">Sign in</a></p>
+      <p class="sc-gate-note">
+        Free means free: no card, and no paid tier that plays more than you do.
+        Sign up with Google, Microsoft, LinkedIn, a phone number or an email
+        address.
+      </p>
+    </div>
+  </section>
+
   <!-- ---- The play surface ---- -->
-  <section class="pa-section" id="stage" aria-live="polite">
+  <section class="pa-section" id="stage" aria-live="polite" data-member-only>
     <div class="pa-empty">
       <p class="pa-empty-title">Warming up…</p>
       <p class="pa-empty-text">Loading the arena.</p>
     </div>
   </section>
 
-  <!-- ---- Everything that isn't the game ---- -->
-  <div class="pa-tabs" role="tablist" aria-label="PromptArena sections">
+  <!-- ---- Everything that isn't the game ----
+       Member-only, and hidden rather than teased. The board, the attempts and
+       the event history are three panels whose entire content comes from
+       tables a visitor cannot read, so leaving them up would mean three
+       headings over three "Loading…" lines that never finish. What is in them
+       is described in the panel above instead, which is the honest version of
+       the same tease. -->
+  <div class="pa-tabs" role="tablist" aria-label="PromptArena sections" data-member-only>
     <button type="button" class="pa-tab" role="tab" id="tab-board"
             aria-controls="panel-board" aria-selected="true">Leaderboard</button>
     <button type="button" class="pa-tab" role="tab" id="tab-attempts"
@@ -82,7 +141,7 @@
             aria-controls="panel-legacy" aria-selected="false">Event history</button>
   </div>
 
-  <section class="pa-panel" id="panel-board" role="tabpanel" aria-labelledby="tab-board" tabindex="0">
+  <section class="pa-panel" id="panel-board" role="tabpanel" aria-labelledby="tab-board" tabindex="0" data-member-only>
     <div class="pa-section-head">
       <h2 class="pa-section-title">Leaderboard</h2>
       <p class="pa-section-note">Members who've chosen to be ranked.</p>
@@ -108,7 +167,7 @@
     </div>
   </section>
 
-  <section class="pa-panel" id="panel-attempts" role="tabpanel" aria-labelledby="tab-attempts" tabindex="0" hidden>
+  <section class="pa-panel" id="panel-attempts" role="tabpanel" aria-labelledby="tab-attempts" tabindex="0" data-member-only hidden>
     <div class="pa-section-head">
       <h2 class="pa-section-title">My attempts</h2>
       <p class="pa-section-note">Every prompt you've submitted, and what the judge said.</p>
@@ -116,7 +175,7 @@
     <div id="attempts"><p class="pa-note">Loading…</p></div>
   </section>
 
-  <section class="pa-panel" id="panel-legacy" role="tabpanel" aria-labelledby="tab-legacy" tabindex="0" hidden>
+  <section class="pa-panel" id="panel-legacy" role="tabpanel" aria-labelledby="tab-legacy" tabindex="0" data-member-only hidden>
     <div class="pa-section-head">
       <h2 class="pa-section-title">Event history</h2>
       <p class="pa-section-note">Rounds you played at a live Sahaba event.</p>
@@ -128,7 +187,7 @@
 
 <script type="module">
   import {
-    requireUser, escapeHtml,
+    currentUser, escapeHtml,
     myStats, myPosition, leaderboard, setRankingVisibility,
     listDeck, myAttemptedChallengeIds, pickChallenge,
     submitPrompt, awaitJudgement, listMyAttempts,
@@ -914,8 +973,18 @@
   }
 
   (async function init() {
-    me = await requireUser("../login.html");
-    if (!me) return;
+    me = await currentUser();
+    if (!me) {
+      // The invitation is already on screen — header-identity.js settled the
+      // class on <html> before this page painted. This only has work to do
+      // when that pass saw a token in localStorage that is no longer a live
+      // session. Same class, so there is one switch rather than two opinions,
+      // and no request is made for a deck this reader cannot read.
+      var root = document.documentElement;
+      root.classList.remove("sc-signed-in");
+      root.classList.add("sc-signed-out");
+      return;
+    }
 
     var stats = await myStats();
     if (stats.off) {

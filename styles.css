@@ -3442,3 +3442,261 @@ html.light-mode .av-thumb.is-on::after { color: #ffffff; }
   font-weight: 700;
 }
 .connect-jump:hover { text-decoration-thickness: 2px; }
+
+/* ============================================================
+   The registration gate
+   ------------------------------------------------------------
+   Browsing is free; acting needs an account. These are the styles for the
+   moment someone meets that line — the event Register control, Connect, and
+   PromptArena.
+
+   Read the warning first, because it decides how everything below is written:
+   **none of this is a security boundary.** `member_directory`,
+   `prospect_directory`, `connect_directory` and the PromptArena tables are
+   granted to `authenticated` only, with `anon` revoked. A signed-out visitor
+   already gets nothing from them. What they got until now was a redirect to a
+   login page with no explanation, or a Register button that opened a ticket
+   site and then quietly failed to record anything. This replaces that with an
+   invitation. Nothing here may be relied on to keep data private, and nothing
+   here removes a check that does.
+
+   Which state is drawn is decided by one class on <html>, set by
+   header-identity.js before the first paint — the same mechanism the header
+   already uses to avoid flashing "Join the Club" at a member. There is
+   deliberately no second source of truth: a gate and a header that disagree
+   would disagree in the expensive direction.
+
+   The guest switch is written as one negative rule rather than the obvious
+   pair, because these attributes go on panels, nav links, `.btn` pills and
+   flex children alike, and each already carries the right `display` in its
+   own rule. A `html.sc-signed-out [data-guest-only] { display: revert }`
+   counterpart would not restore those: `revert` rolls back the whole author
+   origin, so a revealed `.btn` would lose its own `inline-flex` and come back
+   as a plain inline box with its gap and alignment gone. Matching only in the
+   state where the element should be hidden leaves the element's own rules
+   untouched in the state where it should be shown.
+
+   Specificity is (0,2,1), which is deliberate: it has to outrank the
+   component rules it is suppressing — `.cx-filters { display: flex }` and
+   friends — or a guest would see the thing anyway. */
+[data-guest-only]:not(html.sc-signed-out *) { display: none; }
+html.sc-signed-out [data-member-only] { display: none; }
+
+/* The panel itself.
+
+   A flat colour, not a gradient. Gradients are used freely elsewhere on this
+   site, but everything inside this panel is text that has to clear AA in both
+   themes, and a gradient makes that a per-pixel question with no honest
+   single answer — getComputedStyle().backgroundColor reports `transparent`
+   for one, and would measure the text against whatever happened to be behind
+   it. The gradient here is spent on the border instead, where nothing is
+   read. */
+.sc-gate {
+  --sc-gate-surface: #0d1120;
+  position: relative;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 30px 28px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--sc-gate-surface);
+  text-align: center;
+}
+
+/* The gradient edge, drawn as a masked ring rather than a background, so the
+   panel's own background stays one measurable colour. */
+.sc-gate::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.sc-gate-eyebrow {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+
+.sc-gate-title {
+  margin: 0 0 10px;
+  font-size: 25px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.sc-gate-text {
+  margin: 0 auto 18px;
+  max-width: 46ch;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.sc-gate-text strong { color: var(--text); }
+
+/* What is behind the door. Left-aligned inside a centred panel on purpose —
+   a list of three things is read down its left edge, not from the middle
+   out. */
+.sc-gate-list {
+  margin: 0 auto 20px;
+  padding: 0;
+  max-width: 46ch;
+  list-style: none;
+  text-align: left;
+  display: grid;
+  gap: 9px;
+}
+.sc-gate-list li {
+  position: relative;
+  padding-left: 26px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.sc-gate-list li::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 0.55em;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cyan);
+}
+
+.sc-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* "Already a member?" — a plain link, because it is the smaller of the two
+   roads, and a second filled button would present them as a choice between
+   equals when nearly everyone reading this panel wants the first one. */
+.sc-gate-alt {
+  margin: 14px 0 0;
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.sc-gate-alt a {
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The word doing the most work on this panel. Kept as a sentence rather than
+   a badge: "Free" as a chip reads like marketing, "free" in a sentence that
+   says what free means reads like a fact — and it is one. Nothing in this
+   codebase checks a plan before letting a member play PromptArena, open
+   Connect, or use any of the AI features. */
+.sc-gate-note {
+  margin: 16px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* The tease.
+
+   Abstract shapes, never invented people. A visitor should be able to see
+   that Connect is a directory of real profiles without this page making up a
+   single one of them — there are actual members and actual EduHackAI
+   participants behind that grant, and a convincing placeholder would be a
+   lie told in their name. So: blurred blocks, aria-hidden, no text at all. */
+.sc-tease {
+  position: relative;
+  /* Enough of the row clears the panel to read as cards with faces on them;
+     the rest is behind it. Measured in a browser rather than guessed — at
+     -90px only a 26px band showed and it read as a rendering artefact. */
+  margin: 0 0 -62px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  filter: blur(6px);
+  opacity: 0.62;
+  pointer-events: none;
+  user-select: none;
+  /* Fades out into the panel that sits over it, so the two read as one object
+     rather than as content someone forgot to load. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 82%);
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 82%);
+}
+.sc-tease-card {
+  height: 116px;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 12px;
+  align-content: start;
+}
+.sc-tease-dot {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
+  opacity: 0.5;
+}
+.sc-tease-lines { display: grid; gap: 8px; align-content: start; padding-top: 5px; }
+.sc-tease-lines span {
+  display: block;
+  height: 9px;
+  border-radius: 5px;
+  background: var(--text-muted);
+  opacity: 0.34;
+}
+.sc-tease-lines span:nth-child(2) { width: 72%; }
+.sc-tease-lines span:nth-child(3) { width: 48%; }
+
+/* Stacking. `filter` on the tease creates a containing block of its own, so
+   the panel is lifted above it rather than the tease pushed behind. */
+.sc-gate-stack { position: relative; }
+.sc-gate-stack > .sc-gate { position: relative; z-index: 1; }
+
+/* Light mode.
+   White for the panel rather than a tinted surface: it is the only element on
+   the page claiming to be a door, and the page behind it is already #f4f7fc.
+   Contrast measured on both surfaces with the site's own tokens —
+     dark  (#0d1120): --text 17.6:1  --text-secondary 8.3:1
+                      --text-muted 5.5:1  --cyan 10.5:1
+     light (#ffffff): --text 18.1:1  --text-secondary 7.5:1
+                      --text-muted 5.8:1  --cyan 5.4:1
+   The .btn-glow CTA inside carries its own already-verified pair (#050615 on
+   the dark gradient, #fff on the light one) and is not restyled here. */
+html.light-mode .sc-gate {
+  --sc-gate-surface: #ffffff;
+  box-shadow: 0 10px 34px rgba(16, 22, 39, 0.07);
+}
+html.light-mode .sc-gate::before { opacity: 0.42; }
+html.light-mode .sc-tease-lines span { opacity: 0.42; }
+
+/* Phones, down to 375px. The panel gives up its side padding before it gives
+   up its margin, so nothing reaches the viewport edge, and the CTA goes full
+   width — a 999px pill centred on a narrow screen is a smaller target than it
+   looks. */
+@media (max-width: 560px) {
+  .sc-gate { padding: 24px 18px; border-radius: 14px; }
+  .sc-gate-title { font-size: 21px; }
+  .sc-gate-text { font-size: 14.5px; }
+  .sc-gate-actions { flex-direction: column; align-items: stretch; }
+  .sc-gate-actions .btn { justify-content: center; width: 100%; }
+  .sc-tease { grid-template-columns: 1fr; margin-bottom: -58px; }
+  .sc-tease-card:nth-child(n + 3) { display: none; }
+}
