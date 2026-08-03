@@ -116,6 +116,38 @@ if (user) {
 // no data and no failed request to point at. Anything `loadDataset` reads at
 // call time has to be initialised before line 80.
 
+// ⚠ PostgREST caps a single response at its own `max-rows` setting — 1000 on
+// this project — no matter what `limit` the client asks for. So
+// `.limit(3000)` returned 1000 and the page could not tell that from "there
+// are only 1000 rows": it reported "showing 1000 of 1134, the browser loads at
+// most 3000 and the club has passed that", which is three claims of which only
+// the first is true. Measured in the browser, not deduced — the request said
+// limit=3000 and 1000 rows came back.
+//
+// It mattered beyond the wording. Every count on this page is computed from
+// the rows the browser holds, so "6 people need a personal email" was six out
+// of the first thousand, with 134 records never examined. An undercount on
+// that particular tile is people who cannot sign in and do not appear on the
+// list of people who cannot sign in.
+//
+// Paging explicitly is the fix. A stable sort key is required or `range()`
+// windows can overlap and miss rows between requests — the same defect 0028
+// paid for with `sort_id`.
+const PAGE_ROWS = 1000;
+
+async function readAllRows(table, orderBy) {
+  const rows = [];
+  for (let from = 0; from < ROW_LIMIT; from += PAGE_ROWS) {
+    const to = Math.min(from + PAGE_ROWS, ROW_LIMIT) - 1;
+    const res = await supabase.from(table).select("*").order(orderBy).range(from, to);
+    if (res.error) return { data: null, error: res.error };
+    const batch = res.data || [];
+    rows.push(...batch);
+    if (batch.length < to - from + 1) break;   // last page
+  }
+  return { data: rows, error: null };
+}
+
 async function loadDataset() {
   const ds = DATASETS[state.dataset];
   document.getElementById("dm-dataset-note").textContent = ds.note;
@@ -129,7 +161,7 @@ async function loadDataset() {
   // so a field that is not here is a field nothing on this page can write.
   const [fieldRes, rowRes] = await Promise.all([
     supabase.rpc("data_field_stats", { p_table: state.dataset }),
-    supabase.from(state.dataset).select("*").limit(ROW_LIMIT),
+    readAllRows(state.dataset, ds.key),
   ]);
 
   if (fieldRes.error) {
@@ -163,7 +195,7 @@ async function loadDataset() {
   // is healthy".
   state.linkStatusOk = false;
   if (state.dataset === "marketing_contacts") {
-    const link = await supabase.from("contact_link_status").select("*").limit(ROW_LIMIT);
+    const link = await readAllRows("contact_link_status", "id");
     if (link.error) {
       warn(
         "Couldn't read the Microsoft 365 mapping: " + link.error.message +
@@ -220,12 +252,13 @@ function renderTruncation() {
     '<div class="ad-msg warn">' +
       "<strong>This page is showing " + got + " of " + total + " " +
       escapeHtml(ds.label.toLowerCase()) + ".</strong> " +
-      "The browser loads at most " + ROW_LIMIT + " records at a time, and the club has passed that. " +
+      "The page reads in batches and stops at " + ROW_LIMIT + " records, because beyond that it is " +
+      "several megabytes of personal data sitting in a browser tab. " +
       "Everything computed from the list &mdash; the counts above, the search, the segments, and " +
       "<em>the records an export contains</em> &mdash; covers those " + got + " only. " +
       "Export with <em>the whole table</em> ticked to get all " + total + ", and treat the tiles above as " +
-      "a count of what is loaded rather than of the club. Raising this properly means server-side paging, " +
-      "which is a change to this page and not a setting." +
+      "a count of what is loaded rather than of the club. Raising " + ROW_LIMIT + " is a one-line change; " +
+      "showing everything without holding it all at once is not." +
     "</div>";
 }
 
