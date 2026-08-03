@@ -77,6 +77,11 @@ const state = {
   planCsv: "",
 };
 
+// Declared before the top-level await below, because `loadDataset` reads it on
+// its first line and `const` bindings are not available before their
+// declaration is evaluated. See the note above `loadDataset` itself.
+const ROW_LIMIT = 3000;
+
 const user = await requireStaff();
 if (user) {
   state.user = user;
@@ -102,7 +107,14 @@ if (user) {
 // `data_field_stats` already returns the real `count(*)` of the table, so the
 // comparison costs nothing extra — and it is exact, rather than the usual
 // "we got back exactly the limit, so there is probably more" guess.
-const ROW_LIMIT = 3000;
+//
+// ⚠ ROW_LIMIT is declared ABOVE the top-level `await loadDataset()`, not here.
+// It was here, and `const` is not hoisted the way `function` is: the module
+// body ran `loadDataset()` first, hit the temporal dead zone on the very first
+// query, and threw `Cannot access 'ROW_LIMIT' before initialization` before a
+// single request left the browser. The page then sat on its placeholders with
+// no data and no failed request to point at. Anything `loadDataset` reads at
+// call time has to be initialised before line 80.
 
 async function loadDataset() {
   const ds = DATASETS[state.dataset];
