@@ -181,11 +181,28 @@ class ChallengeError extends Error {
 // by wall clock rather than attempt count alone, so a function killed mid-retry
 // never reaches the caller as a dead connection instead of the 429 it could
 // have acted on. See that file for the full argument.
+//
+// ⚠ RETRY_RESERVE_MS MUST NOT BE LESS THAN ATTEMPT_TIMEOUT_MS, and it was:
+// 25,000 of reserve against a 45,000 attempt. `planRetry` describes the reserve
+// as "room for the attempt the sleep is *for*", so a reserve below the longest
+// an attempt may run permitted a retry to start at 25s and run to 70s — 20s
+// past the 50s deadline the same block sets.
+//
+// `promptarena-judge` and `write-contact-email` both set reserve EXACTLY equal
+// to attempt, which is the correct form. The deadline moves with it, because
+// 50s of deadline against a 45s reserve leaves a retry 5s of elapsed time to
+// fit inside — and one call that writes a whole batch of challenges has never
+// finished in 5s, so the ceiling escalation this file's `askModel` is built
+// around would never once have run. 90/45/45 is `promptarena-judge`'s shape,
+// and that function has the same 45s attempt timeout as this one.
+//
+// Worst case is an attempt starting at 45s and being aborted at 90s, inside the
+// platform's 150s with room for the bank read and the insert.
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_MS = 1_000;
 const RETRY_CAP_MS = 8_000;
-const RETRY_DEADLINE_MS = 50_000;
-const RETRY_RESERVE_MS = 25_000;
+const RETRY_DEADLINE_MS = 90_000;
+const RETRY_RESERVE_MS = 45_000;
 const ATTEMPT_TIMEOUT_MS = 45_000;
 
 // One model call produces the whole batch. Asking for five challenges in one

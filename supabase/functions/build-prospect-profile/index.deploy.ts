@@ -184,7 +184,23 @@ class ProfileError extends Error {
 //   * every attempt is aborted at ATTEMPT_TIMEOUT_MS, so one hung socket
 //     cannot silently consume the whole budget.
 //
-// Worst case is therefore an attempt starting at 50s and being aborted at 80s
+// ⚠ RETRY_RESERVE_MS MUST NOT BE LESS THAN ATTEMPT_TIMEOUT_MS, and it was:
+// 15,000 of reserve against a 30,000 attempt. The reserve is defined two
+// paragraphs up as "room for the attempt itself", so a reserve smaller than the
+// longest an attempt may run is not a reserve — it is a bet that the attempt
+// will be quick. Taken at face value the old numbers permitted a retry to start
+// at 35s and run to 65s, overshooting the 50s deadline by 15s: the invariant
+// this block states was broken by the constants directly underneath it.
+//
+// `promptarena-judge` and `write-contact-email` both set reserve EXACTLY equal
+// to attempt, which is the correct form. The deadline moves with it — 50s of
+// deadline against a 30s reserve would leave a retry only 20s of elapsed time
+// to fit inside, which silently disables the escalation retry for exactly the
+// slow calls that need it. 75/30/30 is `write-contact-email`'s shape, and that
+// function has the same 30s attempt timeout as this one, so the two agree
+// rather than each guessing.
+//
+// Worst case is therefore an attempt starting at 45s and being aborted at 75s
 // — comfortably inside 150s, with the margin left for the Supabase client
 // handshake, the auth lookup and the response write.
 //
@@ -196,8 +212,8 @@ class ProfileError extends Error {
 const RETRY_MAX_ATTEMPTS = 3;
 const RETRY_BASE_MS = 1_000;
 const RETRY_CAP_MS = 8_000;
-const RETRY_DEADLINE_MS = 50_000;
-const RETRY_RESERVE_MS = 15_000;
+const RETRY_DEADLINE_MS = 75_000;
+const RETRY_RESERVE_MS = 30_000;
 const ATTEMPT_TIMEOUT_MS = 30_000;
 
 // ============================================================
