@@ -1101,7 +1101,12 @@ body.lightbox-open { overflow: hidden; }
    background-image to none — at equal specificity. Same weight means the
    later rule wins, so the override has to sit after it or the wash silently
    vanishes on a light page. */
-.card-arena:hover {
+/* Scoped to `a` on purpose. While PromptArena is closed to members the home
+   card is a <div>, and a card that lifts and glows under the cursor is a card
+   that says "click me" — the one thing this one must not say. Restoring the
+   link restores the hover with it, because the selector keys off the element
+   rather than a class somebody has to remember to add back. */
+a.card-arena:hover {
   border-color: var(--arena-edge);
   box-shadow: 0 12px 40px var(--arena-glow);
 }
@@ -1113,7 +1118,7 @@ body.lightbox-open { overflow: hidden; }
   background: linear-gradient(135deg, rgba(255, 122, 44, 0.26), rgba(255, 62, 70, 0.16));
   border-color: var(--arena-edge);
 }
-.card-arena:hover .card-icon { box-shadow: 0 10px 26px var(--arena-glow); }
+a.card-arena:hover .card-icon { box-shadow: 0 10px 26px var(--arena-glow); }
 
 /* "Free to play" is the whole pitch: every signed-in member gets in, there is
    no tier gate, and saying so is what turns a link into an invitation. */
