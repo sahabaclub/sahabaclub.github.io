@@ -3696,3 +3696,485 @@ html.light-mode .sc-tease-lines span { opacity: 0.42; }
   .sc-tease { grid-template-columns: 1fr; margin-bottom: -58px; }
   .sc-tease-card:nth-child(n + 3) { display: none; }
 }
+
+/* ============================================================
+   HACKATHONS — medal cards, round disclosures, interest dialog
+   ------------------------------------------------------------
+   Used only by hackathons.html / hackathons-ui.js. The older `hk-`
+   rules for that page still live in a <style> block inside
+   hackathons.html; everything added for the medal/tab/dialog work
+   lives here, and nothing here reuses a class name from there.
+
+   Colour method. Every value below was measured rather than eyeballed,
+   in both themes, with the sheen overlay composited on at its maximum
+   alpha before measuring — a sweeping white highlight is part of the
+   background as far as a reader is concerned. Text is held to WCAG AA
+   4.5:1 (no exemption claimed for the large type), graphics to 1.4.11's
+   3:1. The worst case for each gradient is its lightest stop in dark
+   theme and its darkest stop in light theme, and that is the stop the
+   numbers below refer to.
+
+     dark   gold   card #4d3a0e +10% white sheen -> #5f4e26
+              team name  --text  #f3f4f8  7.34:1
+              place      #f6dda2          6.06:1
+              sub        #cfd4e2          5.44:1
+              rim        #f0c65a          4.96:1  (graphic, needs 3)
+              trophy     #c08b1e on disc  6.63:1  (graphic, needs 3)
+     dark   silver card #414963 + sheen -> #545b73
+              6.12 / 5.48 / 4.54 / 4.85 / 7.92
+     dark   bronze card #4e3520 + sheen -> #604936
+              7.63 / 5.31 / 5.66 / 3.61 / 4.71
+     light  gold   card #eed898 (sheen only lightens it, so it can only help)
+              team name #101627 12.79:1, place #5a3f06 6.94:1,
+              sub #3f4759 6.61:1, disc #20232c on #fdf6e2 14.54:1,
+              trophy #c08b1e on disc 5.20:1
+     light  silver 12.82 / 8.61 / 6.63 / 15.03 / 6.21
+     light  bronze 10.96 / 6.08 / 5.66 / 14.34 / 3.69
+
+   Gold on a light page is the classic AA failure and it is why the light
+   cards are pale wheat with near-black text rather than saturated gold
+   with gold text: the saturated version measured 1.02:1 and was thrown
+   away. The one thing no dark colour could satisfy is the medallion disc
+   against the dark-theme card — even pure black reaches only 2.48:1 on
+   the gold card — so the medallion's identifying edge is its bright
+   metallic rim, which clears 3:1 on all three tiers, and the dark disc
+   behind it is depth only.
+   ============================================================ */
+
+/* ---- The sprite that carries the three trophies ---- */
+.hk-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* ---- Coming soon: the next round, before it has dates ---- */
+.hk-soon {
+  position: relative;
+  overflow: hidden;
+  margin: 0 0 26px;
+  padding: 26px 26px 24px;
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  background:
+    radial-gradient(720px 300px at 12% -20%, rgba(139, 92, 246, 0.16), transparent 62%),
+    radial-gradient(600px 280px at 92% 0%, rgba(34, 211, 238, 0.12), transparent 62%),
+    var(--glass);
+}
+html.light-mode .hk-soon {
+  background:
+    radial-gradient(720px 300px at 12% -20%, rgba(109, 40, 217, 0.10), transparent 62%),
+    radial-gradient(600px 280px at 92% 0%, rgba(14, 116, 144, 0.09), transparent 62%),
+    rgba(255, 255, 255, 0.7);
+}
+.hk-soon-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--cyan);
+}
+.hk-soon-name {
+  margin: 6px 0 0;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.14;
+}
+.hk-soon-tagline { margin: 6px 0 0; font-size: 15.5px; color: var(--text-secondary); }
+.hk-soon-desc {
+  margin: 12px 0 0;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+.hk-soon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+.hk-soon-note { margin: 0; font-size: 13px; color: var(--text-muted); }
+
+/* Early-bird pill. #f6dda2 on the gold tint measures 10.98:1 in dark and
+   #6d4708 on it 7.14:1 in light. */
+.hk-earlybird {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #f6dda2;
+  border: 1px solid rgba(224, 168, 62, 0.45);
+  background: rgba(224, 168, 62, 0.14);
+}
+html.light-mode .hk-earlybird {
+  color: #6d4708;
+  border-color: rgba(154, 100, 19, 0.45);
+  background: rgba(224, 168, 62, 0.20);
+}
+
+/* ============================================================
+   Round disclosure — a real <button aria-expanded> controlling a region
+   ============================================================ */
+.hk-round-h { margin: 0; }
+.hk-round-toggle {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 4px 0 2px;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.hk-round-toggle:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+.hk-round-label { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+.hk-round-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text-secondary);
+  transition: transform 0.22s ease, color 0.22s ease;
+}
+.hk-round-caret svg { width: 17px; height: 17px; }
+.hk-round-toggle[aria-expanded="true"] .hk-round-caret { transform: rotate(180deg); color: var(--text); }
+.hk-round-toggle:hover .hk-round-caret { color: var(--text); border-color: var(--violet); }
+.hk-round-cue {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.hk-round-panel { padding-top: 4px; }
+.hk-round-panel[hidden] { display: none; }
+
+/* ============================================================
+   Medal tiers — gold 1st, silver 2nd, bronze 3rd
+   ============================================================ */
+.hk-medals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0 6px;
+}
+/* A round with fewer than three recorded placings gets fewer cards; the
+   grid is never padded with an empty slot that would read as "nobody". */
+.hk-medals.is-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.hk-medals.is-1 { grid-template-columns: minmax(0, 1fr); }
+
+.hk-medal {
+  --hk-disc: #07080c;
+  --hk-ink-sub: #cfd4e2;
+  --hk-sheen: 0.10;
+
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 22px 18px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--hk-edge);
+  background: linear-gradient(152deg, var(--hk-card-1) 0%, var(--hk-card-2) 46%, var(--hk-card-3) 100%);
+  text-align: center;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+}
+.hk-medal.is-gold {
+  --hk-card-1: #2b1f07; --hk-card-2: #4d3a0e; --hk-card-3: #1d1405;
+  --hk-rim: #f0c65a; --hk-edge: rgba(240, 198, 90, 0.55); --hk-ink-accent: #f6dda2;
+}
+.hk-medal.is-silver {
+  --hk-card-1: #272c3a; --hk-card-2: #414963; --hk-card-3: #1b1f2a;
+  --hk-rim: #d5dbe8; --hk-edge: rgba(213, 219, 232, 0.5); --hk-ink-accent: #e3e8f2;
+}
+.hk-medal.is-bronze {
+  --hk-card-1: #2e2011; --hk-card-2: #4e3520; --hk-card-3: #221709;
+  --hk-rim: #e39a5c; --hk-edge: rgba(227, 154, 92, 0.5); --hk-ink-accent: #f0c6a0;
+}
+html.light-mode .hk-medal {
+  --hk-disc: #20232c;
+  --hk-ink-sub: #3f4759;
+  --hk-sheen: 0.55;
+  box-shadow: 0 10px 26px rgba(16, 22, 39, 0.10);
+}
+html.light-mode .hk-medal.is-gold {
+  --hk-card-1: #fdf6e2; --hk-card-2: #eed898; --hk-card-3: #fbefc9;
+  --hk-edge: rgba(154, 100, 19, 0.42); --hk-ink-accent: #5a3f06;
+}
+html.light-mode .hk-medal.is-silver {
+  --hk-card-1: #f9fafc; --hk-card-2: #d3dae7; --hk-card-3: #eff2f7;
+  --hk-edge: rgba(70, 80, 100, 0.36); --hk-ink-accent: #2f3646;
+}
+html.light-mode .hk-medal.is-bronze {
+  --hk-card-1: #fdf3ea; --hk-card-2: #e7c49d; --hk-card-3: #f8ebdf;
+  --hk-edge: rgba(138, 79, 25, 0.4); --hk-ink-accent: #63380f;
+}
+
+/* Two layers of lustre. ::before is a fixed corner highlight and never
+   moves, so the card still reads as metal when the sweep is switched off
+   for reduced motion. ::after is the sweep, and its resting position is
+   mid-card — that matters, because with `animation: none` the element
+   keeps whatever background-position it starts with. */
+.hk-medal::before,
+.hk-medal::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: -1; }
+.hk-medal::before {
+  background:
+    radial-gradient(120% 70% at 22% -10%, rgba(255, 255, 255, 0.20), transparent 58%),
+    radial-gradient(90% 60% at 88% 108%, rgba(0, 0, 0, 0.22), transparent 60%);
+}
+html.light-mode .hk-medal::before {
+  background:
+    radial-gradient(120% 70% at 22% -10%, rgba(255, 255, 255, 0.75), transparent 58%),
+    radial-gradient(90% 60% at 88% 108%, rgba(16, 22, 39, 0.07), transparent 60%);
+}
+.hk-medal::after {
+  background: linear-gradient(
+    104deg,
+    rgba(255, 255, 255, 0) 34%,
+    rgba(255, 255, 255, var(--hk-sheen)) 47%,
+    rgba(255, 255, 255, 0) 60%
+  );
+  background-size: 280% 100%;
+  background-position: 50% 0;
+  background-repeat: no-repeat;
+  animation: hk-sheen-sweep 7s ease-in-out infinite;
+}
+@keyframes hk-sheen-sweep {
+  0%   { background-position: 118% 0; }
+  55%  { background-position: -18% 0; }
+  100% { background-position: 118% 0; }
+}
+
+/* The medallion: dark disc, bright metallic rim, trophy on top. */
+.hk-medal-badge {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 92px;
+  height: 92px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--hk-disc);
+  box-shadow:
+    0 0 0 3px var(--hk-rim),
+    0 0 0 5px rgba(0, 0, 0, 0.35),
+    0 0 26px -4px var(--hk-rim);
+}
+.hk-medal-trophy { width: 58px; height: 58px; display: block; }
+.hk-medal-place {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--hk-ink-accent);
+}
+.hk-medal-team {
+  margin: 2px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.hk-medal-sub { margin-top: 4px; font-size: 12.5px; font-weight: 600; color: var(--hk-ink-sub); }
+
+/* ============================================================
+   Interest dialog
+   ============================================================ */
+.hk-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+/* Spelled out because [hidden] in the UA sheet loses to the author
+   `display: flex` above — the same trap .pod-modal and .lightbox carry. */
+.hk-modal[hidden] { display: none; }
+.hk-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(3, 6, 14, 0.82);
+  backdrop-filter: blur(4px);
+}
+html.light-mode .hk-modal-backdrop { background: rgba(16, 22, 39, 0.55); }
+body.hk-modal-open { overflow: hidden; }
+
+.hk-modal-box {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 26px 26px 24px;
+  border-radius: 20px;
+  border: 1px solid var(--glass-border);
+  background: #10131c;
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.55);
+}
+html.light-mode .hk-modal-box {
+  background: #ffffff;
+  box-shadow: 0 26px 70px rgba(16, 22, 39, 0.18);
+}
+.hk-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.hk-modal-close:hover { color: var(--text); }
+.hk-modal-close:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
+/* Carries tabindex="-1": on success the form is replaced and focus is moved
+   here, so a screen reader reads the new heading rather than being left on a
+   button that no longer exists. */
+.hk-modal-title {
+  margin: 0 40px 8px 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.hk-modal-title:focus-visible { outline: 2px solid var(--violet); outline-offset: 4px; border-radius: 8px; }
+.hk-modal-intro {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.hk-fields { display: grid; gap: 13px; }
+.hk-field { display: flex; flex-direction: column; gap: 5px; }
+.hk-field label { font-size: 12.5px; font-weight: 700; color: var(--text-secondary); }
+.hk-field input {
+  width: 100%;
+  padding: 10px 13px;
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+}
+html.light-mode .hk-field input { background: #ffffff; }
+.hk-field input:focus-visible { outline: 2px solid var(--violet); outline-offset: 1px; }
+.hk-field input[aria-invalid="true"] { border-color: #f87171; }
+html.light-mode .hk-field input[aria-invalid="true"] { border-color: #b91c1c; }
+.hk-field-error {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fca5a5;
+}
+html.light-mode .hk-field-error { color: #b91c1c; }
+.hk-field-error[hidden] { display: none; }
+
+.hk-form-error {
+  margin: 14px 0 0;
+  padding: 11px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.10);
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #fca5a5;
+}
+html.light-mode .hk-form-error {
+  color: #b91c1c;
+  border-color: rgba(185, 28, 28, 0.35);
+  background: rgba(185, 28, 28, 0.07);
+}
+.hk-form-error[hidden] { display: none; }
+
+.hk-form-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.hk-form-actions .btn { justify-content: center; }
+.hk-form-actions .btn[disabled] { opacity: 0.65; cursor: progress; }
+.hk-form-foot { margin: 12px 0 0; font-size: 11.5px; line-height: 1.55; color: var(--text-muted); }
+
+/* Pending state — a ring that spins, and simply stops for reduced motion. */
+.hk-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(5, 6, 21, 0.35);
+  border-top-color: #050615;
+  animation: hk-spin 0.7s linear infinite;
+}
+@keyframes hk-spin { to { transform: rotate(360deg); } }
+
+.hk-done { text-align: center; padding: 6px 0 2px; }
+.hk-done[hidden] { display: none; }
+.hk-done-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 50%;
+  color: #6ee7a8;
+  border: 1px solid rgba(110, 231, 168, 0.45);
+  background: rgba(52, 211, 153, 0.13);
+}
+html.light-mode .hk-done-mark {
+  color: #166534;
+  border-color: rgba(22, 101, 52, 0.4);
+  background: rgba(22, 163, 74, 0.11);
+}
+.hk-done-mark svg { width: 27px; height: 27px; }
+.hk-done-text { margin: 0 0 18px; font-size: 14.5px; line-height: 1.6; color: var(--text-secondary); }
+
+/* ---- Reduced motion ------------------------------------------------
+   Both spellings, matching the six blocks the repo already ships: the
+   media query for the OS setting, and html.reduce-motion for the site's
+   own Settings toggle. The sheen and the caret stop where they are
+   rather than jumping, because their resting state is the designed one. */
+@media (prefers-reduced-motion: reduce) {
+  .hk-medal::after { animation: none; }
+  .hk-round-caret { transition: none; }
+  .hk-spin { animation: none; border-top-color: transparent; }
+}
+html.reduce-motion .hk-medal::after { animation: none; }
+html.reduce-motion .hk-round-caret { transition: none; }
+html.reduce-motion .hk-spin { animation: none; border-top-color: transparent; }
+
+@media (max-width: 720px) {
+  .hk-medals, .hk-medals.is-2 { grid-template-columns: 1fr; }
+  .hk-soon { padding: 22px 18px 20px; }
+  .hk-soon-name { font-size: 26px; }
+  .hk-modal { padding: 14px; }
+  .hk-modal-box { padding: 22px 18px 20px; }
+  .hk-form-actions { flex-direction: column; align-items: stretch; }
+  .hk-round-cue { display: none; }
+}
