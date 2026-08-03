@@ -201,12 +201,30 @@ const LEGACY_JUDGE_FINDINGS = [
 
 // Exported so the harness can drive `renderDashboard` with fixtures shaped like
 // real query results rather than guessing at the keys.
+//
+// ⚠ EVERY SPEC MUST CARRY AN `order`, AND IT MUST BE A TOTAL KEY.
+// `fetchAll` below walks these in pages of 1,000 with OFFSET/LIMIT
+// (`.range(from, from + PAGE - 1)`). SQL gives an OFFSET no defined order
+// unless the query has an ORDER BY, so without one the second page is not
+// "the rows after the first page" — it is whatever the planner returned that
+// time. Some rows come back twice and some never come back at all, and on a
+// page whose entire purpose is counting submissions and players that is a
+// wrong number with nothing to notice it by.
+//
+// It is invisible today only because every one of these is under 1,000 rows,
+// which is exactly how it would ship and then go wrong later, quietly, on the
+// first table that grows. `promptarena_submissions` grows without limit.
+//
+// This is the same defect migration 0028 paid for with `sort_id`; the fix is
+// the same shape. The chosen column must be unique across the whole result —
+// `id` for the base tables, the view's own key where the view aggregates.
 export const SOURCE_SPECS = [
   {
     key: "submissions",
     name: "Live practice submissions",
     table: "promptarena_submissions",
     columns: "id,user_id,challenge_id,judge_status,score,judge_model,judge_version,judge_error,rubric_scores,submitted_at,judged_at",
+    order: "id",
     granted: true,
     note: "Granted to authenticated in 0029; staff read every row through the \u201cstaff read\u201d policy.",
   },
@@ -215,6 +233,7 @@ export const SOURCE_SPECS = [
     name: "Challenge deck",
     table: "promptarena_challenge_deck",
     columns: "id,title,difficulty,domain,target_audience,creativity,created_at",
+    order: "id",
     granted: true,
     note: "Active challenges only, and no rubric — the deck's column list is the boundary and this page has no business behind it.",
   },
@@ -223,6 +242,7 @@ export const SOURCE_SPECS = [
     name: "The six legacy events",
     table: "promptarena_legacy_event_summary",
     columns: "id,slug,name,held_on,date_last,is_single_day,has_judge_comments,judging_note,player_count,submission_count,scored_count,invalid_count",
+    order: "id",
     granted: true,
     note: "Counts only, no people. The one legacy route 0029 grants.",
   },
@@ -231,6 +251,8 @@ export const SOURCE_SPECS = [
     name: "Judge calibration",
     table: "promptarena_challenge_calibration_staff",
     columns: "*",
+    // One row per challenge, and the view renames `c.id` on the way out.
+    order: "challenge_id",
     granted: false,
     note: "0029 builds promptarena_challenge_calibration and grants it to nobody. Without the staff wrapper this page recomputes what it can from submissions — everything except completion_rate, which needs times_served.",
   },
@@ -239,6 +261,7 @@ export const SOURCE_SPECS = [
     name: "Legacy round scores",
     table: "promptarena_legacy_submission_validity",
     columns: "id,player_id,event_id,round_number,score,invalid_reason,matches_round5_artefact",
+    order: "id",
     granted: false,
     note: "Needed for the legacy half of the score distribution. The underlying table has RLS on and no policy at all.",
   },
@@ -247,6 +270,9 @@ export const SOURCE_SPECS = [
     name: "Legacy players and member matching",
     table: "promptarena_legacy_player_directory",
     columns: "*",
+    // One row per legacy player ROW (159 of them, 152 people), keyed on the
+    // underlying `promptarena_legacy_players.id` renamed to `player_id`.
+    order: "player_id",
     granted: false,
     note: "This is the \u201clink that\u201d half of the ask. It carries contact details, so it must be staff-gated inside the database, not here.",
   },
@@ -255,6 +281,9 @@ export const SOURCE_SPECS = [
     name: "Outreach segments",
     table: "promptarena_outreach_candidates",
     columns: "*",
+    // The view is `select distinct on (email_key) …`, so `email_key` is unique
+    // across the whole result by construction — one row per person.
+    order: "email_key",
     granted: false,
     note: "Mirrors tools/promptarena-campaign/stage-campaign.sql so the dashboard and the campaign cannot disagree about who would be mailed.",
   },
@@ -263,6 +292,7 @@ export const SOURCE_SPECS = [
     name: "Member profiles",
     table: "profiles",
     columns: "user_id,full_name,role,show_in_promptarena_ranking",
+    order: "user_id",
     granted: true,
     note: "Names the live players and identifies the staff accounts that have to come out of any ranking.",
   },
@@ -289,10 +319,26 @@ const PAGE = 1000;
 const MAX_ROWS = 50000;
 
 async function fetchAll(supabase, spec) {
+  // ⚠ Refused rather than silently paged unordered. A spec with no `order` is
+  // the defect described above, and the only way to keep it from coming back
+  // is to make it impossible to add a source without one. This surfaces as a
+  // named source in the "where the numbers came from" panel rather than as a
+  // count that is quietly wrong.
+  if (!spec.order) {
+    return {
+      status: "error",
+      detail: "This source has no `order` in SOURCE_SPECS. Paging it would use OFFSET with no " +
+        "ORDER BY, which has no defined row order past the first page — some rows would be " +
+        "counted twice and others dropped. Give the spec a total key.",
+      rows: [],
+    };
+  }
+
   const rows = [];
   for (let from = 0; from < MAX_ROWS; from += PAGE) {
-    let q = supabase.from(spec.table).select(spec.columns).range(from, from + PAGE - 1);
-    if (spec.order) q = q.order(spec.order, { ascending: true });
+    const q = supabase.from(spec.table).select(spec.columns)
+      .order(spec.order, { ascending: true })
+      .range(from, from + PAGE - 1);
     const { data, error } = await q;
     if (error) return { status: classifyError(error), detail: error.message, rows: [] };
     rows.push.apply(rows, data || []);
