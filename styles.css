@@ -226,31 +226,79 @@ html.light-mode .logo-img-light { display: block; }
 /* The small-phone slogan layout lives further down the file, after the
    .nav.has-drawer rules it has to override. */
 
-/* Dark / light switch in the desktop nav */
-.theme-toggle {
+/* Who you are, in the header
+   ------------------------------------------------------------
+   This slot used to hold the dark/light switch, which now lives in the
+   footer. Signed out it is the Join CTA; signed in it is a circular avatar
+   with the member's name, linking straight to the dashboard. Both states are
+   in the markup on every page and this decides which one is drawn, so
+   header-identity.js only has to set one class on <html> — no layout is
+   built in JavaScript, and nothing shifts once it runs. */
+.nav-identity { display: inline-flex; align-items: center; flex-shrink: 0; }
+
+[data-identity-me] { display: none; }
+html.sc-signed-in [data-identity-join] { display: none; }
+html.sc-signed-in [data-identity-me] { display: inline-flex; }
+
+.nav-identity-me {
+  align-items: center;
+  gap: 9px;
+  max-width: 220px;
+  padding: 3px 14px 3px 3px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text);
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+.nav-identity-me:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+html.light-mode .nav-identity-me:hover {
+  background: rgba(16, 22, 39, 0.06);
+  border-color: rgba(16, 22, 39, 0.22);
+}
+
+/* The circle. Club avatars are generated illustrations rather than
+   photographs, and a member who has never generated one gets the first
+   letter of their name on the brand gradient instead — measured for AA
+   against both gradient stops in each theme, which is why the letter is
+   near-black on the dark palette and white on the light one. */
+.nav-identity-avatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
   border-radius: 50%;
-  border: 1px solid var(--glass-border);
-  background: var(--glass);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: color 0.2s, background 0.2s, transform 0.2s;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: #05070d;
+  background: linear-gradient(135deg, var(--violet), var(--cyan));
 }
-.theme-toggle:hover { color: var(--text); background: rgba(255, 255, 255, 0.1); transform: translateY(-1px); }
-.theme-toggle:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
-.theme-icon { width: 19px; height: 19px; }
-/* Show the mode you'd switch TO: sun while dark, moon while light. */
-.theme-toggle .icon-moon { display: none; }
-html.light-mode .theme-toggle .icon-sun { display: none; }
-html.light-mode .theme-toggle .icon-moon { display: block; }
-html.light-mode .theme-toggle:hover { background: rgba(16, 22, 39, 0.07); }
+html.light-mode .nav-identity-avatar { color: #fff; }
+.nav-identity-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
 
-/* Dark / light choice inside the mobile Settings panel */
+.nav-identity-name {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Dark / light choice inside the mobile Settings panel, and in the footer */
 .theme-choice-row {
   display: flex;
   align-items: center;
@@ -504,13 +552,22 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
 /* On small phones the logo and buttons need the whole top row, so the slogan
    drops onto its own full-width line beneath them, set on a single line.
    This has to sit after the .nav.has-drawer nowrap rule to win over it. */
-/* Phones: the theme toggle comes out of the header — Settings in the menu
-   already carries the Dark/Light choice — and the space it frees lets the
-   slogan sit on the same row as the logo and the menu button. */
+/* Phones: the identity slot narrows rather than disappearing. The avatar is
+   the whole point of it, so that survives to the smallest screen; the name
+   beside it is what gets dropped, and below 460px so does the Join pill —
+   the drawer's own "Join the Club" row is the CTA at that width, and a third
+   control in the top bar is what pushes the slogan off it. */
 @media (max-width: 720px) {
-  .nav.has-drawer .nav-compact .theme-toggle { display: none; }
+  .nav-identity-me { max-width: 150px; padding-right: 10px; gap: 7px; }
+}
+@media (max-width: 560px) {
+  .nav-identity-name { display: none; }
+  .nav-identity-me { max-width: none; padding: 2px; gap: 0; }
+  .nav-identity-join { padding: 8px 13px; font-size: 13px; }
 }
 @media (max-width: 460px) {
+  .nav.has-drawer .nav-identity-join { display: none; }
+  .nav-identity-avatar { width: 32px; height: 32px; flex-basis: 32px; font-size: 13px; }
   .nav.has-drawer .nav-inner { flex-wrap: nowrap; gap: 10px; }
   .nav-slogan {
     flex: 1 1 auto;
@@ -1008,6 +1065,93 @@ body.lightbox-open { overflow: hidden; }
   color: var(--text);
 }
 .card-desc { font-size: 13px; color: var(--text-secondary); margin: 0; line-height: 1.55; }
+
+/* PromptArena's card
+   ------------------------------------------------------------
+   The arena is the only thing on this site you can play, and it looks
+   nothing like the rest of it on purpose — ember and red where the club is
+   violet and cyan. This card is the doorway, so it carries a hint of that
+   heat without the homepage catching fire: one warm accent, a warm frame,
+   and the club's own icon left in the club's own colours so the card still
+   belongs to the grid it sits in.
+
+   Every value is declared ON .card-arena, so it exists nowhere else on the
+   page. Nothing here reads app/promptarena.css — that file keeps its palette
+   under --pa-* names for exactly this reason, and this must not be the thing
+   that leaks it. The two palettes are related by eye, not by token.
+
+   Two accents wearing one name, because a mid-orange that sings on near
+   black is roughly 2:1 on white. Dark mode gets the ember; light mode gets a
+   burnt rust dark enough to read on a white card. Both measured against the
+   card's own surface — the surface is a gradient over a translucent glass
+   layer, so the check was made against the resolved stops rather than a
+   computed background colour, which would have reported `transparent` and
+   scored against the page behind it. */
+.card-arena {
+  --arena-accent: #ff9a52;
+  --arena-edge: rgba(255, 122, 44, 0.36);
+  --arena-glow: rgba(255, 108, 44, 0.26);
+  --arena-wash-a: rgba(255, 122, 44, 0.11);
+  --arena-wash-b: rgba(255, 62, 70, 0.05);
+  border-color: var(--arena-edge);
+  background-image: linear-gradient(155deg, var(--arena-wash-a), var(--arena-wash-b) 65%);
+}
+/* The light-mode half of this lives down in the LIGHT MODE section, because
+   `html.light-mode .card` sets the `background` shorthand — which resets
+   background-image to none — at equal specificity. Same weight means the
+   later rule wins, so the override has to sit after it or the wash silently
+   vanishes on a light page. */
+.card-arena:hover {
+  border-color: var(--arena-edge);
+  box-shadow: 0 12px 40px var(--arena-glow);
+}
+.card-arena:target {
+  border-color: var(--arena-edge);
+  box-shadow: 0 0 0 3px var(--arena-glow), 0 12px 40px var(--arena-glow);
+}
+.card-arena .card-icon {
+  background: linear-gradient(135deg, rgba(255, 122, 44, 0.26), rgba(255, 62, 70, 0.16));
+  border-color: var(--arena-edge);
+}
+.card-arena:hover .card-icon { box-shadow: 0 10px 26px var(--arena-glow); }
+
+/* "Free to play" is the whole pitch: every signed-in member gets in, there is
+   no tier gate, and saying so is what turns a link into an invitation. */
+.card-arena-badge {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--arena-edge);
+  background: var(--arena-wash-a);
+  color: var(--arena-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.card-arena-cue {
+  margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--arena-accent);
+  transition: transform 0.25s;
+}
+.card-arena:hover .card-arena-cue { transform: translateX(3px); }
+
+/* A slow breath on the icon tile — the arena's reactor idling, seen from the
+   doorway. Small enough not to nag on a page people read, and off entirely
+   for anyone who has asked for less movement (both the OS setting and the
+   site's own Reduce motion switch, which kills every animation globally). */
+@keyframes arena-idle {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 108, 44, 0); }
+  50%      { box-shadow: 0 0 22px 0 var(--arena-glow); }
+}
+.card-arena .card-icon { animation: arena-idle 4.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .card-arena .card-icon { animation: none; }
+  .card-arena-cue { transition: none; }
+}
 
 /* Stats — spheres drifting inside a lit rectangular stage */
 .stats {
@@ -2151,6 +2295,36 @@ html.light-mode .hl { background: rgba(139, 92, 246, 0.22); }
   opacity: 0.42;
 }
 
+/* The dark/light switch, in the footer of every page
+   ------------------------------------------------------------
+   It used to be a button in the header, which meant desktop visitors had no
+   other way to change theme — the Dark/Light pair in the mobile Settings
+   panel never shows above 820px. The header slot is the member's avatar now,
+   so the switch moved somewhere every visitor can reach it: not behind
+   sign-in, not behind a breakpoint.
+
+   Deliberately the same .theme-choice markup as the Settings panel. Both are
+   driven by the one [data-theme] handler in script.js, which re-syncs every
+   such button after each change — so the two controls are physically
+   incapable of showing different answers. */
+.footer-theme {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid var(--glass-border);
+}
+.footer-theme-label { font-size: 13px; color: var(--text-secondary); }
+.footer-theme .theme-choice-btn { padding: 7px 16px; font-size: 13px; }
+
+/* login.html and admin.html had no footer at all. They get one carrying
+   nothing but the switch, rather than losing the ability to change theme. */
+.footer-slim { padding-top: 24px; }
+.footer-slim .footer-theme { margin-top: 0; padding-top: 0; border-top: none; }
+
 @media (max-width: 720px) {
   .footer-top { justify-content: center; text-align: center; }
   .footer-signature { font-size: 19px; margin-top: 22px; }
@@ -2257,6 +2431,20 @@ html.light-mode .event-card,
 html.light-mode .signup-card {
   background: #fff;
   box-shadow: 0 2px 10px rgba(16, 22, 39, 0.05);
+}
+
+/* PromptArena's card on a light page. Has to be declared after the rule
+   above, which resets background-image at the same specificity. The ember
+   becomes a burnt rust: #ff9a52 reads beautifully on near-black and is about
+   2:1 on white, so it is not the same colour in both themes — only the same
+   idea. Measured on the card's own washed surface, not on the page. */
+html.light-mode .card-arena {
+  --arena-accent: #9c3407;
+  --arena-edge: rgba(156, 52, 7, 0.32);
+  --arena-glow: rgba(156, 52, 7, 0.2);
+  --arena-wash-a: rgba(255, 122, 44, 0.16);
+  --arena-wash-b: rgba(214, 60, 40, 0.07);
+  background-image: linear-gradient(155deg, var(--arena-wash-a), var(--arena-wash-b) 65%);
 }
 
 /* Stats stage — lighter surface, but the spheres keep their depth so the

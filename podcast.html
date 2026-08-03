@@ -38,25 +38,27 @@
     </a>
     <div class="nav-actions">
       <a href="index.html" class="nav-link">Home</a>
-      <a href="hackathons.html" class="nav-link">Hackathons</a>
       <a href="events.html" class="nav-link">Events</a>
+      <a href="hackathons.html" class="nav-link">Hackathons</a>
+      <a href="app/promptarena.html" class="nav-link">PromptArena</a>
       <a href="app/admin/index.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
-      <a href="index.html#join" class="btn btn-glow">Join free</a>
+      <a href="login.html" class="btn btn-glow" data-identity-join>Join free</a>
     </div>
     <p class="nav-slogan" aria-label="We don't teach tech, we coach IT">
       <span>We Don&rsquo;t Teach Tech,</span>
       <span>We Coach IT&hellip;</span>
     </p>
     <div class="nav-compact">
-      <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Switch to light mode" title="Switch to light mode">
-        <svg class="theme-icon icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="4.2"/>
-          <path d="M12 2.6v2.2M12 19.2v2.2M4.2 12H2M22 12h-2.2M6.3 6.3 4.8 4.8M19.2 19.2l-1.5-1.5M17.7 6.3l1.5-1.5M4.8 19.2l1.5-1.5"/>
-        </svg>
-        <svg class="theme-icon icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20.5 13.4A8.4 8.4 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z"/>
-        </svg>
-      </button>
+      <!-- Signed out: the Join CTA, straight to the signup page. Signed in:
+           the member's avatar and name, linking to the dashboard. Which one
+           shows is decided by header-identity.js before the page paints. -->
+      <div class="nav-identity">
+        <a href="login.html" class="btn btn-glow nav-identity-join" data-identity-join>Join the Club</a>
+        <a href="app/dashboard.html" class="nav-identity-me" data-identity-me aria-label="Your dashboard">
+          <span class="nav-identity-avatar" data-identity-avatar aria-hidden="true"></span>
+          <span class="nav-identity-name" data-identity-name></span>
+        </a>
+      </div>
       <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
         <span class="nav-toggle-bar"></span>
         <span class="nav-toggle-bar"></span>
@@ -66,15 +68,20 @@
   </div>
 </header>
 
+<!-- Runs synchronously, before first paint, so a signed-in member never sees
+     the Join CTA flash before their avatar. See the file for why not a module. -->
+<script src="header-identity.js"></script>
+
 <!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
 <nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
   <div class="mobile-menu-panel">
     <a class="mobile-menu-item" href="mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in" data-signin-link>Sign in</a>
-    <a class="mobile-menu-item is-primary" href="index.html#join">Join the Club</a>
+    <a class="mobile-menu-item is-primary" href="login.html" data-identity-join>Join the Club</a>
     <a class="mobile-menu-item" href="index.html">Home</a>
-    <a class="mobile-menu-item" href="hackathons.html">Hackathons</a>
     <a class="mobile-menu-item" href="events.html">Events</a>
+    <a class="mobile-menu-item" href="hackathons.html">Hackathons</a>
+    <a class="mobile-menu-item" href="app/promptarena.html">PromptArena</a>
     <a class="mobile-menu-item" href="podcast.html">Podcast</a>
     <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="app/admin/index.html">Admin</a>
 
@@ -179,6 +186,13 @@
       <a href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
       <a href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
       <a href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
+    </div>
+  </div>
+  <div class="footer-theme">
+    <span class="footer-theme-label" id="footer-theme-label">Appearance</span>
+    <div class="theme-choice" role="group" aria-labelledby="footer-theme-label">
+      <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+      <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
     </div>
   </div>
   <p class="footer-signature">We Don&rsquo;t Teach Tech, We Coach IT&hellip;</p>

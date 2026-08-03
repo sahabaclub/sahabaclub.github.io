@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PromptArena — Sahaba Club Admin</title>
+
+<!-- ⚠ THIS PAGE RENDERS PERSONAL EMAIL ADDRESSES AND MOBILE NUMBERS belonging
+     to 152 people who never signed up to this website. noindex/nofollow is the
+     least of the controls and the least reliable — the real ones are:
+
+       1. `requireStaff()` below, which sends a member away. A courtesy.
+       2. Every legacy view carries `public.is_staff()` INSIDE its own body.
+          Those views are `security_invoker = off`, so they read their base
+          tables with the owner's rights and RLS does not apply to them at all.
+          A predicate in the UI would be decoration; the predicate in the view
+          is the boundary. See tools/promptarena-dashboard/.
+       3. The three legacy tables have RLS on with no policy of any kind and
+          every grant revoked (0029), so even a staff account cannot reach them
+          except through a view that names them.
+
+     Point 2 is the one to re-read before editing anything here. -->
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<link rel="stylesheet" href="promptarena-admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body class="admin">
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>PromptArena</h1>
+      <p>Live practice and all six Microsoft&nbsp;Forms events on one screen, with the players matched to members where they are members.</p>
+    </div>
+
+    <div id="pa-warnings"></div>
+
+    <!-- Where every number on this page comes from, and whether it is actually
+         readable. This sits above the numbers rather than under them because an
+         empty database and a refused query both render as zero everywhere else. -->
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <h2>Where these numbers come from</h2>
+        <div class="ad-spacer"></div>
+        <span class="ad-cell-dim">Eight sources. A missing one is never shown as a zero.</span>
+      </div>
+      <div class="ad-panel-body">
+        <div class="pa-sources" id="pa-sources"></div>
+      </div>
+    </div>
+
+    <div class="pa-tabs" role="tablist">
+      <button class="pa-tab" role="tab" data-tab="overview" aria-selected="true">Overview</button>
+      <button class="pa-tab" role="tab" data-tab="events">Events<span class="pa-tab-count" id="pa-tab-events"></span></button>
+      <button class="pa-tab" role="tab" data-tab="people">Members &amp; matching<span class="pa-tab-count" id="pa-tab-people"></span></button>
+      <button class="pa-tab" role="tab" data-tab="outreach">Outreach<span class="pa-tab-count" id="pa-tab-outreach"></span></button>
+      <button class="pa-tab" role="tab" data-tab="judge">Judge quality</button>
+    </div>
+
+    <!-- ============ Overview ============ -->
+    <section data-panel="overview">
+      <div class="pa-tiles" id="pa-tiles"></div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>Score distribution</h2>
+          <div class="ad-spacer"></div>
+          <span class="ad-cell-dim">Marks out of 10 &middot; live and legacy stacked</span>
+        </div>
+        <div class="ad-panel-body">
+          <div id="pa-hist-caveat"></div>
+          <div class="pa-hist" id="pa-hist"></div>
+          <div id="pa-hist-legend"></div>
+        </div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>Live practice, month by month</h2>
+          <div class="ad-spacer"></div>
+          <span class="ad-cell-dim">Legacy events carry a registration timestamp, not a play time</span>
+        </div>
+        <div class="ad-panel-body" id="pa-activity"></div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>Top live players</h2>
+          <div class="ad-spacer"></div>
+          <label class="pa-toggle"><input type="checkbox" id="pa-show-staff"> Include staff accounts</label>
+        </div>
+        <div class="ad-panel-body" id="pa-players"></div>
+      </div>
+    </section>
+
+    <!-- ============ Events ============ -->
+    <section data-panel="events" hidden>
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>The six events</h2>
+          <div class="ad-spacer"></div>
+          <span class="ad-cell-dim">Caveats are shown beside the numbers they qualify</span>
+        </div>
+        <div class="ad-panel-body" id="pa-events"></div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>Did the import land what it should have?</h2>
+        </div>
+        <div class="ad-panel-body" id="pa-recon"></div>
+      </div>
+    </section>
+
+    <!-- ============ Members & matching ============ -->
+    <section data-panel="people" hidden>
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>Who among the players is already one of us</h2>
+          <div class="ad-spacer"></div>
+          <label class="pa-toggle"><input type="checkbox" id="pa-show-demo"> Include demo/staff accounts</label>
+        </div>
+        <div class="ad-panel-body">
+          <div id="pa-match-tiles"></div>
+          <div id="pa-match" style="margin-top:16px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Outreach ============ -->
+    <section data-panel="outreach" hidden>
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>The outreach list</h2>
+          <div class="ad-spacer"></div>
+          <a class="ad-btn ad-btn-sm" href="campaigns.html">Campaigns</a>
+        </div>
+        <div class="ad-panel-body">
+          <div id="pa-outreach-tiles"></div>
+          <div id="pa-outreach" style="margin-top:16px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Judge quality ============ -->
+    <section data-panel="judge" hidden>
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>Which challenges are too easy, too hard, or ignored</h2>
+        </div>
+        <div class="ad-panel-body" id="pa-calib"></div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>Which judge produced these marks</h2>
+          <div class="ad-spacer"></div>
+          <span class="ad-cell-dim">&ldquo;The judge got harsher&rdquo; is only answerable if the model is recorded</span>
+        </div>
+        <div class="ad-panel-body" id="pa-judgeruns"></div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>What the old Forms judge actually did</h2>
+        </div>
+        <div class="ad-panel-body" id="pa-legacy-judge"></div>
+      </div>
+    </section>
+
+    <p class="pa-foot">
+      Staff only. This page shows contact details for people who registered at an event and never
+      signed up here &mdash; that is what makes outreach possible and it is why the page is gated in the
+      database rather than in the browser. Nothing on this screen writes, queues or sends anything.
+      Campaign drafts are approved one at a time on the <a href="campaigns.html">Campaigns</a> screen.
+    </p>
+  </main>
+</div>
+
+<script type="module">
+  import { supabase } from "../../lib/supabase-client.js";
+  import { requireStaff, renderShell } from "../../lib/admin-guard.js";
+  import { loadSources, buildModel, renderDashboard, wireTabs } from "./promptarena-admin.js";
+
+  const user = await requireStaff();
+  if (user) {
+    renderShell(user, "promptarena.html");
+    wireTabs();
+
+    const opts = { includeStaff: false, includeDemo: false };
+    let model = null;
+
+    const staffBox = document.getElementById("pa-show-staff");
+    const demoBox = document.getElementById("pa-show-demo");
+    staffBox.addEventListener("change", function () {
+      opts.includeStaff = staffBox.checked;
+      if (model) renderDashboard(model, opts);
+    });
+    demoBox.addEventListener("change", function () {
+      opts.includeDemo = demoBox.checked;
+      if (model) renderDashboard(model, opts);
+    });
+
+    // ⚠ Every failure here is reported, never swallowed. A dashboard that
+    // renders zeros when its queries were refused is worse than one that will
+    // not load — the zeros look like answers.
+    try {
+      const sources = await loadSources(supabase);
+      model = buildModel(sources);
+      renderDashboard(model, opts);
+    } catch (err) {
+      document.getElementById("pa-warnings").innerHTML =
+        '<div class="ad-msg err">The dashboard could not load: ' +
+        String(err && err.message ? err.message : err).replace(/[&<>"']/g, "") +
+        "</div>";
+      throw err;
+    }
+  }
+</script>
+</body>
+</html>
