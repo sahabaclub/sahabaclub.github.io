@@ -43,7 +43,6 @@
     <div class="nav-actions">
       <a href="events.html" class="nav-link">Events</a>
       <a href="hackathons.html" class="nav-link">Hackathons</a>
-      <a href="app/promptarena.html" class="nav-link">PromptArena</a>
       <a href="app/connect.html" class="nav-link">Connect</a>
       <a href="podcast.html" class="nav-link">Podcast</a>
       <a href="app/admin/index.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
@@ -92,7 +91,6 @@
     <a class="mobile-menu-item is-primary" href="login.html" data-identity-join>Join the Club</a>
     <a class="mobile-menu-item" href="events.html">Events</a>
     <a class="mobile-menu-item" href="hackathons.html">Hackathons</a>
-    <a class="mobile-menu-item" href="app/promptarena.html">PromptArena</a>
     <a class="mobile-menu-item" href="app/connect.html">Connect</a>
     <a class="mobile-menu-item" href="podcast.html">Podcast</a>
     <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="app/admin/index.html">Admin</a>
@@ -314,14 +312,19 @@
         <p class="card-subtitle">Tech Talk with Zoka</p>
         <p class="card-desc">Our podcast: AI, cloud, and tech careers, with 20,000+ daily listeners.</p>
       </a>
-      <a class="card card-link card-arena" id="promptarena" href="app/promptarena.html">
+      <!-- Deliberately not a link. PromptArena is built and its admin side is
+           live, but it is not open to members yet, so the ecosystem keeps the
+           icon and says plainly that it is coming rather than offering a door
+           that opens onto an empty room. Restoring it is this element becoming
+           an <a href="app/promptarena.html"> again and the nav links coming
+           back to the six pages they were removed from. -->
+      <div class="card card-arena" id="promptarena">
         <div class="card-icon"><img src="assets/icons/promptarena.svg" alt="" width="96" height="96" loading="lazy"></div>
-        <p class="card-arena-badge">Free to play</p>
+        <p class="card-arena-badge">Coming soon</p>
         <p class="card-title">PromptArena</p>
         <p class="card-subtitle">Beat the judge</p>
-        <p class="card-desc">Take a challenge, write one prompt, and an AI judge scores it in seconds. Every member gets in &mdash; no paywall, just a leaderboard.</p>
-        <p class="card-arena-cue" aria-hidden="true">Enter the arena &rarr;</p>
-      </a>
+        <p class="card-desc">Take a challenge, write one prompt, and an AI judge scores it in seconds. Opening to members soon &mdash; free for everyone when it does.</p>
+      </div>
       <div class="card" id="low-code">
         <div class="card-icon"><img src="assets/icons/low-code.svg" alt="" width="96" height="96" loading="lazy"></div>
         <p class="card-title">Low-Code</p>
