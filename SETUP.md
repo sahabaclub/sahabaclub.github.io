@@ -101,8 +101,10 @@ there is no Anthropic key anywhere in the code. Create one at
 
 This one secret covers `parse-profile-document` (reading CVs and LinkedIn PDF
 exports), `write-member-intro`, `write-contact-email`, `import-event`,
-`generate-avatar` and `refresh-avatars`. `send-newsletter` needs no AI key —
-it only needs the Resend secrets from step 4.
+`generate-avatar`, `refresh-avatars`, the two PromptArena functions
+(`promptarena-judge` and `promptarena-challenge`) and `ai-admin`.
+`send-newsletter` needs no AI key — it only needs the Resend secrets from
+step 4.
 
 ```bash
 supabase functions secrets set OPENAI_API_KEY=...
@@ -135,10 +137,9 @@ works and the dashboard refuses the save with a message naming this migration,
 rather than reporting "Saved." over a career it quietly dropped.
 
 If you are deploying `parse-profile-document` from the **dashboard editor**
-rather than the CLI, deploy its `index.deploy.ts` rather than `index.ts`, for
-the same reason as `generate-avatar` below. Regenerate it whenever `index.ts`
-changes: it is `index.ts` with the `../_shared/cors.ts` import line replaced by
-the `corsHeaders` object inline, and nothing else.
+rather than the CLI, deploy its `index.deploy.ts` rather than `index.ts`. It is
+not the only function with a twin — see **Deploying from the dashboard editor**
+at the end of this step for the full list and the reason.
 
 **Avatars.** `generate-avatar` turns a member's photo into an illustrated
 club-style portrait and then discards the photo. It uses the same
@@ -157,11 +158,10 @@ with "column avatar_status does not exist" before it reaches OpenAI.
 
 If you are deploying from the **dashboard editor** rather than the CLI,
 deploy `supabase/functions/generate-avatar/index.deploy.ts` instead of
-`index.ts`. It is the same function with `_shared/cors.ts` and
-`_shared/avatar-art.ts` pasted inline, because the editor deploys one
-function directory at a time and cannot reach a shared parent file —
-the same arrangement `parse-profile-document` already uses. Keep the two
-in sync.
+`index.ts`, and `refresh-avatars`' twin alongside it — the two share
+`_shared/avatar-art.ts` and a house style in two copies is a house style
+that drifts. See **Deploying from the dashboard editor** at the end of this
+step; it applies to twelve functions, not just these.
 
 Check it landed:
 
@@ -184,6 +184,64 @@ can promote themselves. So the first admin has to be set from the
 Supabase dashboard: Table Editor → `profiles` → find your row → set
 `role` to `admin`. The dashboard connects as the service role, which is
 what the revoke exempts.
+
+**Admin → AI services.** [app/admin/ai.html](app/admin/ai.html) is where staff
+edit the prompts and pick the models for the AI the club keeps paying for month
+after month — the avatars, the CV reader, the PromptArena coach and challenge
+writer, the member introduction, the outreach email and the event importer. It
+is gated on the same `admin` (or `staff`) role as the newsletter page above.
+
+**Run migration `0031` first.** `0031_ai_service_control.sql` creates the
+service catalogue, the model cache and the append-only version history the
+panel reads. There is no `0030` in this directory and that is deliberate — the
+migration's own header says which proposal is holding the number.
+
+The panel talks to the `ai-admin` Edge Function, which does the three things a
+browser cannot: ask OpenAI which models this account may actually use, show the
+prompt a service is running on when nothing is stored, and make one real model
+call to prove an edited prompt still works before it is allowed to go live. It
+needs `OPENAI_API_KEY` and nothing else of its own — `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY` are injected automatically, for the reason step 4
+gives.
+
+```bash
+supabase functions deploy ai-admin
+```
+
+**Then open Admin → AI services once and press "Refresh model list", before
+trying to save any prompt.** The model list is fetched live from OpenAI's
+`/v1/models` with your own key rather than hardcoded — a list of model names
+typed into a migration in August is wrong by November — so the table starts
+empty, and `0031` validates every model you save against it with a real foreign
+key. Until that button has been pressed the model dropdowns are empty and every
+save is refused with "Model … is not in the model list. Refresh the model list
+first."
+
+None of this is required for the platform to run. Every service uses the prompt
+in its own source file until somebody activates a version here, and falls back
+to it the moment that version is removed — so no rows in `ai_service_versions`
+is the normal working state, not an unfinished one.
+
+**Deploying from the dashboard editor.** Twelve functions ship a second file,
+`index.deploy.ts`, beside `index.ts`. Deploy that one instead if you are pasting
+into the Supabase dashboard editor rather than using the CLI: the editor deploys
+one function directory at a time and cannot reach a shared parent file, so every
+`../_shared/…` import in `index.ts` is unresolvable there and the deploy fails.
+Each twin is its `index.ts` with those imports pasted inline and nothing else
+changed, so regenerate it whenever `index.ts` changes — the two have to stay in
+step.
+
+- `generate-avatar`, `refresh-avatars` — `cors.ts`, `avatar-art.ts`, `ai-config.ts`
+- `parse-profile-document`, `import-event`, `promptarena-judge`,
+  `promptarena-challenge`, `write-member-intro`, `write-contact-email` —
+  `cors.ts`, `ai-config.ts`
+- `ai-admin` — `cors.ts`, `avatar-art.ts`
+- `provision-ms365` — `cors.ts`, `graph.ts`
+- `build-prospect-profile`, `send-transactional-email` — `cors.ts`
+
+`send-newsletter`, `send-campaign` and `send-license-reminders` import
+`_shared/cors.ts` and have no twin, so those three are CLI-only until one is
+written. `notify-ms365-reset` imports nothing shared and deploys either way.
 
 ## What's deliberately not built yet
 
@@ -221,3 +279,8 @@ Phase 2, once step 5 above is done:
    audience size" should return a count before you send anything.
 8. Send a test newsletter to a narrow interest tag that only your own
    account matches, and confirm it arrives.
+9. Open **Admin → AI services** and press "Refresh model list" — it should
+   report a count of text and image models. Then edit one prompt, run its
+   test, and confirm it cannot go live until that test passes. Put the
+   service back with "Use the code default" afterwards — nothing on the
+   platform should notice.
