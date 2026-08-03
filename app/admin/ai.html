@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI services — Sahaba Club Admin</title>
+
+<!-- ⚠ THIS PAGE IS A LIVE WRITE PATH INTO A PAID MODEL CALL. Saving here
+     changes what the club's AI does for every member, immediately, and one of
+     the services behind it produces the numbers on the PromptArena
+     leaderboard. noindex/nofollow is the least of the controls. The real ones
+     are:
+
+       1. `requireStaff()` below, which sends a member away. A courtesy.
+       2. Every table and view this page reads has RLS on with a
+          `public.is_staff()` policy, and `ai_service_overview` carries
+          is_staff() INSIDE its own body because it is security_invoker = off
+          and RLS does not apply to it (0031 §8).
+       3. Staff hold SELECT and a five-column INSERT on `ai_service_versions`
+          and nothing else. They cannot mark their own prompt as tested and
+          they cannot activate one — activation is a security definer function
+          that checks is_staff() and refuses anything not 'passed' (0031 §7).
+       4. `ai-admin` re-checks the caller's role in its own body, because it
+          runs as the service role and RLS is bypassed for it.
+
+     Point 3 is the one to re-read before editing anything here: the test gate
+     is a privilege staff do not have, not a flow this page follows. -->
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<link rel="stylesheet" href="ai-admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body class="admin">
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>AI services</h1>
+      <p>Every AI service the club runs on an ongoing basis — the prompt it uses, and the model it runs on.</p>
+    </div>
+
+    <div id="ai-warnings"></div>
+
+    <div class="ad-stats" id="ai-stats"></div>
+
+    <!-- What this screen is and is not, said before the controls rather than
+         after them. Three of these sentences are the difference between a
+         confident edit and an afternoon of confusion. -->
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <h2>Before you change anything</h2>
+        <div class="ad-spacer"></div>
+        <button class="ad-btn ad-btn-sm" id="ai-refresh-models" type="button">Refresh model list</button>
+      </div>
+      <div class="ad-panel-body">
+        <p class="ai-note" style="margin-top:0;">
+          <strong>Nothing here is the original.</strong> Each service keeps its prompt in its own source
+          file, and that is what runs until you activate something on this page — and what it falls back to
+          the moment you press <em>Use the code default</em>, or if this database is ever unreachable. A bad
+          edit is always recoverable.
+        </p>
+        <p class="ai-note">
+          <strong>Every change is tested before it can go live.</strong> Most of these services ask the model
+          for a strict JSON shape, and a prompt that contradicts that shape does not fail loudly — it fails on
+          every call afterwards, silently. So <em>Test run</em> makes one real call with your edit and the
+          model you picked, and a version that has not passed cannot be activated. That is enforced in the
+          database, not on this page.
+        </p>
+        <p class="ai-note">
+          <strong>The model list is live.</strong> It is fetched from OpenAI with the club's own key, so it is
+          what this account can actually use today rather than what somebody typed into a file last year.
+          Models are filtered by what the service calls: an image service is only ever offered image models.
+        </p>
+        <p class="ai-note" id="ai-model-note">Loading the model list…</p>
+      </div>
+    </div>
+
+    <div class="ai-list" id="ai-list">
+      <div class="ad-panel"><div class="ad-empty">Loading services…</div></div>
+    </div>
+
+    <div class="ad-panel" style="margin-top:20px;">
+      <div class="ad-panel-head"><h2>What is deliberately not here</h2></div>
+      <div class="ad-panel-body">
+        <p class="ai-note" style="margin-top:0;">
+          <code>build-prospect-profile</code> — the one-off import that matches harvested SharePoint data to
+          profiles. Ahmed asked for the AI the club <em>keeps</em> running, and named that import as the
+          example to leave out. It reads none of these settings and is not affected by anything on this page.
+        </p>
+        <p class="ai-note">
+          The <strong>PromptArena challenge writer's token ceiling</strong>, because it is not a single number:
+          it is computed per call from how many challenges are being written at once. And the
+          <strong>avatars' ceiling</strong>, because image calls do not have one.
+        </p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module" src="ai-admin.js"></script>
+</body>
+</html>

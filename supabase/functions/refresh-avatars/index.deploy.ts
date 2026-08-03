@@ -3,76 +3,52 @@
 // time and cannot reach a shared parent file. Edit index.ts and regenerate; the
 // two must stay in step.
 
-// generate-avatar
+// refresh-avatars
 // ------------------------------------------------------------
-// Turns a member's real photo into a stylised illustrated Sahaba Club avatar,
-// and then destroys the photo.
+// Redraws the whole wall on the new month's theme. Runs on a schedule, in
+// batches, until nothing is due.
 //
-// The club's rule is that no real photographs live on the platform. That is a
-// privacy promise, not a look, and it only holds because of how this function
-// is written: the uploaded image arrives in the request body, is held in a
-// local variable, is posted to OpenAI, and is never written to storage or to
-// a column. The only bytes that reach the `avatars` bucket are the generated
-// ones. `source_purged_at` is set in the same UPDATE that sets `avatar_url`,
-// so there is no moment at which a generated avatar exists without the
-// receipt saying the source is gone — 0015 has a verification query that
-// alerts on exactly that pair.
+// The point of the feature: the same person, rendered differently each month,
+// so the directory looks alive rather than frozen. Members keep their own
+// three tries on top of this — a refresh is the club's picture of them, not
+// one of their goes, so it resets `avatar_attempts` to 0 and stamps the new
+// cycle, leaving them three fresh tries for the month.
 //
-// The function acts ONLY on the caller's own profile. The target user id is
-// taken from the JWT and the request body is never consulted for it, because
-// a function that accepts "whose photo is this" from the client is a machine
-// for transforming pictures of other people.
+// The thing that shapes this function more than anything else: THERE IS NO
+// SOURCE PHOTOGRAPH. 0015 destroys it after the first generation, on purpose,
+// and `source_purged_at` is the receipt. So the monthly redraw cannot work
+// the way the first generation did. It works from the member's *existing
+// generated avatar* — their likeness as the club already holds it — plus
+// their interests and the new month's theme. Nothing here reads, wants, or
+// could use a real photo, and the purge receipt is re-stamped in the same
+// UPDATE as the new `avatar_url` exactly as it is in generate-avatar.
 //
-// Three generations per member per month, then a themed fallback. The cap is
-// here (and again as a CHECK constraint in 0015) because "generate another"
-// is one button and image generation costs real money per press. Since 0018
-// the three are an allowance per monthly cycle rather than a lifetime one:
-// a member who is unhappy with all three in March gets three fresh tries in
-// April, and refresh-avatars redraws everyone on the new month's theme in
-// between. The style itself lives in _shared/avatar-art.ts, shared with that
-// job so the wall stays one wall.
+// Batching, and why there is a `remaining`: image generation takes seconds
+// per member, and an Edge Function has a wall-clock limit. Each member is
+// committed on their own, so an interrupted run loses at most the one in
+// flight, and `avatars_due_refresh` is ordered oldest-first so the next run
+// resumes where this one stopped rather than starting over.
 //
-// ---- The member does not wait for the drawing ------------------------------
-//
-// This used to hold the HTTP request open for the whole OpenAI image call —
-// tens of seconds, and a test run that went past a 45-second limit and was
-// killed. A member sitting on a spinner that long assumes the page has hung,
-// and the one thing they can do about it (press the button again) is the one
-// thing that makes it worse.
-//
-// So the request now returns as soon as the attempt is RESERVED — 202, with
-// the allowance the member has left — and the drawing happens in the
-// background via EdgeRuntime.waitUntil. The reservation is the only part that
-// has to be synchronous, because it is the part that decides whether this
-// request is allowed to spend money at all, and its answer is what the member
-// needs before they can press anything else.
-//
-// Progress is reported through `profiles.avatar_status` (0026), which the
-// member's own row already lets them read, so the page polls one row it was
-// going to read anyway rather than this function growing a second endpoint:
-//
-//   202 {ok, queued:true, ...}  →  avatar_status 'generating'
-//                                    →  'ready'  and a new avatar_url
-//                                    →  'failed' and a readable avatar_error
-//
-// What did NOT change is the privacy promise, and it is worth saying plainly
-// because moving work into the background is exactly the kind of change that
-// quietly breaks it: the photo bytes still live only in a local variable, they
-// still never reach storage or a column, and they are still scrubbed the
-// moment the image call is done with them. The only difference is that the
-// variable now outlives the HTTP response instead of the request outliving the
-// drawing.
+// Trigger it from Supabase's scheduled functions, or pg_cron — loop while
+// `done` is false:
+//   select cron.schedule('avatar-refresh', '15 3 1-7 * *', $$
+//     select net.http_post(
+//       url := '<project>/functions/v1/refresh-avatars?limit=10',
+//       headers := jsonb_build_object('Authorization', 'Bearer <service role>')
+//     );
+//   $$);
 //
 // Secrets this function needs (see SETUP.md):
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
 //   OPENAI_API_KEY
-//   OPENAI_IMAGE_MODEL                       — optional, see below
+//   OPENAI_IMAGE_MODEL                       — optional, same default as generate-avatar
 //
 // Since 0031 the artwork and the image model can also be set from Admin → AI
-// services, under the `avatar-art` service that this function shares with
-// `refresh-avatars`. The secret above and the constants in
-// `_shared/avatar-art.ts` remain the floor: with nothing activated, or with
-// the database unreachable, this function behaves exactly as it did before.
+// services. ⚠ This function and `generate-avatar` read the SAME service row —
+// `avatar-art` — which is the whole point: the wall and the individual
+// portraits have to be the same artwork, and the panel is not able to give
+// them two. The secret above and the constants in `_shared/avatar-art.ts`
+// remain the floor for both.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 // ---- inlined from ../_shared/cors.ts ----
 const corsHeaders = {
@@ -663,437 +639,347 @@ function extFor(mediaType: string): string {
   return mediaType.includes("png") ? "png" : mediaType.includes("webp") ? "webp" : "jpg";
 }
 
-// A Supabase runtime global, not a Deno one, so it is in none of the types we
-// import. Declared here rather than reached for through `globalThis as any`,
-// and declared as possibly undefined on purpose: `waitUntil` is the whole
-// reason this function can answer in a second, but a local `deno serve`, a
-// self-hosted deployment or a future runtime may not have it. The fallback
-// below awaits the work inline — slow, and exactly what this function used to
-// do — because answering late is a worse outcome than dropping a member's
-// paid-for image on the floor, not a better one.
-declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
-
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
-
-// An environment variable with a default rather than a constant, same as the
-// text model in parse-profile-document: image model names change faster than
-// this function will, and a wrong one should be a dashboard edit rather than
-// a redeploy. The error handler below says so when OpenAI rejects the name.
-//
-// Since 0031 this is the FLOOR rather than the setting. The admin panel's
-// `avatar-art` service can override the model and the artwork; when it has
-// nothing active — a fresh environment, a deliberate reset, or a database this
-// function could not read — everything below runs on exactly these values.
-// See `_shared/ai-config.ts`.
 const IMAGE_MODEL = Deno.env.get("OPENAI_IMAGE_MODEL") ?? "gpt-image-1";
 
-// ⚠ The slug is shared with `refresh-avatars` on purpose, and it is the
-// mechanism by which the two functions cannot drift apart. One row of artwork,
-// two readers. See the header of `_shared/avatar-art.ts`.
+// ⚠ The same slug `generate-avatar` reads. Two functions, one row. See the
+// header of `_shared/avatar-art.ts`.
 const AI_SLUG = "avatar-art";
 
-// Matches the bucket's allowed_mime_types in 0016. Checked here as well so a
-// bad upload fails before it costs an OpenAI call.
-const ALLOWED_MEDIA = ["image/png", "image/jpeg", "image/webp"];
+const DEFAULT_LIMIT = 10;
+const MAX_LIMIT = 50;
 
-// Where the photo came from, for `profiles.avatar_source`. 'fallback' is
-// deliberately not accepted from the client — only this function assigns it.
-const ALLOWED_SOURCES = ["upload", "google", "microsoft", "linkedin"];
+// Stop starting new members after this long and report what is left. The
+// function's own limit is higher; returning a clean `remaining` beats being
+// killed between the storage upload and the profile UPDATE.
+const TIME_BUDGET_MS = 110_000;
 
-// 8 MB decoded. Phone cameras produce more than this; the page downscales
-// before upload, and a body that arrives bigger than this is a bug or an
-// attempt to make us pay to forward large files to OpenAI.
-const MAX_SOURCE_BYTES = 8_000_000;
-
-// How many past drawings `avatar_gallery` keeps. Three tries a month, twelve
-// months a year, and a jsonb column that is read whole every time the profile
-// is: without a cap this grows for ever and every profile read pays for it.
-// Twelve is four months of a member using their full allowance, which is more
-// than enough for "put the one from last month back" — and every entry still
-// points at a file in the bucket, so nothing is deleted by falling off the
-// end, only forgotten.
-const GALLERY_MAX = 12;
+type DueRow = {
+  user_id: string;
+  full_name: string | null;
+  interests: string[] | null;
+  skills: string[] | null;
+  industry: string | null;
+};
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  // Scheduled job, not a public endpoint — the same gate as
+  // send-transactional-email and send-license-reminders. Without it, any
+  // visitor could make the club regenerate several hundred images, which is a
+  // bill rather than a defacement, and this function writes avatars for
+  // members other than the caller by design. Nothing legitimate reaches it
+  // from a browser.
+  const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+  if (!SERVICE_ROLE_KEY || bearer !== SERVICE_ROLE_KEY) {
+    console.error("refresh-avatars called without the service role key");
+    return json({ error: "Not allowed" }, 403);
   }
 
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  const params = new URL(req.url).searchParams;
+  const dryRun = params.get("dry") === "1";
+  const limit = clampLimit(params.get("limit"));
+
+  const cycle = currentCycle();
+  const startedAt = Date.now();
+
+  // Read once for the whole batch, not once per member: every avatar in one
+  // run must be drawn on one month's theme by one model, or the "wall" this
+  // job exists to keep coherent is a wall drawn by two different setups
+  // because somebody saved halfway through. Never throws — a database this
+  // job cannot read means the batch runs on the code defaults, which is a
+  // month of avatars that look right rather than a month with none.
+  const ai = await loadAiConfig(admin, AI_SLUG, {
+    model: IMAGE_MODEL,
+    parts: AVATAR_ART_DEFAULTS,
+  });
+  const imageModel = ai.model;
+  const art = {
+    house_style: part(ai, "house_style", HOUSE_STYLE),
+    variants: listOf(ai, "variants", VARIANTS),
+  };
+  const theme = themeForCycle(cycle, listOf(ai, "themes", THEMES));
+
   try {
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
-
-    // The identity of the profile being changed comes from here and from
-    // nowhere else. See the header note.
-    const jwt = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    const { data: userData, error: userError } = await admin.auth.getUser(jwt);
-    if (userError || !userData.user) {
-      return json({ error: "Not signed in" }, 401);
-    }
-    const userId = userData.user.id;
-
-    if (!OPENAI_API_KEY) {
+    if (!dryRun && !OPENAI_API_KEY) {
       console.error("OPENAI_API_KEY is not set");
       return json({ error: "Avatar generation isn't configured yet." }, 503);
     }
 
-    const body = await req.json().catch(() => ({}));
-    const source: string = body.source ?? "upload";
-    const mediaType: string = body.mediaType ?? "image/png";
-    const imageBase64: string = body.imageBase64 ?? "";
-
-    if (!ALLOWED_SOURCES.includes(source)) {
-      return json({ error: "Unknown avatar source" }, 400);
-    }
-    if (!ALLOWED_MEDIA.includes(mediaType)) {
-      return json({ error: "Photos must be PNG, JPEG or WebP." }, 400);
-    }
-
-    const { data: profile, error: pErr } = await admin
-      .from("profiles")
-      .select("user_id, full_name, headline, industry, skills, interests, avatar_attempts, avatar_cycle")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (pErr || !profile) {
-      return json({ error: "No profile to attach an avatar to" }, 404);
-    }
-
-    // Attempts are counted per cycle, so the column on its own does not mean
-    // what it says: an `avatar_attempts` of 3 stamped with last month's
-    // `avatar_cycle` is a member with three tries in hand, not a member out
-    // of them. `storedAttempts`/`storedCycle` are the raw row as we read it —
-    // used only for the reservation guard below, which has to compare against
-    // what is actually in the row — and `attempts` is what the member has
-    // spent *this* month, which is what the cap and the response talk about.
+    // The view already filters to discoverable members whose cycle is not the
+    // current month. `count: exact` gives the size of the whole queue, not
+    // just this page, which is what makes `remaining` answerable without a
+    // second query.
     //
-    // This mirrors public.avatar_attempts_this_cycle() in 0018. Both exist
-    // because the rule is read from SQL as well as from here, and neither is
-    // allowed to be the only place it is written down.
-    const storedAttempts: number = profile.avatar_attempts ?? 0;
-    const storedCycle: string | null = profile.avatar_cycle ?? null;
-    const cycle = currentCycle();
+    // The ORDER BY is restated here even though 0018 has one. A view's
+    // internal ordering is not something a paginated query is entitled to
+    // rely on, and this is precisely the query that relies on it: oldest
+    // first is what lets an interrupted run resume instead of handing back
+    // the same ten people every time.
+    const { data: due, count, error: dueErr } = await admin
+      .from("avatars_due_refresh")
+      .select("user_id, full_name, interests, skills, industry", { count: "exact" })
+      .order("avatar_refreshed_at", { ascending: true, nullsFirst: true })
+      .range(0, limit - 1);
+    if (dueErr) return json({ error: dueErr.message }, 500);
 
-    // The artwork and the model staff have chosen, or the constants above.
-    // Read before the allowance check rather than after, because the themed
-    // fallback tile below is stamped with `avatar_theme` too and a member out
-    // of tries must land on the same month's accent as everybody else. One
-    // memoised read per instance per minute, so this costs the fallback path
-    // nothing. Never throws — see `_shared/ai-config.ts`.
-    const ai = await loadAiConfig(admin, AI_SLUG, {
-      model: IMAGE_MODEL,
-      parts: AVATAR_ART_DEFAULTS,
-    });
-    const imageModel = ai.model;
-    const art = {
-      house_style: part(ai, "house_style", HOUSE_STYLE),
-      variants: listOf(ai, "variants", VARIANTS),
-    };
+    const batch = (due ?? []) as DueRow[];
+    const totalDue = count ?? batch.length;
 
-    const theme = themeForCycle(cycle, listOf(ai, "themes", THEMES));
-    const staleCycle = storedCycle !== cycle;
-    const attempts = staleCycle ? 0 : storedAttempts;
+    // The avatar to redraw is not in the view — 0018 selects the fields the
+    // prompt needs and nothing else. One lookup for the whole batch rather
+    // than one per member.
+    const ids = batch.map((r) => r.user_id);
+    const avatarUrls = new Map<string, string>();
+    if (ids.length) {
+      const { data: current, error: curErr } = await admin
+        .from("profiles")
+        .select("user_id, avatar_url")
+        .in("user_id", ids);
+      if (curErr) return json({ error: curErr.message }, 500);
+      for (const r of current ?? []) avatarUrls.set(r.user_id, r.avatar_url ?? "");
+    }
 
-    // Out of tries *this month*: no OpenAI call, no increment. The fallback is
-    // generated locally and costs nothing, so a member who has spent their
-    // three still ends up with something that belongs on the wall — and gets
-    // three more when the month turns over.
-    //
-    // This path stays synchronous. There is nothing to wait for — an SVG is
-    // drawn in this process and uploaded — so queueing it would only cost the
-    // member a poll to be told something that was already true when they
-    // asked. It answers 200 with the finished URL, exactly as it always did.
-    if (attempts >= MAX_ATTEMPTS) {
-      const url = await storeFallback(admin, userId, profile, cycle, theme);
-      if (!url) return json({ error: "Couldn't save an avatar just now." }, 502);
+    if (dryRun) {
+      // Same shape as send-license-reminders' dry run: enough to see who is
+      // next and why, with nothing spent. `willRedraw` is the interesting
+      // column — false means we will write the themed fallback because there
+      // is no usable picture to work from.
       return json({
         ok: true,
-        queued: false,
-        avatarUrl: url,
-        attemptsUsed: attempts,
-        attemptsLeft: 0,
+        dryRun: true,
         cycle,
-        isFallback: true,
+        theme,
+        // Which artwork this run would use, and where it came from. A dry run
+        // whose whole job is "see who is next and why" should also answer
+        // "and drawn how" — an activated house style that nobody expected is
+        // exactly the thing worth catching before several hundred images.
+        model: imageModel,
+        artSource: ai.source,
+        artVersion: ai.version || null,
+        wouldProcess: batch.length,
+        remaining: totalDue,
+        sample: batch.slice(0, 10).map((r) => ({
+          user_id: r.user_id,
+          full_name: r.full_name,
+          willRedraw: !!storagePathFor(avatarUrls.get(r.user_id) ?? ""),
+        })),
       });
     }
 
-    // The photo. From here until the OpenAI call returns it exists only as
-    // this local variable — nothing between these lines writes it anywhere.
-    let sourceBytes: Uint8Array;
-    try {
-      sourceBytes = decodeBase64(imageBase64);
-    } catch {
-      return json({ error: "That photo didn't arrive in one piece — try again." }, 400);
-    }
-    if (!sourceBytes.byteLength) {
-      return json({ error: "imageBase64 is required" }, 400);
-    }
-    if (sourceBytes.byteLength > MAX_SOURCE_BYTES) {
-      return json({ error: "That photo is too large. Try one under 8 MB." }, 413);
-    }
+    let processed = 0;
+    let superseded = 0;
+    const failures: Array<{ user_id: string; reason: string }> = [];
+    let ranOutOfTime = false;
 
-    // Reserve the attempt before spending money, guarded on the row we just
-    // read. Two "generate another" clicks racing each other both read 2 and
-    // would both generate; the guard means the loser's update matches no rows
-    // and it is told to try again. The refund below covers the case where
-    // OpenAI never produced an image.
-    //
-    // The guard is on the *stored* pair, not on the effective count, and that
-    // is the part worth reading twice. If the row says (attempts 3, cycle
-    // '2026-06') and this is July, the member has 0 spent and 3 in hand — but
-    // guarding on `avatar_attempts = 0` would match nothing and every first
-    // generation of a new month would fail as a phantom conflict. Guarding on
-    // (3, '2026-06') — what is really in the row — matches exactly once, and
-    // the write that wins is also the write that moves the row into July. The
-    // loser of a genuine race then sees the new cycle and correctly conflicts.
-    //
-    // `avatar_status`/`avatar_error` ride along in the same statement rather
-    // than following in a second one. The WHERE clause is untouched — this is
-    // the same guard on the same pair — but it means the row is never briefly
-    // "an attempt has been spent and nothing is happening", which is precisely
-    // the state a polling client would read as a stuck generation.
-    const next = attempts + 1;
-    // The attempt index, 0-based, so a member's three tries in a cycle get the
-    // three different treatments in _shared/avatar-art.ts rather than three
-    // draws of the same prompt.
-    const prompt = buildPrompt(profile, theme, "photo", next - 1, art);
+    for (const row of batch) {
+      if (Date.now() - startedAt > TIME_BUDGET_MS) {
+        ranOutOfTime = true;
+        break;
+      }
 
-    let reservation = admin
-      .from("profiles")
-      .update({
-        avatar_attempts: next,
-        avatar_cycle: cycle,
-        avatar_status: "generating",
-        avatar_error: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId)
-      .eq("avatar_attempts", storedAttempts);
-    // A never-generated member has a null cycle, and `= null` is never true in
-    // SQL — that comparison has to be IS NULL or the first ever generation
-    // reserves nothing.
-    reservation = storedCycle === null
-      ? reservation.is("avatar_cycle", null)
-      : reservation.eq("avatar_cycle", storedCycle);
-
-    const { data: reserved, error: rErr } = await reservation.select("user_id");
-    if (rErr) return json({ error: rErr.message }, 500);
-    if (!reserved?.length) {
-      return json({ error: "Another avatar is already being generated. Give it a moment." }, 409);
+      try {
+        const written = await refreshOne(
+          admin, row, avatarUrls.get(row.user_id) ?? "", cycle, theme, art, imageModel,
+        );
+        // Either way they are in this cycle now and out of the queue, so both
+        // count toward `processed` — `superseded` is only there to explain a
+        // month where the numbers look light.
+        if (!written) superseded++;
+        processed++;
+      } catch (err) {
+        // A member who fails keeps last month's avatar and last month's
+        // cycle, so they stay in the view and are picked up first next run.
+        // Nothing is half-written: the profile UPDATE is the last step.
+        const reason = String(err instanceof Error ? err.message : err);
+        console.error("refresh-avatars " + row.user_id + ": " + reason);
+        failures.push({ user_id: row.user_id, reason });
+      }
     }
 
-    // Everything expensive, from here on, off the request's critical path.
-    // `draw` never rejects — it records its own outcome on the profile row,
-    // because after the response has gone there is nobody left to tell.
-    const work = draw(admin, {
-      userId,
-      source,
-      mediaType,
-      sourceBytes,
-      prompt,
-      theme,
-      cycle,
-      variant: next - 1,
-      attempts,
-      next,
-      // Carried into the background half rather than read again there: the
-      // picture must be drawn by the model that was live when the attempt was
-      // reserved, not by whatever staff activated in the seconds since.
-      imageModel,
-    });
+    // Everyone we did not advance is still due, failures included.
+    const remaining = Math.max(0, totalDue - processed);
 
-    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime && typeof EdgeRuntime.waitUntil === "function") {
-      EdgeRuntime.waitUntil(work);
-    } else {
-      // No waitUntil in this runtime. Do it the old way and answer late; the
-      // response below is still a 202, so a client that polls afterwards
-      // simply finds the work already finished on its first look.
-      console.warn("EdgeRuntime.waitUntil is unavailable — drawing inline");
-      await work;
-    }
+    // `done` tells the scheduler whether looping again is worth anything.
+    // Nothing left is the obvious case. The other one matters more: a full
+    // batch that advanced nobody means every member in it failed, and since
+    // the view is ordered oldest-first the next call would hand back the same
+    // people and fail the same way. Reporting done stops that loop and leaves
+    // them for the next scheduled run, by which time a busy image service or
+    // a bad model name will plausibly have changed.
+    const done = remaining === 0 || (processed === 0 && !ranOutOfTime);
 
-    // 202, not 200: accepted, not done. The allowance is already correct —
-    // the attempt is spent whether or not the drawing lands, and it is given
-    // back by `draw` if it does not, which the member sees on the next poll.
     return json({
       ok: true,
-      queued: true,
-      attemptsUsed: next,
-      attemptsLeft: MAX_ATTEMPTS - next,
       cycle,
-    }, 202);
+      theme,
+      model: imageModel,
+      artSource: ai.source,
+      artVersion: ai.version || null,
+      processed,
+      failed: failures.length,
+      superseded,
+      remaining,
+      done,
+      ranOutOfTime,
+      failures: failures.slice(0, 20),
+    });
   } catch (err) {
     console.error(err);
     return json({ error: String(err) }, 500);
   }
 });
 
-// ---- The background half ----------------------------------------------
+// One member, start to finish. Throws on anything that should count as a
+// failure; the caller records it and moves to the next person. Returns false
+// if the member drew their own avatar while this was running — see
+// saveRefreshed.
+async function refreshOne(
+  admin: ReturnType<typeof createClient>,
+  row: DueRow,
+  currentUrl: string,
+  cycle: string,
+  theme: string,
+  // Resolved once for the batch by the handler and passed down rather than
+  // read here, so every member in one run is drawn the same way.
+  art: { house_style: string; variants: string[] },
+  imageModel: string,
+): Promise<boolean> {
+  const profile = {
+    full_name: row.full_name,
+    interests: row.interests,
+    skills: row.skills,
+    industry: row.industry,
+  };
 
-type DrawJob = {
-  userId: string;
-  source: string;
-  mediaType: string;
-  sourceBytes: Uint8Array;
-  prompt: string;
-  theme: string;
-  cycle: string;
-  variant: number;
-  attempts: number;   // spent before this try — what a refund restores
-  next: number;       // spent including this try — what the guard matches on
-  imageModel: string; // resolved before the response went out; see above
-};
+  const sourcePath = storagePathFor(currentUrl);
 
-// Draws, uploads, and writes the profile. Runs after the response has been
-// sent, so it must never throw: an unhandled rejection inside waitUntil is a
-// line in a log nobody is reading and a member left on 'generating' for ever.
-// Every exit from here leaves `avatar_status` at 'ready' or 'failed'.
-async function draw(admin: ReturnType<typeof createClient>, job: DrawJob): Promise<void> {
-  const { userId, source, mediaType, prompt, theme, cycle, variant, attempts, next, imageModel } = job;
-
-  try {
-    // The photo has done its job, whether the call succeeded or not. It would
-    // be collected when this task ends anyway; zeroing it is cheap and means
-    // the source is gone before anything is written, not merely never written.
-    // Attached to the call itself rather than placed after it, because a
-    // failed generation is not a reason to keep somebody's photograph in
-    // memory for the rest of the instance's life — and now that the response
-    // has already gone, that life is longer than the request's was.
-    const pngBytes = await generate(job.sourceBytes, mediaType, prompt, imageModel)
-      .finally(() => job.sourceBytes.fill(0));
-
-    const path = `${userId}/${crypto.randomUUID()}.png`;
-    const { error: upErr } = await admin.storage
-      .from(AVATAR_BUCKET)
-      .upload(path, pngBytes, { contentType: "image/png", upsert: false });
-    if (upErr) {
-      console.error("upload: " + upErr.message);
-      await fail(admin, userId, cycle, attempts, next, "Couldn't save the new avatar just now.");
-      return;
-    }
-    const avatarUrl = admin.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl;
-
-    // The gallery is read here, immediately before the write, rather than
-    // carried down from the request — it is minutes old by then, and
-    // refresh-avatars or the member's own previous try may have touched it.
-    //
-    // Read-then-write, so two drawings genuinely overlapping can still lose
-    // one entry, and that is a known cost rather than an oversight. The
-    // reservation guard does not prevent the overlap: it only stops two
-    // requests that read the *same* row from both reserving. A second request
-    // issued after the first has reserved reads the new count and reserves the
-    // next attempt quite legitimately — and now that the response no longer
-    // waits for the drawing, the member is free to send it. What is lost when
-    // that happens is one row of history; the picture itself is in the bucket,
-    // and the winning `avatar_url` is still the last one written. Serialising
-    // it would mean a jsonb-appending SQL function on the hot path of every
-    // generation, which is a lot of machinery for a forgotten thumbnail.
-    const { data: current } = await admin
-      .from("profiles")
-      .select("avatar_gallery")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    const held = current?.avatar_gallery;
-    const previous = Array.isArray(held) ? held : [];
-    const gallery = [
-      { url: avatarUrl, prompt, theme, variant, cycle, created_at: new Date().toISOString() },
-      ...previous,
-    ].slice(0, GALLERY_MAX);
-
-    // One UPDATE. `source_purged_at` travels with `avatar_url` so the two can
-    // never disagree — the alert in 0015 looks for a generated avatar with a
-    // null purge timestamp, and splitting these into two statements would
-    // create a window where that is briefly true. `avatar_status` is in the
-    // same statement for the same reason: 'ready' and the URL the member is
-    // about to be shown must become true together, or a poll lands between
-    // them and shows the old picture as the new one.
-    const { error: saveErr } = await admin
-      .from("profiles")
-      .update({
-        avatar_url: avatarUrl,
-        avatar_gallery: gallery,
-        avatar_status: "ready",
-        avatar_error: null,
-        avatar_is_generated: true,
-        avatar_source: source,
-        avatar_prompt: prompt,
-        avatar_theme: theme,
-        // Stamped here as well as by refresh-avatars: this member has now had
-        // a picture drawn for this month, and `avatars_due_refresh` orders on
-        // this column, so leaving it stale would send the monthly job to the
-        // people who need it least first.
-        avatar_refreshed_at: new Date().toISOString(),
-        source_purged_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId);
-    if (saveErr) {
-      // The picture exists and is uploaded; only the row write failed. The
-      // attempt is still refunded, because from the member's side nothing
-      // happened and charging them for it would be wrong.
-      console.error("save: " + saveErr.message);
-      await fail(admin, userId, cycle, attempts, next, "Your avatar was drawn but couldn't be saved. Try again.");
-    }
-  } catch (err) {
-    const message = String(err instanceof Error ? err.message : err);
-    console.error("generate-avatar: " + message);
-    await fail(admin, userId, cycle, attempts, next, message);
+  // No picture we can redraw. Rather than skipping — which would leave them
+  // out of the month forever, since the view would keep offering them and
+  // every run would keep passing — they get the deterministic themed tile,
+  // which is real club artwork and changes with the month like everyone
+  // else's. That covers a member with no avatar at all, and one sitting on
+  // last month's fallback SVG, which the image endpoint will not accept as
+  // input anyway.
+  if (!sourcePath) {
+    const url = await uploadFallback(admin, row.user_id, String(row.full_name ?? ""), cycle);
+    if (!url) throw new Error("fallback upload failed");
+    return await saveRefreshed(admin, row.user_id, {
+      avatar_url: url,
+      avatar_source: "fallback",
+      avatar_theme: theme,
+      avatar_cycle: cycle,
+    });
   }
+
+  // Their existing avatar, out of our own bucket. Downloaded through the
+  // storage API rather than fetched from the public URL for two reasons: the
+  // CDN can still be holding a previous version, and `avatar_url` is a column
+  // members may write. Following an arbitrary URL out of a member-writable
+  // column, from a service-role job, is a request-forgery hole — so anything
+  // that is not a path inside the avatars bucket is treated as "no usable
+  // source" above and never fetched.
+  const { data: blob, error: dlErr } = await admin.storage
+    .from(AVATAR_BUCKET)
+    .download(sourcePath);
+  if (dlErr || !blob) throw new Error("couldn't read the current avatar: " + (dlErr?.message ?? "missing"));
+
+  let sourceBytes = new Uint8Array(await blob.arrayBuffer());
+  if (!sourceBytes.byteLength) throw new Error("current avatar is empty");
+
+  // Variant 0, as it always was: the monthly job draws one picture per member
+  // and has nothing to vary between. The rota still has to be passed, because
+  // entry 0 is one of the three staff can edit.
+  const prompt = buildPrompt(profile, theme, "avatar", 0, art);
+  const pngBytes = await generate(sourceBytes, prompt, imageModel);
+
+  // Generated art rather than a photograph, but zeroed on the same principle
+  // as generate-avatar: the input to an image call does not outlive the call.
+  sourceBytes.fill(0);
+  sourceBytes = new Uint8Array(0);
+
+  // A new path each month rather than an overwrite, so the public URL changes
+  // and no CDN anywhere serves last month's face. Same `<user_id>/` prefix,
+  // so the storage policies in 0016 cover it unchanged.
+  const path = `${row.user_id}/${crypto.randomUUID()}.png`;
+  const { error: upErr } = await admin.storage
+    .from(AVATAR_BUCKET)
+    .upload(path, pngBytes, { contentType: "image/png", upsert: false });
+  if (upErr) throw new Error("upload: " + upErr.message);
+
+  const avatarUrl = admin.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl;
+
+  return await saveRefreshed(admin, row.user_id, {
+    avatar_url: avatarUrl,
+    avatar_prompt: prompt,
+    avatar_theme: theme,
+    avatar_cycle: cycle,
+  });
 }
 
-// Give the try back and say what went wrong, in one statement.
+// The one UPDATE, for both paths.
 //
-// Nothing usable was produced, so nothing was charged for and the try is given
-// back. Guarded on (next, cycle) so a concurrent success is never rolled back.
-// The cycle is left at the current month rather than restored to the stale
-// one: `attempts` is already the count for this month, and re-staling the row
-// would only make the next request redo the reset.
+// `avatar_source` is deliberately not set on the redraw path: 0015's CHECK
+// allows only upload/google/microsoft/linkedin/fallback, and the honest
+// answer to "where did this likeness come from" is still whatever they first
+// gave us. The fallback path passes 'fallback' because that is exactly what
+// it wrote.
 //
-// `avatar_status` and `avatar_error` sit inside the same guarded statement on
-// purpose. If the guard misses, some other writer owns this row — a
-// generation that succeeded while this one was failing, or the monthly
-// refresh — and stamping 'failed' over their work would tell the member their
-// perfectly good new avatar is broken.
-async function fail(
+// `source_purged_at` travels with `avatar_url` and `avatar_is_generated` in
+// the same statement, the same as generate-avatar — 0015's alert looks for a
+// generated avatar with a null purge timestamp, and a monthly job that split
+// these would trip it several hundred times.
+//
+// `avatar_attempts` goes to 0 with the new cycle: the club redrawing everyone
+// must not cost a member one of their own three tries for the month.
+//
+// Guarded on the member not already being in this cycle. The window is small
+// but real — this job reads a batch, then spends several seconds per member
+// inside OpenAI, and a member who generates their own avatar during those
+// seconds has deliberately chosen a picture. Overwriting it with the batch's
+// version, and handing back the tries they just spent, is the wrong outcome
+// even though it is the rarer one. Returns false when that happened; the row
+// is already out of `avatars_due_refresh` either way.
+async function saveRefreshed(
   admin: ReturnType<typeof createClient>,
   userId: string,
-  cycle: string,
-  attempts: number,
-  next: number,
-  message: string,
-): Promise<void> {
-  const { error } = await admin
+  fields: Record<string, unknown>,
+): Promise<boolean> {
+  const now = new Date().toISOString();
+  const { data, error } = await admin
     .from("profiles")
     .update({
-      avatar_attempts: attempts,
-      avatar_status: "failed",
-      // Read by the member, so it is the triaged sentence from `generate`
-      // rather than a stack trace. Length-capped because the column is shown
-      // in a state line, and a 4 kB OpenAI error body is not a sentence.
-      avatar_error: message.slice(0, 300),
-      updated_at: new Date().toISOString(),
+      ...fields,
+      avatar_is_generated: true,
+      avatar_attempts: 0,
+      avatar_refreshed_at: now,
+      source_purged_at: now,
+      updated_at: now,
     })
     .eq("user_id", userId)
-    .eq("avatar_attempts", next)
-    .eq("avatar_cycle", cycle);
-  if (error) console.error("refund: " + error.message);
+    // `neq` alone would drop everyone with a null cycle, because NULL <> 'x'
+    // is NULL rather than true — and a never-refreshed member is exactly who
+    // this job is for.
+    .or(`avatar_cycle.is.null,avatar_cycle.neq.${fields.avatar_cycle}`)
+    .select("user_id");
+  if (error) throw new Error("save: " + error.message);
+  return !!data?.length;
 }
 
 // ---- OpenAI -----------------------------------------------------------
 
-// POST /v1/images/edits, multipart — the edits endpoint rather than
-// generations because the source photograph is the input we are transforming.
-// Plain fetch and FormData, no SDK, same as every other function here.
-async function generate(
-  bytes: Uint8Array,
-  mediaType: string,
-  prompt: string,
-  model: string,
-): Promise<Uint8Array> {
+// The edits endpoint again, with the member's existing avatar as the image
+// input. Errors here are read from a log by whoever is watching the batch,
+// not by a member staring at a spinner, so the triage is shorter than
+// generate-avatar's and phrased for the operator.
+async function generate(bytes: Uint8Array, prompt: string, model: string): Promise<Uint8Array> {
   const form = new FormData();
   form.append("model", model);
-  form.append("image", new Blob([bytes], { type: mediaType }), "source." + extFor(mediaType));
+  form.append("image", new Blob([bytes], { type: "image/png" }), "avatar.png");
   form.append("prompt", prompt);
   form.append("size", "1024x1024");
   form.append("quality", "high");
@@ -1106,89 +992,50 @@ async function generate(
 
   if (!res.ok) {
     const detail = await res.text();
-    console.error("OpenAI " + res.status + ": " + detail.slice(0, 500));
-
-    // Same triage as parse-profile-document: the model name is the setting
-    // most likely to be wrong, and a generic message sends someone hunting in
-    // the wrong place. These sentences now land in `avatar_error` and are read
-    // by the member off their own profile row, so they still have to be
-    // sentences rather than codes.
-    // Since 0031 the model can come from the admin panel as well as from the
-    // secret, and the two need different remedies — so the message names which
-    // one is in play rather than sending somebody to the secrets screen to
-    // change a value that is not being read.
     if (/model_not_found|does not exist|unknown model/i.test(detail)) {
+      // Names which setting is actually in play — since 0031 the model can
+      // come from the admin panel instead of the secret, and sending an
+      // operator to change a value nothing is reading wastes a batch window.
       throw new Error(
         model === IMAGE_MODEL
-          ? "The configured image model name isn't valid. Set OPENAI_IMAGE_MODEL in the Supabase Edge Function secrets to a model your account can use."
-          : `The image model chosen in the admin panel (${model}) isn't valid for this account. Change it under Admin → AI services → Member avatars, or reset that service to its code default.`,
+          ? "OPENAI_IMAGE_MODEL is not a model this account can use"
+          : `the image model chosen in Admin → AI services (${model}) is not one this account can use`,
       );
     }
-    if (res.status === 401) {
-      throw new Error("The AI service rejected our credentials. Check OPENAI_API_KEY.");
-    }
-    if (res.status === 429) {
-      throw new Error("The image service is busy right now — try again in a moment.");
-    }
-    // A photo the safety system declines is a normal outcome, not a bug, and
-    // the member needs to know a different photo will work.
-    if (/moderation|safety|content_policy/i.test(detail)) {
-      throw new Error("That photo couldn't be used. Try a clear, front-facing photo of yourself.");
-    }
-    throw new Error("Couldn't create an avatar just now. Try again shortly.");
+    if (res.status === 401) throw new Error("OpenAI rejected OPENAI_API_KEY");
+    if (res.status === 429) throw new Error("rate limited");
+    throw new Error("OpenAI " + res.status + ": " + detail.slice(0, 200));
   }
 
   const data = await res.json();
   const b64 = data.data?.[0]?.b64_json;
-  if (!b64) throw new Error("No image came back — try again shortly.");
+  if (!b64) throw new Error("no image came back");
   return decodeBase64(b64);
 }
 
-// ---- The fallback -----------------------------------------------------
+// ---- Helpers ----------------------------------------------------------
 
-// The tile itself is drawn in _shared/avatar-art.ts, so that this and the
-// monthly job produce the same artwork. What stays here is which columns get
-// written, which is not the same for the two callers: this path is a member
-// who has spent their three tries, so it must not touch the attempt count.
-async function storeFallback(
-  admin: ReturnType<typeof createClient>,
-  userId: string,
-  profile: Record<string, unknown>,
-  cycle: string,
-  theme: string,
-): Promise<string> {
-  const url = await uploadFallback(admin, userId, String(profile.full_name ?? ""), cycle);
-  if (!url) return "";
+// The object path inside the avatars bucket, or null if this URL is not one
+// of ours. Doubles as the "can we redraw this?" test — see refreshOne. SVG is
+// excluded because it is the fallback tile and the image endpoint will not
+// take it as input.
+function storagePathFor(url: string): string | null {
+  const marker = "/storage/v1/object/public/" + AVATAR_BUCKET + "/";
+  const at = String(url ?? "").indexOf(marker);
+  if (at === -1) return null;
 
-  // The fallback carries the same purge receipt. Nothing was sent to OpenAI
-  // on this path, so there is even less to keep — but a row with a generated
-  // avatar and a null timestamp is what the alert looks for, and "we didn't
-  // call the model this time" is not a reason to trip it.
-  //
-  // 'ready' rather than 'idle': this request finished, and a client that has
-  // just been handed a URL should not then poll a status that says nothing is
-  // happening. The tile is not added to `avatar_gallery` — it is deterministic
-  // per member per month and can be redrawn at any time for nothing, so a
-  // history entry for it would be a slot spent on something not worth keeping.
-  const { error: saveErr } = await admin
-    .from("profiles")
-    .update({
-      avatar_url: url,
-      avatar_status: "ready",
-      avatar_error: null,
-      avatar_is_generated: true,
-      avatar_source: "fallback",
-      avatar_theme: theme,
-      avatar_refreshed_at: new Date().toISOString(),
-      source_purged_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("user_id", userId);
-  if (saveErr) {
-    console.error("fallback save: " + saveErr.message);
-    return "";
-  }
-  return url;
+  const path = decodeURIComponent(url.slice(at + marker.length).split("?")[0]);
+  if (!path || path.toLowerCase().endsWith(".svg")) return null;
+  // `..` cannot climb out of a bucket through the storage API, but a path
+  // arriving from a column is not a place to find out.
+  if (path.includes("..")) return null;
+  return path;
+}
+
+function clampLimit(raw: string | null): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_LIMIT;
+  return Math.min(Math.floor(n), MAX_LIMIT);
 }
 
 function json(body: unknown, status = 200) {

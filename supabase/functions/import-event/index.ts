@@ -24,14 +24,33 @@
 //   OPENAI_API_KEY
 //   OPENAI_MODEL        — optional, defaults below
 //   OPENAI_IMAGE_MODEL  — optional, defaults below
+//
+// Since 0031 both halves of this function are settable from Admin → AI
+// services, and they are TWO services there rather than one:
+//
+//   `import-event`       the text call below — prompt, model, ceiling
+//   `import-event-card`  the image call at the bottom — prompt and model
+//
+// They are separate because they are separate calls: a different endpoint, a
+// different kind of model and a different prompt. One combined setting would
+// have meant either hiding the artwork brief from Ahmed or offering him a
+// model dropdown that is wrong for one of the two calls. The constants below
+// remain the floor for both.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { loadAiConfig, part } from "../_shared/ai-config.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 const IMAGE_MODEL = Deno.env.get("OPENAI_IMAGE_MODEL") ?? "gpt-image-1";
+
+// The code defaults for the ceiling, and the two slugs the admin panel stores
+// overrides under. See the header for why there are two.
+const MAX_OUTPUT_TOKENS = 3000;
+const AI_SLUG_TEXT = "import-event";
+const AI_SLUG_CARD = "import-event-card";
 
 const BUCKET = "event-images";
 
@@ -73,6 +92,20 @@ Dates must be YYYY-MM-DD. If the page gives a date without a year, choose the ne
 Tags are for filtering the events list, so keep them broad and reusable ('AI', 'Cloud', 'Hackathon', 'Workshop', 'Networking', 'Security') rather than specific to one event.
 
 Set confidence to 'low' whenever the date or the title had to be guessed at or left empty.`;
+
+// The artwork brief for an event with no usable image of its own, and the code
+// default for the `import-event-card` service.
+//
+// Deliberately abstract. Generating something that imitates a real organiser's
+// branding would put a fake Microsoft or AWS logo on the public events page,
+// which is both misleading and not ours to do — so if this is ever edited from
+// the panel, that is the sentence to keep.
+const CARD_BRIEF = [
+  "Abstract editorial artwork for a technology community event card.",
+  "Deep navy and violet with cyan accents, soft gradients, geometric shapes,",
+  "subtle depth, generous negative space, modern and calm.",
+  "No text, no words, no letters, no logos, no brand marks, no people's faces.",
+].join(" ");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -142,7 +175,7 @@ Deno.serve(async (req) => {
       sourceText.slice(0, 24000),
     ].join("\n");
 
-    const evt = await extractEvent(context);
+    const evt = await extractEvent(admin, context);
     if ("error" in evt) return json({ error: evt.error }, 502);
 
     // Judge by the result, not the source. Live testing put both LinkedIn
@@ -294,14 +327,21 @@ function decodeEntities(s: string) {
 
 // ---- The model call ---------------------------------------------------
 
-async function extractEvent(context: string) {
+async function extractEvent(admin: ReturnType<typeof createClient>, context: string) {
+  // What staff have chosen for the text half, or the constants above.
+  const ai = await loadAiConfig(admin, AI_SLUG_TEXT, {
+    model: MODEL,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    parts: { system: SYSTEM_PROMPT },
+  });
+
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: MODEL,
-      instructions: SYSTEM_PROMPT,
-      max_output_tokens: 3000,
+      model: ai.model,
+      instructions: part(ai, "system", SYSTEM_PROMPT),
+      max_output_tokens: ai.maxOutputTokens,
       input: [{ role: "user", content: [{ type: "input_text", text: context }] }],
       text: { format: { type: "json_schema", name: "event", strict: true, schema: EVENT_SCHEMA } },
     }),
@@ -311,7 +351,11 @@ async function extractEvent(context: string) {
     const detail = await res.text();
     console.error("OpenAI " + res.status + ": " + detail);
     if (/model_not_found|does not exist|unknown model/i.test(detail)) {
-      return { error: "The configured model name isn't valid. Set OPENAI_MODEL in the Edge Function secrets." };
+      return {
+        error: ai.model === MODEL
+          ? "The configured model name isn't valid. Set OPENAI_MODEL in the Edge Function secrets."
+          : `The model chosen in Admin → AI services for the event importer (${ai.model}) isn't valid for this account. Change it there, or reset that service to its code default.`,
+      };
     }
     return { error: "Couldn't read that event just now." };
   }
@@ -348,22 +392,30 @@ async function storeFromUrl(admin: ReturnType<typeof createClient>, src: string)
 }
 
 async function generateImage(admin: ReturnType<typeof createClient>, title: string, tags: string[]) {
-  // Deliberately abstract. Generating something that imitates a real
-  // organiser's branding would put a fake Microsoft or AWS logo on the public
-  // events page, which is both misleading and not ours to do.
-  const prompt = [
-    "Abstract editorial artwork for a technology community event card.",
-    "Theme: " + [title, ...(tags || [])].join(", ") + ".",
-    "Deep navy and violet with cyan accents, soft gradients, geometric shapes,",
-    "subtle depth, generous negative space, modern and calm.",
-    "No text, no words, no letters, no logos, no brand marks, no people's faces.",
-  ].join(" ");
+  // What staff have chosen for the card artwork, or the constant above.
+  // Read here rather than in the handler because this path only runs when the
+  // event page had no usable image of its own — most imports never reach it.
+  const ai = await loadAiConfig(admin, AI_SLUG_CARD, {
+    model: IMAGE_MODEL,
+    parts: { image_brief: CARD_BRIEF },
+  });
+
+  // ⚠ The theme is appended by this function and is not part of what staff can
+  // edit. It is the event's own title and tags, and an artwork brief that
+  // could drop it would be an artwork brief that draws the same picture for
+  // every event on the page.
+  //
+  // (It used to sit second, between the opening line and the palette. It is
+  // last now so that the brief is one editable block rather than two halves
+  // with a hole in the middle — the only behavioural change here.)
+  const prompt = part(ai, "image_brief", CARD_BRIEF) +
+    " Theme: " + [title, ...(tags || [])].join(", ") + ".";
 
   try {
     const res = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: { "Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: IMAGE_MODEL, prompt, size: "1024x1024", n: 1 }),
+      body: JSON.stringify({ model: ai.model, prompt, size: "1024x1024", n: 1 }),
     });
     if (!res.ok) {
       console.error("image " + res.status + ": " + (await res.text()));

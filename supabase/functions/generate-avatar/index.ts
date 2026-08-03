@@ -62,17 +62,28 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
 //   OPENAI_API_KEY
 //   OPENAI_IMAGE_MODEL                       — optional, see below
+//
+// Since 0031 the artwork and the image model can also be set from Admin → AI
+// services, under the `avatar-art` service that this function shares with
+// `refresh-avatars`. The secret above and the constants in
+// `_shared/avatar-art.ts` remain the floor: with nothing activated, or with
+// the database unreachable, this function behaves exactly as it did before.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { listOf, loadAiConfig, part } from "../_shared/ai-config.ts";
 import {
+  AVATAR_ART_DEFAULTS,
   AVATAR_BUCKET,
   buildPrompt,
   currentCycle,
   decodeBase64,
   extFor,
+  HOUSE_STYLE,
   MAX_ATTEMPTS,
   themeForCycle,
+  THEMES,
   uploadFallback,
+  VARIANTS,
 } from "../_shared/avatar-art.ts";
 
 // A Supabase runtime global, not a Deno one, so it is in none of the types we
@@ -93,7 +104,18 @@ const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 // text model in parse-profile-document: image model names change faster than
 // this function will, and a wrong one should be a dashboard edit rather than
 // a redeploy. The error handler below says so when OpenAI rejects the name.
+//
+// Since 0031 this is the FLOOR rather than the setting. The admin panel's
+// `avatar-art` service can override the model and the artwork; when it has
+// nothing active — a fresh environment, a deliberate reset, or a database this
+// function could not read — everything below runs on exactly these values.
+// See `_shared/ai-config.ts`.
 const IMAGE_MODEL = Deno.env.get("OPENAI_IMAGE_MODEL") ?? "gpt-image-1";
+
+// ⚠ The slug is shared with `refresh-avatars` on purpose, and it is the
+// mechanism by which the two functions cannot drift apart. One row of artwork,
+// two readers. See the header of `_shared/avatar-art.ts`.
+const AI_SLUG = "avatar-art";
 
 // Matches the bucket's allowed_mime_types in 0016. Checked here as well so a
 // bad upload fails before it costs an OpenAI call.
@@ -174,7 +196,24 @@ Deno.serve(async (req) => {
     const storedAttempts: number = profile.avatar_attempts ?? 0;
     const storedCycle: string | null = profile.avatar_cycle ?? null;
     const cycle = currentCycle();
-    const theme = themeForCycle(cycle);
+
+    // The artwork and the model staff have chosen, or the constants above.
+    // Read before the allowance check rather than after, because the themed
+    // fallback tile below is stamped with `avatar_theme` too and a member out
+    // of tries must land on the same month's accent as everybody else. One
+    // memoised read per instance per minute, so this costs the fallback path
+    // nothing. Never throws — see `_shared/ai-config.ts`.
+    const ai = await loadAiConfig(admin, AI_SLUG, {
+      model: IMAGE_MODEL,
+      parts: AVATAR_ART_DEFAULTS,
+    });
+    const imageModel = ai.model;
+    const art = {
+      house_style: part(ai, "house_style", HOUSE_STYLE),
+      variants: listOf(ai, "variants", VARIANTS),
+    };
+
+    const theme = themeForCycle(cycle, listOf(ai, "themes", THEMES));
     const staleCycle = storedCycle !== cycle;
     const attempts = staleCycle ? 0 : storedAttempts;
 
@@ -240,7 +279,7 @@ Deno.serve(async (req) => {
     // The attempt index, 0-based, so a member's three tries in a cycle get the
     // three different treatments in _shared/avatar-art.ts rather than three
     // draws of the same prompt.
-    const prompt = buildPrompt(profile, theme, "photo", next - 1);
+    const prompt = buildPrompt(profile, theme, "photo", next - 1, art);
 
     let reservation = admin
       .from("profiles")
@@ -280,6 +319,10 @@ Deno.serve(async (req) => {
       variant: next - 1,
       attempts,
       next,
+      // Carried into the background half rather than read again there: the
+      // picture must be drawn by the model that was live when the attempt was
+      // reserved, not by whatever staff activated in the seconds since.
+      imageModel,
     });
 
     if (typeof EdgeRuntime !== "undefined" && EdgeRuntime && typeof EdgeRuntime.waitUntil === "function") {
@@ -321,6 +364,7 @@ type DrawJob = {
   variant: number;
   attempts: number;   // spent before this try — what a refund restores
   next: number;       // spent including this try — what the guard matches on
+  imageModel: string; // resolved before the response went out; see above
 };
 
 // Draws, uploads, and writes the profile. Runs after the response has been
@@ -328,7 +372,7 @@ type DrawJob = {
 // line in a log nobody is reading and a member left on 'generating' for ever.
 // Every exit from here leaves `avatar_status` at 'ready' or 'failed'.
 async function draw(admin: ReturnType<typeof createClient>, job: DrawJob): Promise<void> {
-  const { userId, source, mediaType, prompt, theme, cycle, variant, attempts, next } = job;
+  const { userId, source, mediaType, prompt, theme, cycle, variant, attempts, next, imageModel } = job;
 
   try {
     // The photo has done its job, whether the call succeeded or not. It would
@@ -338,7 +382,7 @@ async function draw(admin: ReturnType<typeof createClient>, job: DrawJob): Promi
     // failed generation is not a reason to keep somebody's photograph in
     // memory for the rest of the instance's life — and now that the response
     // has already gone, that life is longer than the request's was.
-    const pngBytes = await generate(job.sourceBytes, mediaType, prompt)
+    const pngBytes = await generate(job.sourceBytes, mediaType, prompt, imageModel)
       .finally(() => job.sourceBytes.fill(0));
 
     const path = `${userId}/${crypto.randomUUID()}.png`;
@@ -464,9 +508,14 @@ async function fail(
 // POST /v1/images/edits, multipart — the edits endpoint rather than
 // generations because the source photograph is the input we are transforming.
 // Plain fetch and FormData, no SDK, same as every other function here.
-async function generate(bytes: Uint8Array, mediaType: string, prompt: string): Promise<Uint8Array> {
+async function generate(
+  bytes: Uint8Array,
+  mediaType: string,
+  prompt: string,
+  model: string,
+): Promise<Uint8Array> {
   const form = new FormData();
-  form.append("model", IMAGE_MODEL);
+  form.append("model", model);
   form.append("image", new Blob([bytes], { type: mediaType }), "source." + extFor(mediaType));
   form.append("prompt", prompt);
   form.append("size", "1024x1024");
@@ -487,9 +536,15 @@ async function generate(bytes: Uint8Array, mediaType: string, prompt: string): P
     // the wrong place. These sentences now land in `avatar_error` and are read
     // by the member off their own profile row, so they still have to be
     // sentences rather than codes.
+    // Since 0031 the model can come from the admin panel as well as from the
+    // secret, and the two need different remedies — so the message names which
+    // one is in play rather than sending somebody to the secrets screen to
+    // change a value that is not being read.
     if (/model_not_found|does not exist|unknown model/i.test(detail)) {
       throw new Error(
-        "The configured image model name isn't valid. Set OPENAI_IMAGE_MODEL in the Supabase Edge Function secrets to a model your account can use.",
+        model === IMAGE_MODEL
+          ? "The configured image model name isn't valid. Set OPENAI_IMAGE_MODEL in the Supabase Edge Function secrets to a model your account can use."
+          : `The image model chosen in the admin panel (${model}) isn't valid for this account. Change it under Admin → AI services → Member avatars, or reset that service to its code default.`,
       );
     }
     if (res.status === 401) {

@@ -71,8 +71,15 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
 //   OPENAI_API_KEY
 //   OPENAI_MODEL                             — optional, defaults below
+//
+// Since 0031 the system prompt and the model can also be set from Admin → AI
+// services, under the `promptarena-challenge` service. The constants below
+// remain the floor. The ceiling is NOT settable there — it is computed per
+// call from the batch size (see `ceilingFor`), and a single number would be
+// wrong for nine batch sizes out of ten.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { loadAiConfig, part } from "../_shared/ai-config.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -86,6 +93,36 @@ const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 // not depend on anybody remembering. ⚠ Bump it whenever the vocabularies, the
 // system prompt or the validation below change.
 const GENERATOR_VERSION = "2026-08-02.1";
+
+// ⚠ And the half of that instruction a comment cannot enforce, for the same
+// reason `promptarena-judge` spells out at length above its own `JUDGE_VERSION`:
+// staff can change the system prompt and the model from the admin panel, and
+// the person doing it is not reading this file. `generatorVersion` below
+// appends 0031's content digest — computed by a database trigger over the
+// stored prompt and model, not by anything here — so a challenge generated
+// under an override records which override produced it. "Which prompt wrote
+// this incoherent challenge" stays answerable without anybody remembering.
+const AI_SLUG = "promptarena-challenge";
+
+type ChallengeConfig = {
+  model: string;
+  systemPrompt: string;
+  generatorVersion: string;
+};
+
+async function resolveChallengeConfig(
+  admin: ReturnType<typeof createClient>,
+): Promise<ChallengeConfig> {
+  const ai = await loadAiConfig(admin, AI_SLUG, {
+    model: MODEL,
+    parts: { system: SYSTEM_PROMPT },
+  });
+  return {
+    model: ai.model,
+    systemPrompt: part(ai, "system", SYSTEM_PROMPT),
+    generatorVersion: GENERATOR_VERSION + (ai.digest ? "+" + ai.digest : ""),
+  };
+}
 
 // ============================================================
 // What "it failed" is allowed to mean
@@ -500,7 +537,13 @@ Deno.serve(async (req) => {
       requests.push(chooseAxes(body, bank, requests));
     }
 
-    const drafts = await askModel({ requests, titles: bank.titles }, startedAt);
+    // Resolved once for the whole batch: ten challenges written in one
+    // invocation must be ten challenges from one generator, or
+    // `generator_version` is a column that answers a question about the batch
+    // rather than about the row.
+    const cfg = await resolveChallengeConfig(admin);
+
+    const drafts = await askModel({ requests, titles: bank.titles, cfg }, startedAt);
 
     // ---- Validation ----
     //
@@ -526,7 +569,7 @@ Deno.serve(async (req) => {
       return json({ ok: true, dry_run: true, generated: accepted.length, rejected, challenges: accepted });
     }
 
-    const rows = accepted.map((c) => toRow(c));
+    const rows = accepted.map((c) => toRow(c, cfg));
     const { data: inserted, error: insertErr } = await admin
       .from("promptarena_challenges")
       .insert(rows)
@@ -544,8 +587,8 @@ Deno.serve(async (req) => {
       dry_run: false,
       inserted: inserted?.length ?? 0,
       rejected,
-      model: MODEL,
-      generator_version: GENERATOR_VERSION,
+      model: cfg.model,
+      generator_version: cfg.generatorVersion,
       challenges: inserted,
     });
   } catch (err) {
@@ -879,7 +922,7 @@ function cleanList(v: unknown, max: number, maxChars: number): string[] {
 // `created_at`: they are the same instant today, but they mean different things
 // — one is when the model wrote it and the other is when the row appeared — and
 // a backfill of previously generated challenges would separate them.
-function toRow(c: Accepted): Record<string, unknown> {
+function toRow(c: Accepted, cfg: ChallengeConfig): Record<string, unknown> {
   return {
     title: c.title,
     brief: c.brief,
@@ -889,8 +932,8 @@ function toRow(c: Accepted): Record<string, unknown> {
     creativity: c.creativity,
     constraints: c.constraints,
     rubric: c.rubric,
-    generated_by_model: MODEL,
-    generator_version: GENERATOR_VERSION,
+    generated_by_model: cfg.model,
+    generator_version: cfg.generatorVersion,
     // ⚠ `technique` lives here and nowhere else. 0029 has no column for it, and
     // `generation_params` is deliberately absent from `promptarena_challenge_deck`
     // — which is what stops a member reading which technique they are being
@@ -935,7 +978,9 @@ function toRow(c: Accepted): Record<string, unknown> {
 // the ceiling escalates instead: attempt one asks for `ceilingFor(n, false)`,
 // any attempt after a truncation asks for `ceilingFor(n, true)`.
 async function askModel(
-  input: { requests: AxisRequest[]; titles: string[] },
+  // `cfg` rides on the input rather than beside it, so the retry loop and the
+  // single attempt cannot end up on two different configurations.
+  input: { requests: AxisRequest[]; titles: string[]; cfg: ChallengeConfig },
   startedAt: number,
 ): Promise<Draft[]> {
   let attempt = 0;
@@ -1038,7 +1083,9 @@ function triageOpenAI(status: number, detail: string, retryAfterMs: number | nul
     return new ChallengeError(
       "model_not_configured",
       503,
-      "The configured AI model name isn't valid. Set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.",
+      // Two possible sources since 0031, so the sentence names both — this
+      // classifier sees a response, not the configuration that produced it.
+      "The configured AI model name isn't valid. Change it under Admin → AI services → PromptArena challenge writer if a model is set there, or set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.",
     );
   }
   if (/insufficient_quota|billing_hard_limit|exceeded your current quota|billing_not_active/i.test(detail)) {
@@ -1135,7 +1182,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function askModelOnce(
-  input: { requests: AxisRequest[]; titles: string[] },
+  input: { requests: AxisRequest[]; titles: string[]; cfg: ChallengeConfig },
   maxOutputTokens: number,
 ): Promise<Draft[]> {
   const lines = [
@@ -1185,8 +1232,8 @@ async function askModelOnce(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: MODEL,
-        instructions: SYSTEM_PROMPT,
+        model: input.cfg.model,
+        instructions: input.cfg.systemPrompt,
         // See `ceilingFor`: sized per challenge from the bounds `validate`
         // enforces, plus a reasoning allowance, because this ceiling is shared
         // with the model's own reasoning tokens. Escalates once on truncation.

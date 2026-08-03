@@ -1,6 +1,8 @@
-// ⚠ GENERATED — do not edit. Deploy-time twin of index.ts with ../_shared/*
-// inlined, because the Supabase dashboard editor cannot resolve relative
-// imports outside the function directory. Edit index.ts and regenerate.
+// GENERATED - do not edit. Deploy-time twin of index.ts with the ../_shared/cors.ts, ../_shared/ai-config.ts imports replaced by those files inline, and
+// nothing else. The Supabase dashboard editor deploys one function directory at a
+// time and cannot reach a shared parent file. Edit index.ts and regenerate; the
+// two must stay in step.
+
 // import-event
 // ------------------------------------------------------------
 // Turns an event link into a draft event for the admin to review. Never
@@ -27,14 +29,231 @@
 //   OPENAI_API_KEY
 //   OPENAI_MODEL        — optional, defaults below
 //   OPENAI_IMAGE_MODEL  — optional, defaults below
+//
+// Since 0031 both halves of this function are settable from Admin → AI
+// services, and they are TWO services there rather than one:
+//
+//   `import-event`       the text call below — prompt, model, ceiling
+//   `import-event-card`  the image call at the bottom — prompt and model
+//
+// They are separate because they are separate calls: a different endpoint, a
+// different kind of model and a different prompt. One combined setting would
+// have meant either hiding the artwork brief from Ahmed or offering him a
+// model dropdown that is wrong for one of the two calls. The constants below
+// remain the floor for both.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-const corsHeaders = {  "Access-Control-Allow-Origin": "*",  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",};
+// ---- inlined from ../_shared/cors.ts ----
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+// ---- inlined from ../_shared/ai-config.ts ----
+type AiDb = {
+  from(table: string): {
+    select(columns: string): {
+      eq(column: string, value: string): {
+        maybeSingle(): PromiseLike<{
+          data: Record<string, unknown> | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+  };
+};
+
+// A whole invocation reads the same configuration, and some of these functions
+// loop — `promptarena-judge` drains a queue, `refresh-avatars` walks a batch,
+// `write-contact-email` writes for up to 25 people. One read per invocation
+// rather than one per item, without making a stale cache outlive the instance
+// that made it.
+//
+// 60 seconds, not "for ever": Edge Function instances are reused between
+// requests, so a permanent memo would mean an activated prompt taking effect
+// only after the instance recycled — which is invisible, unpredictable, and
+// exactly the kind of thing that gets debugged as "the save didn't work".
+const CACHE_MS = 60_000;
+
+const cache = new Map<string, { at: number; row: StoredConfig | null }>();
+
+type StoredConfig = {
+  model: string | null;
+  max_output_tokens: number | null;
+  parts: unknown;
+  version: number | null;
+  config_digest: string | null;
+};
+
+type AiDefaults = {
+  model: string;
+  maxOutputTokens?: number;
+  parts: Record<string, unknown>;
+};
+
+type AiConfig = {
+  slug: string;
+  model: string;
+  maxOutputTokens: number;
+  parts: Record<string, unknown>;
+  version: number;
+  digest: string;
+  // 'database' means at least one field came from a stored version. Logged by
+  // some callers so a support question about a strange answer can start with
+  // "which prompt produced it".
+  source: "database" | "code";
+};
+
+// The one entry point. `slug` is `ai_services.slug`; `defaults` is what the
+// function would have used before 0031 existed.
+async function loadAiConfig(
+  admin: AiDb,
+  slug: string,
+  defaults: AiDefaults,
+): Promise<AiConfig> {
+  const base: AiConfig = {
+    slug,
+    model: defaults.model,
+    maxOutputTokens: defaults.maxOutputTokens ?? 0,
+    parts: { ...defaults.parts },
+    version: 0,
+    digest: "",
+    source: "code",
+  };
+
+  const row = await read(admin, slug);
+  if (!row) return base;
+
+  const merged: AiConfig = { ...base, parts: { ...defaults.parts } };
+  let touched = false;
+
+  const model = trimmed(row.model);
+  if (model) {
+    merged.model = model;
+    touched = true;
+  }
+
+  // Only accepted when the caller has a ceiling at all. A service that does
+  // not send `max_output_tokens` to OpenAI (the image ones) must not acquire
+  // one because a row carried a number.
+  if (defaults.maxOutputTokens && Number.isInteger(row.max_output_tokens) && (row.max_output_tokens as number) > 0) {
+    merged.maxOutputTokens = row.max_output_tokens as number;
+    touched = true;
+  }
+
+  // Part-by-part, and only keys the caller declared. A stored `parts` object
+  // carrying a key this version of the function knows nothing about is
+  // ignored rather than passed through — which is what makes rolling the code
+  // back over a newer stored configuration safe.
+  if (row.parts && typeof row.parts === "object" && !Array.isArray(row.parts)) {
+    const stored = row.parts as Record<string, unknown>;
+    for (const key of Object.keys(defaults.parts)) {
+      if (!(key in stored)) continue;
+      const fallback = defaults.parts[key];
+      const value = Array.isArray(fallback)
+        ? listPart(stored[key], fallback as unknown[])
+        : textPart(stored[key], String(fallback ?? ""));
+      if (value !== fallback) {
+        merged.parts[key] = value;
+        touched = true;
+      }
+    }
+  }
+
+  if (Number.isInteger(row.version) && (row.version as number) > 0) merged.version = row.version as number;
+  merged.digest = trimmed(row.config_digest);
+  merged.source = touched ? "database" : "code";
+  return merged;
+}
+
+// ---- Part validation --------------------------------------------------
+//
+// Strict, and deliberately so. These decide whether a stored value is good
+// enough to send to a paid model call in place of one that was written and
+// reviewed in a source file. "Present but empty" is the single most likely
+// way for a stored prompt to be wrong, and it is the one that would otherwise
+// produce a silently unguided model rather than a visible error.
+
+function textPart(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const text = value.trim();
+  return text ? text : fallback;
+}
+
+// A list part is all-or-nothing against the code's own list. The twelve
+// monthly themes and the three avatar variants are ROTAS: they are indexed by
+// month and by attempt number, so a stored list of a different length does not
+// mean "fewer themes", it means every index after the edit points somewhere
+// different from what the code that reads it expects. Length is therefore part
+// of the shape, not a preference.
+function listPart(value: unknown, fallback: unknown[]): unknown[] {
+  if (!Array.isArray(value)) return fallback;
+  if (value.length !== fallback.length) return fallback;
+  const clean = value.map((v) => (typeof v === "string" ? v.trim() : ""));
+  if (clean.some((v) => !v)) return fallback;
+  return clean;
+}
+
+// Convenience for callers whose parts are all plain strings.
+function part(cfg: AiConfig, key: string, fallback: string): string {
+  return textPart(cfg.parts[key], fallback);
+}
+
+function listOf(cfg: AiConfig, key: string, fallback: string[]): string[] {
+  const value = listPart(cfg.parts[key], fallback);
+  return value.map((v) => String(v));
+}
+
+// ---- The read ---------------------------------------------------------
+//
+// `ai_active_config` is a view over the one active version per service. It is
+// read with the service role, because every caller of this file already is one
+// — and because the view is staff-only, which a function's own JWT-less
+// service context satisfies by bypassing RLS rather than by passing it.
+async function read(admin: AiDb, slug: string): Promise<StoredConfig | null> {
+  const hit = cache.get(slug);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.row;
+
+  try {
+    const { data, error } = await admin
+      .from("ai_active_config")
+      .select("model, max_output_tokens, parts, version, config_digest")
+      .eq("slug", slug)
+      .maybeSingle();
+
+    if (error) {
+      // Logged rather than thrown. The most likely cause on a fresh
+      // environment is that 0031 has not been applied yet, and a function
+      // that refused to run until a migration landed would be a worse
+      // outcome than one that runs on its own defaults and says so.
+      console.warn(`ai-config: ${slug} unreadable (${error.message}) — using code defaults`);
+      cache.set(slug, { at: Date.now(), row: null });
+      return null;
+    }
+
+    const row = (data ?? null) as StoredConfig | null;
+    cache.set(slug, { at: Date.now(), row });
+    return row;
+  } catch (err) {
+    console.warn(`ai-config: ${slug} lookup failed (${String(err)}) — using code defaults`);
+    cache.set(slug, { at: Date.now(), row: null });
+    return null;
+  }
+}
+
+function trimmed(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 const IMAGE_MODEL = Deno.env.get("OPENAI_IMAGE_MODEL") ?? "gpt-image-1";
+
+// The code defaults for the ceiling, and the two slugs the admin panel stores
+// overrides under. See the header for why there are two.
+const MAX_OUTPUT_TOKENS = 3000;
+const AI_SLUG_TEXT = "import-event";
+const AI_SLUG_CARD = "import-event-card";
 
 const BUCKET = "event-images";
 
@@ -76,6 +295,20 @@ Dates must be YYYY-MM-DD. If the page gives a date without a year, choose the ne
 Tags are for filtering the events list, so keep them broad and reusable ('AI', 'Cloud', 'Hackathon', 'Workshop', 'Networking', 'Security') rather than specific to one event.
 
 Set confidence to 'low' whenever the date or the title had to be guessed at or left empty.`;
+
+// The artwork brief for an event with no usable image of its own, and the code
+// default for the `import-event-card` service.
+//
+// Deliberately abstract. Generating something that imitates a real organiser's
+// branding would put a fake Microsoft or AWS logo on the public events page,
+// which is both misleading and not ours to do — so if this is ever edited from
+// the panel, that is the sentence to keep.
+const CARD_BRIEF = [
+  "Abstract editorial artwork for a technology community event card.",
+  "Deep navy and violet with cyan accents, soft gradients, geometric shapes,",
+  "subtle depth, generous negative space, modern and calm.",
+  "No text, no words, no letters, no logos, no brand marks, no people's faces.",
+].join(" ");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -145,7 +378,7 @@ Deno.serve(async (req) => {
       sourceText.slice(0, 24000),
     ].join("\n");
 
-    const evt = await extractEvent(context);
+    const evt = await extractEvent(admin, context);
     if ("error" in evt) return json({ error: evt.error }, 502);
 
     // Judge by the result, not the source. Live testing put both LinkedIn
@@ -297,14 +530,21 @@ function decodeEntities(s: string) {
 
 // ---- The model call ---------------------------------------------------
 
-async function extractEvent(context: string) {
+async function extractEvent(admin: ReturnType<typeof createClient>, context: string) {
+  // What staff have chosen for the text half, or the constants above.
+  const ai = await loadAiConfig(admin, AI_SLUG_TEXT, {
+    model: MODEL,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    parts: { system: SYSTEM_PROMPT },
+  });
+
   const res = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: { "Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: MODEL,
-      instructions: SYSTEM_PROMPT,
-      max_output_tokens: 3000,
+      model: ai.model,
+      instructions: part(ai, "system", SYSTEM_PROMPT),
+      max_output_tokens: ai.maxOutputTokens,
       input: [{ role: "user", content: [{ type: "input_text", text: context }] }],
       text: { format: { type: "json_schema", name: "event", strict: true, schema: EVENT_SCHEMA } },
     }),
@@ -314,7 +554,11 @@ async function extractEvent(context: string) {
     const detail = await res.text();
     console.error("OpenAI " + res.status + ": " + detail);
     if (/model_not_found|does not exist|unknown model/i.test(detail)) {
-      return { error: "The configured model name isn't valid. Set OPENAI_MODEL in the Edge Function secrets." };
+      return {
+        error: ai.model === MODEL
+          ? "The configured model name isn't valid. Set OPENAI_MODEL in the Edge Function secrets."
+          : `The model chosen in Admin → AI services for the event importer (${ai.model}) isn't valid for this account. Change it there, or reset that service to its code default.`,
+      };
     }
     return { error: "Couldn't read that event just now." };
   }
@@ -351,22 +595,30 @@ async function storeFromUrl(admin: ReturnType<typeof createClient>, src: string)
 }
 
 async function generateImage(admin: ReturnType<typeof createClient>, title: string, tags: string[]) {
-  // Deliberately abstract. Generating something that imitates a real
-  // organiser's branding would put a fake Microsoft or AWS logo on the public
-  // events page, which is both misleading and not ours to do.
-  const prompt = [
-    "Abstract editorial artwork for a technology community event card.",
-    "Theme: " + [title, ...(tags || [])].join(", ") + ".",
-    "Deep navy and violet with cyan accents, soft gradients, geometric shapes,",
-    "subtle depth, generous negative space, modern and calm.",
-    "No text, no words, no letters, no logos, no brand marks, no people's faces.",
-  ].join(" ");
+  // What staff have chosen for the card artwork, or the constant above.
+  // Read here rather than in the handler because this path only runs when the
+  // event page had no usable image of its own — most imports never reach it.
+  const ai = await loadAiConfig(admin, AI_SLUG_CARD, {
+    model: IMAGE_MODEL,
+    parts: { image_brief: CARD_BRIEF },
+  });
+
+  // ⚠ The theme is appended by this function and is not part of what staff can
+  // edit. It is the event's own title and tags, and an artwork brief that
+  // could drop it would be an artwork brief that draws the same picture for
+  // every event on the page.
+  //
+  // (It used to sit second, between the opening line and the palette. It is
+  // last now so that the brief is one editable block rather than two halves
+  // with a hole in the middle — the only behavioural change here.)
+  const prompt = part(ai, "image_brief", CARD_BRIEF) +
+    " Theme: " + [title, ...(tags || [])].join(", ") + ".";
 
   try {
     const res = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: { "Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: IMAGE_MODEL, prompt, size: "1024x1024", n: 1 }),
+      body: JSON.stringify({ model: ai.model, prompt, size: "1024x1024", n: 1 }),
     });
     if (!res.ok) {
       console.error("image " + res.status + ": " + (await res.text()));

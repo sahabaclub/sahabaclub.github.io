@@ -123,8 +123,15 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
 //   OPENAI_API_KEY
 //   OPENAI_MODEL                             — optional, defaults below
+//
+// Since 0031 the system prompt, the model and the output ceiling can also be
+// set from Admin → AI services. ⚠ Read the block above `JUDGE_VERSION` before
+// changing anything here: this judge is calibrated, and an edit that does not
+// move `judge_version` makes every score before and after it silently
+// incomparable. The constants in this file remain the floor.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { loadAiConfig, part } from "../_shared/ai-config.ts";
 
 // A Supabase runtime global, not a Deno one, so it is in none of the types we
 // import. Same declaration and same fallback as `generate-avatar`: without
@@ -144,6 +151,86 @@ const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 // if this string moves when the judge does. `judge_model` records the other
 // half: the model changing underneath us.
 const JUDGE_VERSION = "2026-08-02.1";
+
+// ============================================================
+// ⚠ AND SINCE 0031, THE PART OF THAT INSTRUCTION A COMMENT CANNOT ENFORCE
+// ============================================================
+//
+// The paragraph above was written for somebody editing this file. It held
+// because editing the judge meant editing source and deploying it, and a
+// deploy is a moment at which a person reads the file they are deploying.
+//
+// Staff can now change this judge's system prompt and its model from the admin
+// panel. That person is not reading this file. So "remember to bump the
+// version" is exactly the kind of rule this function's own header refuses to
+// rely on elsewhere — "a rule that lives only in a prompt is a rule that holds
+// until the day it does not" — and it is now enforced instead of asked for:
+//
+//   * 0031 computes `config_digest` in a database trigger, over the stored
+//     prompt, the model and the ceiling together. It is not a column any
+//     caller can write.
+//   * `judgeVersionFor` below appends it to the constant above, so an
+//     overridden judge stamps `2026-08-02.1+9f3c1a4b2d0e` on every row it
+//     writes.
+//   * There is no branch here that can decline to do that, because this
+//     function does not compute the digest and cannot reproduce one for a
+//     configuration it is not running.
+//
+// Which means the two questions `promptarena_submissions.judge_version` exists
+// to answer stay answerable after the panel ships:
+//
+//   "Did the judge change in March?"     — the string moved on the 14th.
+//   "Are these two months comparable?"   — same string, same judge. The digest
+//                                          is over content, so rolling back to
+//                                          an earlier prompt reproduces that
+//                                          prompt's digest exactly, and two
+//                                          windows judged identically compare
+//                                          equal rather than merely looking
+//                                          similar.
+//
+// `judge_model` still records the model separately. Both move on a model
+// change, deliberately: a model swap is a judge change, and the column that
+// answers "were these comparable" has to say no.
+const AI_SLUG = "promptarena-judge";
+
+// Everything this function needs that staff can now change, resolved once per
+// invocation and then passed down. Deliberately NOT held in a module-level
+// mutable: an isolate serves concurrent requests, and a judgement whose
+// `judge_model` column disagrees with the prompt that produced it is worse
+// than no column at all.
+type JudgeConfig = {
+  model: string;
+  systemPrompt: string;
+  maxOutputTokens: number;
+  maxOutputTokensRetry: number;
+  version: string;
+  source: "database" | "code";
+};
+
+async function resolveJudgeConfig(admin: ReturnType<typeof createClient>): Promise<JudgeConfig> {
+  const ai = await loadAiConfig(admin, AI_SLUG, {
+    model: MODEL,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    parts: { system: SYSTEM_PROMPT },
+  });
+
+  const base = ai.maxOutputTokens || MAX_OUTPUT_TOKENS;
+
+  return {
+    model: ai.model,
+    systemPrompt: part(ai, "system", SYSTEM_PROMPT),
+    maxOutputTokens: base,
+    // The retry ceiling is not independently settable and never was — it is
+    // "stop rationing the reasoning" relative to the first attempt. Scaled
+    // from whatever the base is, floored at the code's own retry value so
+    // lowering the base cannot quietly remove the escape hatch, and capped at
+    // what 0031's CHECK will accept so the two files agree on what a ceiling
+    // may be.
+    maxOutputTokensRetry: Math.min(128_000, Math.max(MAX_OUTPUT_TOKENS_RETRY, base * 2)),
+    version: JUDGE_VERSION + (ai.digest ? "+" + ai.digest : ""),
+    source: ai.source,
+  };
+}
 
 // ============================================================
 // What "it failed" is allowed to mean
@@ -761,6 +848,13 @@ Deno.serve(async (req) => {
       return fail(new JudgeError("not_signed_in", 401, "Not signed in"));
     }
 
+    // Resolved once, here, and passed down every path below — including the
+    // drain, so a batch of thirty judgements is thirty judgements by one
+    // judge. Never throws: an unreadable configuration means this invocation
+    // runs on the constants in this file, which is the calibrated judge and
+    // therefore the right thing to fall back to.
+    const cfg = await resolveJudgeConfig(admin);
+
     if (!OPENAI_API_KEY) {
       console.error("OPENAI_API_KEY is not set");
       return fail(new JudgeError(
@@ -798,12 +892,12 @@ Deno.serve(async (req) => {
         return fail(new JudgeError("already_judged", 409, "This submission has already been judged"));
       }
 
-      const claimed = await claim(admin, submissionId);
+      const claimed = await claim(admin, submissionId, cfg);
       if (!claimed) {
         return fail(new JudgeError("claim_lost", 409, "Another judge is already working on this submission"));
       }
 
-      const work = judgeOne(admin, claimed, startedAt);
+      const work = judgeOne(admin, claimed, startedAt, cfg);
 
       if (wait) {
         const outcome = await work;
@@ -831,7 +925,7 @@ Deno.serve(async (req) => {
     }
 
     const limit = clampInt(body?.limit, 1, DRAIN_MAX_LIMIT, DRAIN_DEFAULT_LIMIT);
-    const result = await drain(admin, limit, startedAt);
+    const result = await drain(admin, limit, startedAt, cfg);
     return json({ ok: true, ...result });
   } catch (err) {
     if (err instanceof JudgeError) {
@@ -929,6 +1023,7 @@ type Claimed = { id: string; challenge_id: string; prompt_text: string };
 async function claim(
   admin: ReturnType<typeof createClient>,
   submissionId: string,
+  cfg: JudgeConfig,
 ): Promise<Claimed | null> {
   const staleBefore = new Date(Date.now() - CLAIM_STALE_MS).toISOString();
 
@@ -937,8 +1032,8 @@ async function claim(
     .update({
       judge_status: "pending",
       judge_error: null,
-      judge_model: MODEL,
-      judge_version: JUDGE_VERSION,
+      judge_model: cfg.model,
+      judge_version: cfg.version,
       updated_at: new Date().toISOString(),
     })
     .eq("id", submissionId)
@@ -968,6 +1063,7 @@ async function drain(
   admin: ReturnType<typeof createClient>,
   limit: number,
   startedAt: number,
+  cfg: JudgeConfig,
 ): Promise<Record<string, unknown>> {
   const staleBefore = new Date(Date.now() - CLAIM_STALE_MS).toISOString();
 
@@ -1030,7 +1126,7 @@ async function drain(
       stoppedEarly = true;
       break;
     }
-    const claimed = await claim(admin, item.id);
+    const claimed = await claim(admin, item.id, cfg);
     if (!claimed) {
       skipped++;
       continue;
@@ -1038,7 +1134,7 @@ async function drain(
     // Each submission gets its own retry clock. Sharing the invocation's
     // would mean the fifth submission in a batch had no budget left to retry
     // a rate limit that the first one caused.
-    const outcome = await judgeOne(admin, claimed, Date.now());
+    const outcome = await judgeOne(admin, claimed, Date.now(), cfg);
     if (outcome.status === "judged") judged.push(item.id);
     else failed.push({ id: item.id, code: String(outcome.code ?? "unknown") });
   }
@@ -1082,6 +1178,7 @@ async function judgeOne(
   admin: ReturnType<typeof createClient>,
   row: Claimed,
   startedAt: number,
+  cfg: JudgeConfig,
 ): Promise<Outcome> {
   try {
     // The challenge, read from the base table rather than the deck view,
@@ -1120,7 +1217,7 @@ async function judgeOne(
     // of this file is built to avoid.
     if (isNonAnswer(promptText)) {
       const verdict = nonAnswerVerdict(arabic);
-      return await write(admin, row.id, 1, zeroRubric("non_answer"), verdict);
+      return await write(admin, row.id, 1, zeroRubric("non_answer", cfg.version), verdict, cfg);
     }
 
     // ---- The echo short-circuit ----
@@ -1139,6 +1236,7 @@ async function judgeOne(
       truncated: promptText.length > PROMPT_MAX_CHARS,
       challenge,
       echo,
+      cfg,
     }, startedAt);
 
     // ---- The score, computed rather than asked for ----
@@ -1150,7 +1248,7 @@ async function judgeOne(
     // judgement at all". `weights` too: a score is a weighted mean, and a mean
     // is not reproducible from its parts without them.
     rubricScores.meta = {
-      judge_version: JUDGE_VERSION,
+      judge_version: cfg.version,
       weights,
       on_topic: draft.on_topic,
       language: draft.language,
@@ -1189,13 +1287,13 @@ async function judgeOne(
       );
     }
 
-    return await write(admin, row.id, score, rubricScores, verdict);
+    return await write(admin, row.id, score, rubricScores, verdict, cfg);
   } catch (err) {
     const je = err instanceof JudgeError
       ? err
       : new JudgeError("internal_error", 500, String(err instanceof Error ? err.message : err));
     console.error(`promptarena-judge ${row.id} ${je.code}: ${je.message}`);
-    await markFailed(admin, row.id, je);
+    await markFailed(admin, row.id, je, cfg);
     return {
       status: "failed",
       submission_id: row.id,
@@ -1223,6 +1321,7 @@ async function write(
   score: number,
   rubricScores: Record<string, unknown>,
   verdict: Verdict,
+  cfg: JudgeConfig,
 ): Promise<Outcome> {
   // The same six conditions `promptarena_submissions_judged_is_explained`
   // checks, checked here first. Reaching the constraint is not a safety net
@@ -1247,8 +1346,12 @@ async function write(
       feedback_improvements: verdict.improvements,
       feedback_how_to_improve: verdict.how_to_improve,
       rubric_scores: rubricScores,
-      judge_model: MODEL,
-      judge_version: JUDGE_VERSION,
+      // ⚠ The pair that makes score drift attributable. `cfg.version` is the
+      // code constant plus 0031's content digest when staff have activated an
+      // override — see the block above `JUDGE_VERSION`. Nothing here chooses
+      // whether to move it.
+      judge_model: cfg.model,
+      judge_version: cfg.version,
       judge_error: null,
       judged_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -1295,6 +1398,7 @@ async function markFailed(
   admin: ReturnType<typeof createClient>,
   submissionId: string,
   err: JudgeError,
+  cfg: JudgeConfig,
 ): Promise<void> {
   const note = `${err.message} [${err.code}${err.retryable ? ", retryable" : ""}]`.slice(0, 500);
   const { error } = await admin
@@ -1303,8 +1407,8 @@ async function markFailed(
       judge_status: "failed",
       score: null,
       judge_error: note,
-      judge_model: MODEL,
-      judge_version: JUDGE_VERSION,
+      judge_model: cfg.model,
+      judge_version: cfg.version,
       updated_at: new Date().toISOString(),
     })
     .eq("id", submissionId)
@@ -1513,10 +1617,10 @@ function nonAnswerVerdict(arabic: boolean): Verdict {
 // A rubric of zeros with a reason, for the paths that never reached the model.
 // Written rather than left `{}` so that a later query asking "which submissions
 // did the judge decide without asking the model" has an answer.
-function zeroRubric(gate: string): Record<string, unknown> {
+function zeroRubric(gate: string, version: string): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const d of DIMENSIONS) out[d] = 1;
-  out.meta = { judge_version: JUDGE_VERSION, gate, model_consulted: false };
+  out.meta = { judge_version: version, gate, model_consulted: false };
   return out;
 }
 
@@ -1639,6 +1743,10 @@ type AskInput = {
   truncated: boolean;
   challenge: Record<string, unknown>;
   echo: boolean;
+  // Carried on the input rather than passed alongside it, so the retry loop
+  // and the single attempt cannot end up using different configurations for
+  // two attempts at the same submission.
+  cfg: JudgeConfig;
 };
 
 // Retries the transient half of the taxonomy in-process and gives up early
@@ -1676,7 +1784,7 @@ type AskInput = {
 // it does not.
 async function askModel(input: AskInput, startedAt: number): Promise<Draft> {
   let attempt = 0;
-  let ceiling = MAX_OUTPUT_TOKENS;
+  let ceiling = input.cfg.maxOutputTokens;
   for (;;) {
     attempt++;
     let failure: JudgeError;
@@ -1704,7 +1812,7 @@ async function askModel(input: AskInput, startedAt: number): Promise<Draft> {
     // Raise the ceiling for whatever comes next. Done before `planRetry` so that
     // it also applies when the *next* failure is a rate limit: once we know this
     // submission needs more room, every further attempt gets it.
-    if (failure.code === "output_truncated") ceiling = MAX_OUTPUT_TOKENS_RETRY;
+    if (failure.code === "output_truncated") ceiling = input.cfg.maxOutputTokensRetry;
 
     const plan = planRetry({
       attempt,
@@ -1778,7 +1886,11 @@ function triageOpenAI(status: number, detail: string, retryAfterMs: number | nul
     return new JudgeError(
       "model_not_configured",
       503,
-      "The configured AI model name isn't valid. Set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.",
+      // Two places the name can come from since 0031, so the sentence names
+      // both rather than sending an operator to change a value that is not
+      // being read. `triageOpenAI` classifies a response and is not given the
+      // configuration, which is why this one message covers both.
+      "The configured AI model name isn't valid. Change it under Admin → AI services → PromptArena coach if a model is set there, or set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.",
     );
   }
   if (/insufficient_quota|billing_hard_limit|exceeded your current quota|billing_not_active/i.test(detail)) {
@@ -1991,8 +2103,8 @@ async function askModelOnce(input: AskInput, maxOutputTokens: number): Promise<D
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: MODEL,
-        instructions: SYSTEM_PROMPT,
+        model: input.cfg.model,
+        instructions: input.cfg.systemPrompt,
         // See MAX_OUTPUT_TOKENS: this ceiling is shared with the model's own
         // reasoning tokens, so it is sized as (bounded visible payload at Arabic
         // token density) + (a reasoning allowance), and it escalates once on
@@ -2081,8 +2193,9 @@ async function askModelOnce(input: AskInput, maxOutputTokens: number): Promise<D
       "output_truncated",
       503,
       `The AI coach ran out of room mid-answer (ceiling ${maxOutputTokens} tokens, shared with its own ` +
-        `reasoning). Nothing is wrong with this prompt. If this persists, raise MAX_OUTPUT_TOKENS_RETRY in ` +
-        `promptarena-judge — re-running at the same ceiling will not reliably fix it, and there is no ` +
+        `reasoning). Nothing is wrong with this prompt. If this persists, raise the ceiling under ` +
+        `Admin → AI services → PromptArena coach (or MAX_OUTPUT_TOKENS_RETRY in promptarena-judge, which ` +
+        `is what the panel's value scales from) — re-running at the same ceiling will not reliably fix it, and there is no ` +
         `reasoning-effort dial to lower here because the reasoning is what the judge is for.`,
       { retryable: true },
     );
