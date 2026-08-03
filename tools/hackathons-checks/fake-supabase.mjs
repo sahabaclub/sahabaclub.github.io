@@ -10,12 +10,16 @@ export const rows = {
       tagline: null, description: null, status: "announced",
       starts_on: null, ends_on: null, location: null, mode: null, partner: null,
     },
+    // `location` follows 0036's convention: it is the Demo Day VENUE, always
+    // prefixed with the words "Demo Day", and round 2 held two of them in one
+    // field separated by " · ". Round 3 is left with no location at all, so
+    // "a round that records no Demo Day contributes none" stays exercised.
     {
       id: "r4", slug: "eduhackai-4", round_number: 4, name: "EduHackAI-4",
       tagline: "Fourth round", status: "completed",
       description: "Ten days, one team, one shipped app — this round ran in Arabic.",
       starts_on: "2025-12-06", ends_on: "2025-12-20",
-      location: "Alexandria", mode: "hybrid", partner: null,
+      location: "Demo Day: Cairo, Egypt", mode: "online", partner: null,
     },
     {
       id: "r3", slug: "eduhackai-3", round_number: 3, name: "EduHackAI-3",
@@ -27,7 +31,8 @@ export const rows = {
       id: "r2", slug: "eduhackai-2", round_number: 2, name: "EduHackAI-2",
       tagline: null, description: null, status: "completed",
       starts_on: "2025-05-24", ends_on: "2025-06-28",
-      location: null, mode: "online", partner: null,
+      location: "Demo Day 1: CodersHQ, Dubai · Demo Day 2: Cairo, Egypt",
+      mode: "online", partner: null,
     },
     // Kept rank-less on purpose: the "a round with no recorded placings must
     // render its teams without medals" case has to stay exercised.
@@ -35,7 +40,7 @@ export const rows = {
       id: "r1", slug: "eduhackai-1", round_number: 1, name: "EduHackAI-1",
       tagline: null, description: null, status: "completed",
       starts_on: "2025-02-01", ends_on: null,
-      location: null, mode: "in-person", partner: null,
+      location: "Demo Day: Mercure Hotel, Dubai", mode: "in-person", partner: null,
     },
   ],
   hackathon_teams: [
@@ -51,12 +56,28 @@ export const rows = {
   ],
   // Deliberately NOT alphabetical: the view supplies the order and the
   // renderer must not re-sort it. Coaches first, lead coach first of those.
+  //
+  // The coach rows also carry the three cases the programme-wide "Thanks to
+  // our coaches" section has to survive:
+  //
+  //   * one person coaching several rounds — "Ahmed Zoka" is in r4, r3 and r2
+  //     and must fold into ONE card naming all three;
+  //   * that person spelled differently between rounds — r2 stores him
+  //     lower-case, so deduplication cannot be a plain string match;
+  //   * a coach recorded under a single name and nothing else — "Solo", which
+  //     is the shape two of the real coaches have, and which must render like
+  //     everybody else rather than being special-cased.
   hackathon_roster: [
     { hackathon_id: "r4", team_id: null, full_name: "Ahmed Zoka", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r4", team_id: null, full_name: "Aaron Second Coach", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r4", team_id: "t41", full_name: "Zed Builder", is_mentor: false, is_judge: false, role_in_team: "Developer, Designer", profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r4", team_id: "t41", full_name: "Alice Builder", is_mentor: false, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r4", team_id: null, full_name: "No Team Person", is_mentor: false, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
+    { hackathon_id: "r3", team_id: null, full_name: "Ahmed Zoka", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
+    { hackathon_id: "r3", team_id: null, full_name: "Gangothri Example", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
+    { hackathon_id: "r3", team_id: "t31", full_name: "Alice Builder", is_mentor: false, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
+    { hackathon_id: "r2", team_id: null, full_name: "ahmed zoka", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
+    { hackathon_id: "r1", team_id: null, full_name: "Solo", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r1", team_id: "t11", full_name: "Someone Else", is_mentor: false, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
   ],
 };

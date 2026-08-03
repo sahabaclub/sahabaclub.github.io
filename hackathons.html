@@ -156,7 +156,7 @@
 
   /* ---- One round ---- */
   .hk-round {
-    padding: 26px 0 8px;
+    padding: 26px 0 18px;
     border-top: 1px solid var(--glass-border);
     scroll-margin-top: 90px;
   }
@@ -170,11 +170,13 @@
     text-transform: uppercase;
     color: var(--cyan);
   }
-  /* Now a <span> inside the disclosure button rather than a heading of its
-     own, so the block margin goes and the size is set here. */
+  /* The round's name, which is now the text that stands in for the round's
+     logo when its file is missing — see .hk-logo in styles.css. It is a
+     <span> inside the <h3>, so the block margin goes and the size is set
+     here. */
   .hk-round-name {
     display: block;
-    margin: 3px 0 0;
+    margin: 0;
     font-size: 30px;
     font-weight: 800;
     letter-spacing: -0.015em;
@@ -693,7 +695,21 @@
 
   <section class="events-hero">
     <p class="kicker center">Build your first AI app in 10 days</p>
-    <h1 class="glow-text">EduHackAI</h1>
+    <!-- The brand mark, with the wordmark as its fallback text. Both files
+         are 500x500 and both are declared at their intrinsic size so the
+         slot is the right shape before either has loaded; .hk-logo holds
+         that height open whichever of the two ends up filling it, so the
+         reveal costs no reflow. hackathons-ui.js shows an image only after
+         it has actually decoded — see the note above logoHtml(). -->
+    <h1 class="hk-brand-h">
+      <span class="hk-logo hk-brand">
+        <img class="hk-logo-img hk-logo-dark" data-hk-logo="dark"
+             src="assets/eduhack/eduhackai-dark.png" alt="EduHackAI" width="500" height="500">
+        <img class="hk-logo-img hk-logo-light" data-hk-logo="light"
+             src="assets/eduhack/eduhackai-light.png" alt="EduHackAI" width="500" height="500">
+        <span class="hk-logo-text glow-text">EduHackAI</span>
+      </span>
+    </h1>
     <p class="lead">A 10-day practical hackathon where you join a team, take on daily challenges, and ship a real AI application built on Microsoft Power Platform and Azure AI &mdash; whether or not you have written code before.</p>
   </section>
 
@@ -706,6 +722,13 @@
     <div id="hack-soon"></div>
 
     <div class="hk-stats" id="hack-stats"></div>
+
+    <!-- The history of EduHackAI, between the coming round and the round
+         cards. Every figure in it is computed by hackathons-ui.js from the
+         rows this page already loaded — see storyFacts(). Nothing is written
+         here, deliberately: a number typed into this file is a number that
+         goes stale the next time the database moves. -->
+    <div id="hack-story"></div>
 
     <div class="hk-toolbar">
       <nav class="hk-jump" id="hack-jump" aria-label="Jump to a round"></nav>
@@ -722,6 +745,17 @@
     <p class="hk-status" id="hack-status" hidden></p>
 
     <div id="hack-rounds"></div>
+
+    <!-- Coaches across the whole programme, deduplicated: one card per
+         person however many rounds they taught. Read from hackathon_roster's
+         is_mentor flag in the order the view supplies. -->
+    <div id="hack-coaches"></div>
+
+    <!-- The closing call to register interest. It opens the SAME dialog as
+         the button at the top of the page — the one below in this file —
+         because it carries data-hk-open, which is the only thing that opens
+         it. There is no second form anywhere on this page. -->
+    <div id="hack-cta"></div>
 
   </div>
 

@@ -3744,6 +3744,71 @@ html.light-mode .sc-tease-lines span { opacity: 0.42; }
 /* ---- The sprite that carries the three trophies ---- */
 .hk-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
 
+/* ============================================================
+   Logo slots — the brand mark and the per-round marks
+   ------------------------------------------------------------
+   Theme swapping is the mechanism .logo-img-dark / .logo-img-light already
+   uses for the club wordmark at the top of this file: two files, one per
+   theme, and html.light-mode picks. There is deliberately no second
+   mechanism on this page.
+
+   What is different here is that a file may not exist. Both images start
+   hidden and hackathons-ui.js adds .is-ready to one only after it has
+   decoded, so:
+
+     * a missing file is never a broken-image icon — it was never displayed;
+     * .hk-logo-text underneath is what renders instead, and it is the
+       heading this page had before any logo existed;
+     * .hk-logo holds the slot's height open either way, so the reveal moves
+       nothing on the page.
+
+   assets/eduhack/round-2-light.png genuinely does not exist, so round 2 in
+   light mode is the text heading on the live site while every other round
+   shows its mark. The dark file is not substituted for it: that artwork's
+   lettering is white and would come out invisible on a light page, which
+   reads as a fault rather than as a fallback.
+
+   Sizing is by height with width:auto, so the rendered box comes from the
+   file's own aspect ratio rather than from the width/height attributes. The
+   attributes are the intrinsic pixel sizes (500x500 brand, 300x80 rounds)
+   and are there to reserve the right shape during load.
+   ============================================================ */
+.hk-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: var(--hk-logo-h, 48px);
+  max-width: 100%;
+}
+.hk-logo-img {
+  display: none;
+  height: var(--hk-logo-h, 48px);
+  width: auto;
+  max-width: 100%;
+}
+/* Dark is the default theme, so the dark file is the one revealed here and
+   the light rules below override in light mode. Each pair is ordered so the
+   later rule is the more specific case. */
+.hk-logo-dark.is-ready { display: block; }
+html.light-mode .hk-logo-dark.is-ready { display: none; }
+html.light-mode .hk-logo-light.is-ready { display: block; }
+
+/* The text stands in until the file for the ACTIVE theme has loaded — which
+   is why the light-mode rules undo the dark-mode one rather than sharing it.
+   Round 2 has a dark file and no light file, so it is the one case where
+   these two answers differ. */
+.hk-logo-text { display: block; }
+.hk-logo.is-dark-ready .hk-logo-text { display: none; }
+html.light-mode .hk-logo.is-dark-ready .hk-logo-text { display: block; }
+html.light-mode .hk-logo.is-light-ready .hk-logo-text { display: none; }
+
+/* The brand mark in the page hero. Square artwork, so the slot is square. */
+.hk-brand-h { margin: 8px 0 14px; }
+.hk-brand {
+  --hk-logo-h: 140px;
+  justify-content: center;
+}
+
 /* ---- Coming soon: the next round, before it has dates ---- */
 .hk-soon {
   position: relative;
@@ -3763,50 +3828,78 @@ html.light-mode .hk-soon {
     radial-gradient(600px 280px at 92% 0%, rgba(14, 116, 144, 0.09), transparent 62%),
     rgba(255, 255, 255, 0.7);
 }
+/* The eyebrow. It used to carry a starburst, and the early-bird pill below
+   carried the same one; at this size the pair read as a spinner and the top
+   of the page looked stuck loading. Both are gone and neither is replaced —
+   the answer to too much ornament is less of it, not different ornament. */
 .hk-soon-flag {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  margin: 0;
   font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--cyan);
 }
-.hk-soon-name {
-  margin: 6px 0 0;
+/* Light mode's --cyan (#0e7490) measured 3.99:1 at the darkest point of this
+   panel's violet/cyan wash — under AA, on 11.5px uppercase text. It reads
+   fine on the flat page, which is why it survived; the panel is a tint
+   darker than the page and that is what takes it under. One step darker
+   clears it at 5.58:1. Same finding as .hk-place.is-rank-1 in the inline
+   sheet, same fix. */
+html.light-mode .hk-soon-flag { color: #0b5c73; }
+/* One statement: the round's mark (or its name), then "is coming". The two
+   sit on a baseline-ish row and wrap as a unit on a narrow screen. */
+.hk-soon-h {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin: 8px 0 0;
   font-size: 32px;
   font-weight: 800;
   letter-spacing: -0.015em;
   line-height: 1.14;
 }
-.hk-soon-tagline { margin: 6px 0 0; font-size: 15.5px; color: var(--text-secondary); }
+.hk-soon-logo { --hk-logo-h: 56px; }
+.hk-soon-name { font: inherit; }
+.hk-soon-verb {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.hk-soon-tagline { margin: 10px 0 0; font-size: 15.5px; color: var(--text-secondary); }
 .hk-soon-desc {
   margin: 12px 0 0;
   font-size: 14.5px;
   line-height: 1.65;
   color: var(--text-secondary);
 }
+.hk-soon-note {
+  margin: 12px 0 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 68ch;
+}
 .hk-soon-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  margin-top: 18px;
+  gap: 14px;
+  margin-top: 20px;
 }
-.hk-soon-note { margin: 0; font-size: 13px; color: var(--text-muted); }
 
-/* Early-bird pill. #f6dda2 on the gold tint measures 10.98:1 in dark and
-   #6d4708 on it 7.14:1 in light. */
+/* Early-bird pill, with the icon removed at the owner's request — text and
+   nothing else. The colours are unchanged and still measured: #f6dda2 on the
+   gold tint is 10.98:1 in dark and #6d4708 on it 7.14:1 in light. */
 .hk-earlybird {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-  padding: 4px 12px;
+  padding: 5px 14px;
   border-radius: 999px;
   font-size: 12.5px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   color: #f6dda2;
   border: 1px solid rgba(224, 168, 62, 0.45);
   background: rgba(224, 168, 62, 0.14);
@@ -3820,59 +3913,100 @@ html.light-mode .hk-earlybird {
 /* ============================================================
    Round disclosure — a real <button aria-expanded> controlling a region
    ============================================================ */
-.hk-round-h { margin: 0; }
+/* The title is a title again. It used to BE the disclosure button; the
+   control now sits at the bottom of the card, so the heading no longer has
+   to be a click target and the round's mark can live inside it. */
+.hk-round-h {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  margin: 0;
+}
+.hk-round-logo { --hk-logo-h: 48px; }
+
+/* The disclosure: a full-width bar across the bottom of the card, which is
+   where the owner asked for it and how big he asked for it to be.
+
+   It stays BEFORE the panel in the DOM so that pressing it and then tabbing
+   lands inside what it just opened. Collapsed — which, with one round open
+   at most, is how three of the four always are — it is the last thing in the
+   card. */
 .hk-round-toggle {
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: center;
+  gap: 10px;
   width: 100%;
-  padding: 4px 0 2px;
+  margin-top: 16px;
+  padding: 12px 16px;
   font: inherit;
-  text-align: left;
-  color: inherit;
-  background: none;
-  border: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
   cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+.hk-round-toggle:hover {
+  color: var(--text);
+  border-color: var(--violet);
+  background: rgba(139, 92, 246, 0.08);
 }
 .hk-round-toggle:focus-visible {
   outline: 2px solid var(--violet);
-  outline-offset: 4px;
-  border-radius: 10px;
+  outline-offset: 2px;
 }
-.hk-round-label { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 auto; }
+/* Open, the bar is the seam between the card and the detail below it, so it
+   loses its bottom corners and the panel picks them up. */
+.hk-round-toggle[aria-expanded="true"] {
+  border-radius: 14px 14px 0 0;
+  border-bottom-color: transparent;
+  color: var(--text);
+}
 .hk-round-caret {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 1px solid var(--glass-border);
-  background: var(--glass);
-  color: var(--text-secondary);
-  transition: transform 0.22s ease, color 0.22s ease;
+  color: inherit;
+  transition: transform 0.22s ease;
 }
 .hk-round-caret svg { width: 17px; height: 17px; }
-.hk-round-toggle[aria-expanded="true"] .hk-round-caret { transform: rotate(180deg); color: var(--text); }
-.hk-round-toggle:hover .hk-round-caret { color: var(--text); border-color: var(--violet); }
-.hk-round-cue {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-  white-space: nowrap;
+.hk-round-toggle[aria-expanded="true"] .hk-round-caret { transform: rotate(180deg); }
+.hk-round-cue { white-space: nowrap; }
+
+.hk-round-panel {
+  padding: 4px 16px 18px;
+  border: 1px solid var(--glass-border);
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
 }
-.hk-round-panel { padding-top: 4px; }
 .hk-round-panel[hidden] { display: none; }
 
 /* ============================================================
    Medal tiers — gold 1st, silver 2nd, bronze 3rd
    ============================================================ */
+/* Sizes here were cut hard after "make it smaller as it is taking very big
+   side": the medallion went 92px -> 54px, the trophy 58px -> 32px, the card
+   padding 22px -> 13px and the team name 20px -> 15px. Three cards now sit
+   in a row inside the round header rather than filling the viewport with it.
+
+   No COLOUR changed, which is why every measurement in tools/hackathons-
+   checks/contrast.mjs is untouched by this. The one thing size could have
+   cost is WCAG's large-text allowance, and this file never used it: every
+   piece of text on these cards is held to 4.5:1, so shrinking it does not
+   move the bar it has to clear. */
 .hk-medals {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-  margin: 18px 0 6px;
+  gap: 10px;
+  margin: 14px 0 4px;
 }
 /* A round with fewer than three recorded placings gets fewer cards; the
    grid is never padded with an empty slot that would read as "nobody". */
@@ -3890,13 +4024,13 @@ html.light-mode .hk-earlybird {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 22px 18px 20px;
-  border-radius: 20px;
+  gap: 2px;
+  padding: 13px 12px 12px;
+  border-radius: 14px;
   border: 1px solid var(--hk-edge);
   background: linear-gradient(152deg, var(--hk-card-1) 0%, var(--hk-card-2) 46%, var(--hk-card-3) 100%);
   text-align: center;
-  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.24);
 }
 .hk-medal.is-gold {
   --hk-card-1: #2b1f07; --hk-card-2: #4d3a0e; --hk-card-3: #1d1405;
@@ -3970,34 +4104,229 @@ html.light-mode .hk-medal::before {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 92px;
-  height: 92px;
-  margin-bottom: 6px;
+  width: 54px;
+  height: 54px;
+  margin-bottom: 4px;
   border-radius: 50%;
   background: var(--hk-disc);
   box-shadow:
-    0 0 0 3px var(--hk-rim),
-    0 0 0 5px rgba(0, 0, 0, 0.35),
-    0 0 26px -4px var(--hk-rim);
+    0 0 0 2px var(--hk-rim),
+    0 0 0 3px rgba(0, 0, 0, 0.35),
+    0 0 16px -4px var(--hk-rim);
 }
-.hk-medal-trophy { width: 58px; height: 58px; display: block; }
+.hk-medal-trophy { width: 32px; height: 32px; display: block; }
 .hk-medal-place {
-  font-size: 12.5px;
+  font-size: 10.5px;
   font-weight: 800;
-  letter-spacing: 0.11em;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--hk-ink-accent);
 }
 .hk-medal-team {
-  margin: 2px 0 0;
-  font-size: 20px;
+  margin: 1px 0 0;
+  font-size: 15px;
   font-weight: 800;
   line-height: 1.25;
   letter-spacing: -0.01em;
   color: var(--text);
   overflow-wrap: anywhere;
 }
-.hk-medal-sub { margin-top: 4px; font-size: 12.5px; font-weight: 600; color: var(--hk-ink-sub); }
+.hk-medal-sub { margin-top: 2px; font-size: 11px; font-weight: 600; color: var(--hk-ink-sub); }
+
+/* ============================================================
+   The EduHackAI story
+   ------------------------------------------------------------
+   Prose only. The page already carries a strip of stat tiles directly
+   above this section, and repeating those numbers as a second row of tiles
+   would be the same facts twice — so the figures live inside the sentences,
+   emphasised, and nowhere else.
+   ============================================================ */
+.hk-story {
+  margin: 8px 0 26px;
+  padding: 22px 24px 20px;
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  background: var(--glass);
+}
+.hk-story-h {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+.hk-story-p {
+  margin: 0 0 10px;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  max-width: 78ch;
+}
+.hk-story-p:last-child { margin-bottom: 0; }
+/* The Demo Day venues. A list rather than a comma-joined clause: most of
+   these names contain a comma of their own, so in a sentence the separators
+   and the names were the same character. */
+.hk-venues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.hk-venue {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+}
+html.light-mode .hk-venue { background: rgba(0, 0, 0, 0.04); }
+/* The computed figures. Colour and weight only — no boxes, because these
+   are sentences and a number in a box stops being part of one. */
+.hk-story-p strong {
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   Coaches — one card per person, across the whole programme
+   ------------------------------------------------------------
+   The monogram is the design, not a placeholder. No file under
+   assets/eduhack/coaches/ exists yet, so it is what every card renders
+   today, and it is built to look finished: the club's violet-to-cyan wash,
+   initials in the page's own type, the same circle a photo will occupy.
+   hackathons-ui.js reveals a photo only once it has decoded, and the photo
+   is absolutely positioned over the monogram in the same box, so a file
+   landing later changes nothing about the layout.
+   ============================================================ */
+.hk-thanks { margin: 34px 0 0; padding-top: 26px; border-top: 1px solid var(--glass-border); }
+.hk-thanks-h {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+.hk-coach-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.hk-coach {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 18px 12px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background: var(--glass);
+  text-align: center;
+}
+.hk-coach-face {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+}
+.hk-coach-mono {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  background: linear-gradient(140deg, rgba(139, 92, 246, 0.38), rgba(34, 211, 238, 0.22));
+}
+html.light-mode .hk-coach-mono {
+  background: linear-gradient(140deg, rgba(139, 92, 246, 0.30), rgba(34, 211, 238, 0.20));
+}
+/* Hidden until it has decoded, so a 404 never paints and never moves
+   anything. Positioned over the monogram rather than replacing it. */
+.hk-coach-photo {
+  display: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hk-coach-photo.is-ready { display: block; }
+.hk-coach-name {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.hk-coach-rounds {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.hk-coach-round {
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.7;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  white-space: nowrap;
+}
+html.light-mode .hk-coach-round { background: rgba(0, 0, 0, 0.04); }
+
+/* ============================================================
+   Closing call to action
+   ------------------------------------------------------------
+   The second door into the one dialog. It carries data-hk-open and nothing
+   else — there is no second form on this page.
+   ============================================================ */
+.hk-cta {
+  margin: 34px 0 8px;
+  padding: 30px 26px 28px;
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  text-align: center;
+  background:
+    radial-gradient(700px 280px at 50% -30%, rgba(139, 92, 246, 0.16), transparent 62%),
+    var(--glass);
+}
+html.light-mode .hk-cta {
+  background:
+    radial-gradient(700px 280px at 50% -30%, rgba(109, 40, 217, 0.10), transparent 62%),
+    rgba(255, 255, 255, 0.7);
+}
+.hk-cta-h {
+  margin: 0 0 8px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+.hk-cta-text {
+  margin: 0 auto;
+  max-width: 62ch;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+.hk-cta-actions { display: flex; justify-content: center; margin-top: 20px; }
 
 /* ============================================================
    Interest dialog
@@ -4163,18 +4492,34 @@ html.light-mode .hk-done-mark {
 @media (prefers-reduced-motion: reduce) {
   .hk-medal::after { animation: none; }
   .hk-round-caret { transition: none; }
+  .hk-round-toggle { transition: none; }
   .hk-spin { animation: none; border-top-color: transparent; }
 }
 html.reduce-motion .hk-medal::after { animation: none; }
 html.reduce-motion .hk-round-caret { transition: none; }
+html.reduce-motion .hk-round-toggle { transition: none; }
 html.reduce-motion .hk-spin { animation: none; border-top-color: transparent; }
 
 @media (max-width: 720px) {
-  .hk-medals, .hk-medals.is-2 { grid-template-columns: 1fr; }
+  /* The medal cards are small enough now to keep three across on a phone;
+     one per row was a workaround for how tall they used to be. */
+  .hk-medals, .hk-medals.is-2 { gap: 7px; }
+  .hk-medal { padding: 11px 7px 10px; }
+  .hk-medal-badge { width: 44px; height: 44px; }
+  .hk-medal-trophy { width: 26px; height: 26px; }
+  .hk-medal-team { font-size: 13px; }
   .hk-soon { padding: 22px 18px 20px; }
-  .hk-soon-name { font-size: 26px; }
+  .hk-soon-h { font-size: 26px; }
+  .hk-soon-verb { font-size: 21px; }
+  .hk-soon-logo { --hk-logo-h: 44px; }
+  .hk-round-logo { --hk-logo-h: 38px; }
+  .hk-brand { --hk-logo-h: 104px; }
+  .hk-story { padding: 18px 16px 16px; }
+  .hk-cta { padding: 24px 18px 22px; }
+  .hk-coach-grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
   .hk-modal { padding: 14px; }
   .hk-modal-box { padding: 22px 18px 20px; }
   .hk-form-actions { flex-direction: column; align-items: stretch; }
-  .hk-round-cue { display: none; }
+  /* The cue is the bar's only visible label now that the control lives at
+     the bottom of the card, so it stays at every width. */
 }
