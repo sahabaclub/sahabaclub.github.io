@@ -1,0 +1,126 @@
+/* Sahaba Club — admin, data management
+   ------------------------------------------------------------
+   Sits on top of admin.css and adds nothing to its palette. Every colour here
+   is one of that file's tokens, which are the ones already measured for AA in
+   both themes — --ad-text-3, --ad-ok, --ad-warn and --ad-danger each have a
+   comment there recording the ratio that made them what they are. A new hex
+   in this file would be a new thing to measure and a new thing to get wrong
+   in one of the two themes. */
+
+/* ---- Section switcher --------------------------------------------------
+   Tabs rather than five pages, because the whole point of the screen is that
+   the same list is what you filter, edit, export and import. Splitting them
+   would mean choosing the rows again on every page. */
+.dm-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--ad-line); margin-bottom: 20px;
+}
+.dm-tab {
+  appearance: none; border: none; background: none; cursor: pointer;
+  font-family: inherit; font-size: 14px; font-weight: 600;
+  color: var(--ad-text-2); padding: 10px 14px;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.dm-tab:hover { color: var(--ad-text); }
+.dm-tab.is-active { color: var(--ad-text); border-bottom-color: var(--ad-violet); }
+.dm-tab .dm-tab-count {
+  font-family: var(--ad-mono); font-size: 10.5px; margin-left: 6px;
+  color: var(--ad-text-3);
+}
+.dm-tab.is-active .dm-tab-count { color: var(--ad-violet); }
+
+/* Which table we are looking at. A segmented control rather than a dropdown:
+   it is the single most consequential choice on the page and it should be
+   readable without opening anything. */
+.dm-dataset { display: inline-flex; border: 1px solid var(--ad-line-strong); border-radius: 9px; overflow: hidden; }
+.dm-dataset button {
+  appearance: none; border: none; cursor: pointer; font-family: inherit;
+  font-size: 13.5px; font-weight: 600; padding: 8px 16px;
+  background: var(--ad-panel); color: var(--ad-text-2);
+}
+.dm-dataset button + button { border-left: 1px solid var(--ad-line-strong); }
+.dm-dataset button.is-active { background: var(--ad-panel-2); color: var(--ad-text); }
+
+/* ---- The prose that has to be read before a control is used ------------ */
+.dm-note { font-size: 13.5px; color: var(--ad-text-2); line-height: 1.62; margin: 0 0 12px; }
+.dm-note:last-child { margin-bottom: 0; }
+.dm-note strong { color: var(--ad-text); }
+.dm-note code {
+  font-family: var(--ad-mono); font-size: 12.5px;
+  background: var(--ad-panel-2); padding: 1px 5px; border-radius: 4px;
+}
+
+/* ---- Field catalogue --------------------------------------------------- */
+.dm-bar {
+  height: 6px; border-radius: 3px; background: var(--ad-panel-2);
+  overflow: hidden; min-width: 90px;
+}
+.dm-bar span { display: block; height: 100%; background: var(--ad-violet); }
+.dm-pop { display: flex; align-items: center; gap: 10px; }
+.dm-pop-n { font-variant-numeric: tabular-nums; font-size: 13px; white-space: nowrap; }
+
+/* ---- Column chooser ---------------------------------------------------- */
+.dm-cols { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.dm-col-pick {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; color: var(--ad-text-2); cursor: pointer;
+}
+.dm-col-pick input { margin: 0; }
+
+/* ---- Row editor -------------------------------------------------------- */
+.dm-editor-group { margin-bottom: 20px; }
+.dm-editor-group > h3 {
+  font-family: var(--ad-mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ad-text-3);
+  margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--ad-line);
+}
+.dm-authored {
+  font-family: var(--ad-mono); font-size: 9.5px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ad-warn); margin-left: 7px;
+}
+.dm-readonly-grid { display: grid; grid-template-columns: 170px 1fr; gap: 7px 14px; font-size: 13px; }
+.dm-readonly-grid dt { color: var(--ad-text-3); }
+.dm-readonly-grid dd { margin: 0; word-break: break-word; }
+
+/* ---- Diffs: the import plan and the audit trail ------------------------
+   The same shape in both places on purpose. "What was there, what it becomes"
+   is one idea, and an operator who has read one of these screens has read the
+   other. Colour is never the only signal — the arrow and the strikethrough
+   carry it too, which is what makes it legible without colour vision. */
+.dm-diff { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; font-size: 12.5px; }
+.dm-diff dt { color: var(--ad-text-3); font-family: var(--ad-mono); font-size: 11px; padding-top: 1px; }
+.dm-diff dd { margin: 0; word-break: break-word; }
+.dm-was { color: var(--ad-text-3); text-decoration: line-through; }
+.dm-now { color: var(--ad-ok); }
+.dm-arrow { color: var(--ad-text-3); margin: 0 6px; }
+.dm-theirs { color: var(--ad-warn); }
+
+.dm-plan-row { padding: 11px 14px; border-bottom: 1px solid var(--ad-line); }
+.dm-plan-row:last-child { border-bottom: none; }
+.dm-plan-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
+.dm-plan-key { font-family: var(--ad-mono); font-size: 12px; word-break: break-all; }
+.dm-plan-line { font-family: var(--ad-mono); font-size: 11px; color: var(--ad-text-3); }
+.dm-plan-scroll { max-height: 460px; overflow-y: auto; }
+
+/* ---- Drop zone --------------------------------------------------------- */
+.dm-drop {
+  border: 1px dashed var(--ad-line-strong); border-radius: 11px;
+  padding: 28px 20px; text-align: center; cursor: pointer;
+  background: var(--ad-panel-2); color: var(--ad-text-2); font-size: 14px;
+}
+.dm-drop:hover, .dm-drop.is-over { border-color: var(--ad-violet); color: var(--ad-text); }
+.dm-drop strong { display: block; color: var(--ad-text); font-size: 15px; margin-bottom: 4px; }
+
+/* ---- Microsoft 365 mapping --------------------------------------------- */
+.dm-fix { display: grid; grid-template-columns: 1fr 260px auto; gap: 12px; align-items: center; }
+@media (max-width: 760px) { .dm-fix { grid-template-columns: 1fr; } }
+.dm-fix input {
+  background: var(--ad-bg); border: 1px solid var(--ad-line-strong); border-radius: 8px;
+  padding: 8px 11px; color: var(--ad-text); font-size: 14px; font-family: inherit; width: 100%;
+}
+.dm-fix input:focus { outline: 2px solid var(--ad-violet); outline-offset: -1px; }
+.dm-mailbox { font-family: var(--ad-mono); font-size: 12.5px; color: var(--ad-cyan); word-break: break-all; }
+
+/* ---- Egress: the two logs ---------------------------------------------- */
+.dm-log-scroll { max-height: 420px; overflow-y: auto; }
+.dm-log-when { font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 12.5px; color: var(--ad-text-3); }
