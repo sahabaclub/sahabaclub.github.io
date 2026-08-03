@@ -271,8 +271,8 @@ values
       {"key":"system","label":"Introduction system prompt","kind":"text","rows":18,
        "hint":"Rule 2 (never name a licence tier) is checked in code as well as asked for here, and the check will reject a draft regardless of what this says. Repetition is the failure mode: these cards sit stacked on one wall."}
     ]'::jsonb,
-    1200, true,
-    'Two or three sentences plus a one-word tag. 1200 is generous for the visible answer; on a reasoning model most of it is reasoning.',
+    4000, true,
+    'Derived, not picked: ~850 visible tokens (INTRO_MAX_CHARS of 1,200 characters, plus the vibe tag and the JSON around them, divided by the Arabic token multiplier) plus a ~3,150 reasoning allowance. On the gpt-5 family this ceiling is SHARED with the model''s own reasoning tokens and can be spent before the first visible character — which is what the old value of 1200 did, generous as it looked for two or three sentences. Effort is capped low. The retry ceiling scales with this one.',
     false, 50
   ),
   (
@@ -287,8 +287,8 @@ values
       {"key":"system","label":"Email writer system prompt","kind":"text","rows":18,
        "hint":"Reads the personal details of people who are not members. Rule 2 (never name a licence tier) and the placeholder rule are both checked in code afterwards — a draft that breaks them is rejected, not sent."}
     ]'::jsonb,
-    2000, true,
-    'Three or four short paragraphs, a subject line and a note for the reviewer.',
+    7000, true,
+    'Derived, not picked: ~3,100 visible tokens (the subject, body and note caps — 200, 4,000 and 300 characters — divided by the Arabic token multiplier, because the campaign language is a dropdown staff can set to Arabic) plus a ~3,900 reasoning allowance. On the gpt-5 family this ceiling is SHARED with the model''s own reasoning tokens and can be spent before the first visible character — which is what the old value of 2000 did, generous as it looked for three or four short paragraphs. Effort is capped low. The retry ceiling scales with this one.',
     false, 60
   ),
   (
