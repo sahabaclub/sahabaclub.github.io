@@ -164,12 +164,80 @@
       "</tr>";
     }).join("") : '<tr><td colspan="4" class="ad-empty">No members yet.</td></tr>';
 
-    // Be honest on the dashboard about what isn't automated yet, rather than
-    // letting someone assume mailboxes and emails are going out.
-    document.getElementById("ad-note").innerHTML =
-      '<div class="ad-msg warn">Microsoft 365 mailboxes and welcome emails are not yet automatic — ' +
-      "they need the server functions deploying. Until then, new members get an account and a profile, " +
-      "and you issue their mailbox by hand.</div>";
+    renderMs365Note();
+  }
+
+  // What this used to be: one hardcoded sentence saying mailboxes and welcome
+  // emails "are not yet automatic — they need the server functions deploying".
+  // It was written when that was true and given no condition, so it went on
+  // asserting it whatever the state of the tenant. A permanent warning tells
+  // you nothing, and this one was the only thing on the dashboard claiming to
+  // describe provisioning — so it could just as easily have been hiding a real
+  // failure as reporting one.
+  //
+  // The two numbers that actually separate the cases are the mailbox count and
+  // `credential_sent_at`, which provision-ms365 stamps only after
+  // send-transactional-email accepts the message. A mailbox with no timestamp
+  // is the case worth shouting about: the account exists in the tenant and its
+  // password was generated, shown to nobody, and discarded.
+  async function renderMs365Note() {
+    const note = document.getElementById("ad-note");
+    const plural = (n, one, many) => n + " " + (n === 1 ? one : many);
+
+    const [made, sent, unfinished] = await Promise.all([
+      supabase.from("ms365_accounts").select("user_id", { count: "exact", head: true }),
+      supabase.from("ms365_accounts").select("user_id", { count: "exact", head: true })
+        .not("credential_sent_at", "is", null),
+      supabase.from("profiles").select("user_id", { count: "exact", head: true })
+        .is("onboarding_completed_at", null),
+    ]);
+
+    // Say we could not look rather than reporting a zero we did not measure —
+    // "no mailboxes" and "no answer" are different findings.
+    if (made.error || sent.error) {
+      note.innerHTML = '<div class="ad-msg info">Couldn\'t read the Microsoft 365 state just now, ' +
+        "so this panel can't tell you whether mailboxes and welcome emails are going out. " +
+        "Reload; if it persists it's a permissions or connection problem, not an empty tenant.</div>";
+      return;
+    }
+
+    const mailboxes = made.count ?? 0;
+    const delivered = sent.count ?? 0;
+    const stalled = unfinished.error ? null : (unfinished.count ?? 0);
+    const stalledLine = stalled
+      ? " " + plural(stalled, "member has", "members have") + " not finished onboarding, so " +
+        (stalled === 1 ? "they have" : "they have") + " not reached that step."
+      : "";
+
+    if (mailboxes === 0) {
+      note.innerHTML = '<div class="ad-msg warn"><strong>No Microsoft 365 mailbox has been created yet.</strong> ' +
+        "Creating one is a button a member presses during onboarding — it does not happen on signup, and " +
+        'the same step offers "set up later".' + escapeHtml(stalledLine) +
+        " If you expected mailboxes by now, check that <code>provision-ms365</code> is deployed: onboarding " +
+        "catches a missing function and lets the member carry on without one.</div>";
+      return;
+    }
+
+    if (delivered === 0) {
+      note.innerHTML = '<div class="ad-msg err"><strong>' + plural(mailboxes, "mailbox exists", "mailboxes exist") +
+        " and no sign-in email has been recorded for any of them.</strong> " +
+        "The accounts are real and their passwords were generated, so those members cannot get in and the " +
+        "password is not stored anywhere to resend. Check <code>send-transactional-email</code> is deployed and " +
+        "that <code>RESEND_API_KEY</code> is set, then reset the affected mailboxes from Members.</div>";
+      return;
+    }
+
+    if (delivered < mailboxes) {
+      note.innerHTML = '<div class="ad-msg warn"><strong>' + (mailboxes - delivered) + " of " +
+        plural(mailboxes, "mailbox", "mailboxes") + " has no sign-in email recorded.</strong> " +
+        "Those members have an account they cannot reach; the password is not stored, so it needs resetting " +
+        "rather than resending." + escapeHtml(stalledLine) + "</div>";
+      return;
+    }
+
+    note.innerHTML = '<div class="ad-msg ok">Microsoft 365 is running on its own — ' +
+      plural(mailboxes, "mailbox has", "mailboxes have") + " been created and every one has had its sign-in " +
+      "details emailed." + escapeHtml(stalledLine) + "</div>";
   }
 </script>
 </body>
