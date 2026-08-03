@@ -237,9 +237,7 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-5";
 
-// The code default for the ceiling, and the slug the admin panel stores an
-// override under.
-const MAX_OUTPUT_TOKENS = 1200;
+// The slug the admin panel stores an override under.
 const AI_SLUG = "write-member-intro";
 
 // How many recent intros are shown to the model as "already used". Enough for
@@ -253,6 +251,215 @@ const RECENT_INTROS = 10;
 // each other on the wall is the exact failure this function exists to avoid.
 // Fewer than six flags ordinary phrases; more than six almost never fires.
 const OPENING_WORDS = 6;
+
+// ============================================================
+// What "it failed" is allowed to mean
+// ============================================================
+//
+// Identical in shape to `build-prospect-profile`'s `ProfileError` and
+// `promptarena-judge`'s `JudgeError`, deliberately: three functions calling the
+// same upstream must not hold three different opinions about what a 429 means.
+// A status the caller can act on without parsing English, a stable
+// machine-readable code, and whether it is retryable — decided here, at the
+// only place that knows what actually went wrong, rather than guessed from the
+// status by each caller in turn.
+//
+// `retryable` is the column that matters and it is not derivable from the
+// status: 429 appears in both halves, because OpenAI reports an exhausted
+// balance as a 429 with `insufficient_quota` and no amount of waiting fixes it.
+//
+//   code                       status  retryable  meaning
+//   ------------------------   ------  ---------  --------------------------
+//   rate_limited                  429  yes        OpenAI is throttling us
+//   upstream_error                502  yes        OpenAI 5xx/408
+//   upstream_timeout              502  yes        our own attempt timeout
+//   upstream_unreachable          502  yes        the request never completed
+//   upstream_bad_response         502  yes        200 with nothing usable in it
+//   draft_rejected                502  yes        a draft our own checks refused
+//   quota_exhausted               402  no         the OpenAI balance is spent
+//   ai_unconfigured               503  no         OPENAI_API_KEY not set
+//   ai_credentials                503  no         OPENAI_API_KEY rejected
+//   model_not_configured          503  no         OPENAI_MODEL unusable
+//   not_configured                503  no         no service-role key here
+//   output_truncated              503  yes        our token ceiling was too low
+//   model_refused                 422  no         the model declined this profile
+//   content_filtered              422  no         the model's own filter stopped it
+//   bad_request                   400  no         the caller sent nonsense
+//   not_signed_in / not_allowed   401/403  no     the caller may not do this
+//   not_found                     404  no         no profile, or no welcome post
+//   upstream_rejected_request     500  no         we sent OpenAI a bad request
+//   write_failed                  500  no         the body could not be saved
+//   internal_error                500  no         an unhandled bug in here
+//
+// Messages stay member-readable sentences. This function is triggered by the
+// member themself the moment they finish their profile, so `error` is a string
+// somebody will read; the code is what a caller branches on.
+//
+// Every failure also carries `retry_after` (seconds) when OpenAI told us one,
+// alongside a real `Retry-After` header.
+class IntroError extends Error {
+  readonly code: string;
+  readonly status: number;
+  readonly retryable: boolean;
+  readonly retryAfterMs: number | null;
+  attempts = 1;
+
+  constructor(
+    code: string,
+    status: number,
+    message: string,
+    opts: { retryable?: boolean; retryAfterMs?: number | null } = {},
+  ) {
+    super(message);
+    this.name = "IntroError";
+    this.code = code;
+    this.status = status;
+    this.retryable = opts.retryable ?? false;
+    this.retryAfterMs = opts.retryAfterMs ?? null;
+  }
+}
+
+// ============================================================
+// The retry budget
+// ============================================================
+//
+// `build-prospect-profile`'s, unchanged, and for its reasons: bounded twice and
+// by wall clock rather than by attempt count alone, so a function killed
+// mid-retry never reaches the caller as a dead connection instead of the 429 it
+// could have acted on.
+//
+//   * at most RETRY_MAX_ATTEMPTS attempts, total, per invocation;
+//   * no new attempt may *start* once RETRY_DEADLINE_MS of wall clock has
+//     passed, and a retry only starts if the sleep plus RETRY_RESERVE_MS of
+//     room for the attempt itself still fits inside that deadline;
+//   * every attempt is aborted at ATTEMPT_TIMEOUT_MS, so one hung socket cannot
+//     silently consume the whole budget.
+//
+// ⚠ The deadline is measured from the START OF THE INVOCATION, not from the
+// start of the model call, and that is what makes it safe for this function to
+// make *two* model calls (the draft, and the variety retry below). Both share
+// one 50s budget, so the second cannot start a fresh one.
+const RETRY_MAX_ATTEMPTS = 3;
+const RETRY_BASE_MS = 1_000;
+const RETRY_CAP_MS = 8_000;
+const RETRY_DEADLINE_MS = 50_000;
+const RETRY_RESERVE_MS = 15_000;
+const ATTEMPT_TIMEOUT_MS = 30_000;
+
+// The variety retry is optional — see the call site. It is also a whole extra
+// model call, and one that starts late enough can still be aborted at
+// ATTEMPT_TIMEOUT_MS and leave nothing for the database write. So it is simply
+// not started past this point: worst case is an attempt beginning at 60s and
+// aborted at 90s, leaving 60s of the platform's 150s for the update and the
+// response.
+const CLASH_RETRY_DEADLINE_MS = 60_000;
+
+// ============================================================
+// The output token budget, and why 1200 was never the visible answer
+// ============================================================
+//
+// ⚠ THE NUMBER BELOW IS DERIVED FROM THE PAYLOAD, NOT PICKED. The value it
+// replaces was 1200, and 1200 is the same shape of mistake that made
+// `build-prospect-profile` fail 42.9% of live calls — 50 occurrences — at a
+// ceiling of 1500. The tempting reading there was that the answers were too
+// long. They were not, and they are not here either.
+//
+// **What overflows is the reasoning.** `OPENAI_MODEL` defaults to `gpt-5`, and
+// on the Responses API reasoning tokens are drawn from the *same*
+// `max_output_tokens` budget as the visible answer: the parameter limits
+// "reasoning tokens, visible output tokens, and non-visible formatting tokens",
+// and exhausting it "might occur before any visible output tokens are
+// produced". A ceiling sized for the answer alone is therefore mostly, and
+// sometimes entirely, spent before the first character of JSON is written —
+// which is exactly what a two-or-three-sentence card sized at 1200 was.
+//
+// ---- The visible half, bounded by this file rather than hoped for -----
+//
+// Both fields are bounded in code below, which is what makes this arithmetic
+// instead of an estimate:
+//
+//   intro           INTRO_MAX_CHARS (rejected above it)                 1,200
+//   vibe_tag        VIBE_TAG_MAX_CHARS (sliced to it)                      16
+//   keys, quoting, escaping                                               ~50
+//                                                             ---------------
+//                                                             ~1,270 characters
+//
+// ⚠ AND THEN THE SCRIPT DENSITY. Rule 7 says to use the member's name exactly
+// as given, and this club's members write their names in Arabic script as well
+// as Latin; `openingFingerprint` below is Unicode-aware for that reason. Arabic
+// costs materially more tokens per character than English — call it 1.5
+// characters per token against English's ~4 — so the honest visible worst case
+// is 1,270 / 1.5 ≈ **850 tokens**, not the ~320 an English-only reading gives.
+// A typical card is nearer 150. The ceiling has to cover the worst case.
+//
+// ---- The reasoning half ----------------------------------------------
+//
+// Reasoning cost scales with how hard the task is, not with the length of the
+// answer, so it is an allowance added on top rather than a multiple. ~3,150 at
+// LOW effort, against the sibling's ~3,300 for a transcription: this input is
+// smaller (one profile object and up to ten one-sentence openings, ~1,500
+// characters in total) and the task is no harder.
+//
+//   850 visible + 3,150 reasoning = 4,000
+//
+// Neither number costs anything unused — OpenAI bills tokens generated, not
+// tokens permitted — so the ceiling only has to be high enough to be wrong
+// rarely and cheap when it is. The retry keeps the same visible bound and stops
+// rationing the reasoning: 850 + ~11,000.
+//
+// A larger budget is NOT licence to write more. Every check in `askIntroOnce`
+// is unchanged, and INTRO_MAX_CHARS is what keeps the extra room from turning
+// into extra prose: the model may now finish its sentence, but the card it
+// finishes is measured exactly as before.
+const MAX_OUTPUT_TOKENS = 4_000;
+const MAX_OUTPUT_TOKENS_RETRY = 12_000;
+
+// ⚠ `effort: "low"`, and this is a decision rather than a default. It is
+// `build-prospect-profile`'s setting and NOT `promptarena-judge`'s, and the
+// test is whether the reasoning is the product:
+//
+//   * For the judge it is. Consistency against the calibration anchors is the
+//     one quality property that judge exists to have, so buying ceiling
+//     headroom by thinking less would trade away the thing being paid for.
+//   * Here it is not. The product is two or three warm sentences drawn from a
+//     profile object that is already in front of the model — composition, not
+//     analysis. There is no fact to derive and no judgement to reach.
+//
+// The one thing on this task that genuinely needs care — not opening the way
+// the wall already opens — is *not* left to deliberation either. It is checked
+// deterministically by `openingFingerprint` after the fact and retried with the
+// clashing words named, which is a better instrument than hoping the model
+// thought harder about it. So every reasoning token here is a token not
+// available for the answer.
+//
+// ⚠ Sending this key at all is safe by precedent, not by assumption:
+// `parse-profile-document` ships `reasoning` in production against the same
+// admin-settable model this function reads. It is worth knowing that the key is
+// rejected outright by NON-reasoning models, so pointing Admin → AI services at
+// one would fail every call — `triageOpenAI` names this key in that message so
+// the operator is sent to the right place rather than to the ceiling.
+const REASONING_EFFORT = "low";
+
+// The caps that make the sum above real, and that were already here as bare
+// numbers. INTRO_MAX_CHARS rejects rather than truncates: `feed_posts.body` is
+// capped at 5000 in 0014, so this is not a database guard, it is "two or three
+// sentences did not come back" — and half a sentence about a real person on a
+// public wall is worse than a title-only post.
+const INTRO_MAX_CHARS = 1_200;
+// A lookup key rather than prose: the page hashes whatever it does not
+// recognise into a palette slot. Sliced, not rejected — a long word here costs
+// an accent colour, not a sentence.
+const VIBE_TAG_MAX_CHARS = 16;
+
+// Everything the model call needs that staff can now change, resolved once per
+// invocation and then passed down, so that the variety retry below is a second
+// attempt at the same prompt rather than a second prompt.
+type IntroConfig = {
+  model: string;
+  systemPrompt: string;
+  maxOutputTokens: number;
+  maxOutputTokensRetry: number;
+};
 
 const INTRO_SCHEMA = {
   type: "object",
@@ -289,17 +496,47 @@ Rules, in order of importance:
 6. No marketing language, no "we are thrilled", no "passionate about", no hashtags, no emoji, no exclamation marks stacked up.
 7. Use the name exactly as given. If there is no name, introduce them without one rather than writing a placeholder.`;
 
+// What staff have chosen, or the constants above. Never throws — see
+// `_shared/ai-config.ts`.
+async function resolveConfig(admin: Parameters<typeof loadAiConfig>[0]): Promise<IntroConfig> {
+  const ai: AiConfig = await loadAiConfig(admin, AI_SLUG, {
+    model: MODEL,
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    parts: { system: SYSTEM_PROMPT },
+  });
+
+  const base = ai.maxOutputTokens || MAX_OUTPUT_TOKENS;
+
+  return {
+    model: ai.model,
+    systemPrompt: part(ai, "system", SYSTEM_PROMPT),
+    maxOutputTokens: base,
+    // The retry ceiling is not independently settable and never was — it is
+    // "stop rationing the reasoning" relative to the first attempt. Scaled from
+    // whatever the base is, floored at this file's own retry value so lowering
+    // the base in the panel cannot quietly remove the escape hatch, and capped
+    // at what 0031's CHECK will accept (256..128000) so the two agree on what a
+    // ceiling may be.
+    maxOutputTokensRetry: Math.min(128_000, Math.max(MAX_OUTPUT_TOKENS_RETRY, base * 2)),
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  // The retry budget is the whole invocation's, not one model call's — see
+  // RETRY_DEADLINE_MS. Read before anything else so the auth lookup and the
+  // feed queries are inside it, which is what they cost.
+  const startedAt = Date.now();
 
   try {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     const body = await req.json().catch(() => ({}));
     const userId: string | undefined = body.userId;
-    if (!userId) return json({ error: "userId is required" }, 400);
+    if (!userId) return fail(new IntroError("bad_request", 400, "userId is required"));
 
     // Three callers, three reasons:
     //   - the service role, when a scheduled job backfills posts;
@@ -310,12 +547,12 @@ Deno.serve(async (req) => {
     // A member may only ever trigger their own.
     const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     if (!SERVICE_ROLE_KEY) {
-      return json({ error: "Not configured" }, 503);
+      return fail(new IntroError("not_configured", 503, "Not configured"));
     }
     if (bearer !== SERVICE_ROLE_KEY) {
       const { data: userData, error: userError } = await admin.auth.getUser(bearer);
       if (userError || !userData.user) {
-        return json({ error: "Not signed in" }, 401);
+        return fail(new IntroError("not_signed_in", 401, "Not signed in"));
       }
       if (userData.user.id !== userId) {
         const { data: callerProfile } = await admin
@@ -324,14 +561,18 @@ Deno.serve(async (req) => {
           .eq("user_id", userData.user.id)
           .maybeSingle();
         if (!callerProfile || (callerProfile.role !== "admin" && callerProfile.role !== "staff")) {
-          return json({ error: "You can only write your own introduction" }, 403);
+          return fail(new IntroError("not_allowed", 403, "You can only write your own introduction"));
         }
       }
     }
 
     if (!OPENAI_API_KEY) {
       console.error("OPENAI_API_KEY is not set");
-      return json({ error: "The AI writer isn't configured yet. Set OPENAI_API_KEY in the Edge Function secrets." }, 503);
+      return fail(new IntroError(
+        "ai_unconfigured",
+        503,
+        "The AI writer isn't configured yet. Set OPENAI_API_KEY in the Edge Function secrets.",
+      ));
     }
 
     // The post has to exist before there is anything to write into. If the
@@ -347,10 +588,10 @@ Deno.serve(async (req) => {
       .in("kind", ["member_joined", "coach_joined"])
       .order("created_at", { ascending: true })
       .limit(1);
-    if (postErr) return json({ error: postErr.message }, 500);
+    if (postErr) return fail(new IntroError("internal_error", 500, postErr.message));
     const post = posts?.[0];
     if (!post) {
-      return json({ error: "No welcome post for this member yet" }, 404);
+      return fail(new IntroError("not_found", 404, "No welcome post for this member yet"));
     }
     if (post.body && body.regenerate !== true) {
       // Already written. Rewriting on every profile save would churn the wall
@@ -363,7 +604,7 @@ Deno.serve(async (req) => {
       .select("user_id, full_name, headline, bio, city, country, industry, experience_level, skills, interests, role")
       .eq("user_id", userId)
       .maybeSingle();
-    if (pErr || !profile) return json({ error: "Profile not found" }, 404);
+    if (pErr || !profile) return fail(new IntroError("not_found", 404, "Profile not found"));
 
     // member_activity is a view over event registrations; a member who joined
     // this morning has no row in it, which is normal and not an error.
@@ -398,23 +639,22 @@ Deno.serve(async (req) => {
 
     const context = buildContext(profile, activity ?? null);
 
-    // Resolved once, before the first attempt, so that the retry below is a
-    // second attempt at the same prompt rather than a second prompt. Never
+    // Resolved once, before the first attempt, so that the retries below are
+    // further attempts at the same prompt rather than further prompts. Never
     // throws — see `_shared/ai-config.ts`.
-    const ai = await loadAiConfig(admin, AI_SLUG, {
-      model: MODEL,
-      maxOutputTokens: MAX_OUTPUT_TOKENS,
-      parts: { system: SYSTEM_PROMPT },
-    });
+    const cfg = await resolveConfig(admin);
 
     let written: { intro: string; vibe_tag: string };
     try {
-      written = await writeIntro(ai, context, usedOpenings);
+      written = await askIntro(cfg, context, usedOpenings, startedAt);
     } catch (err) {
       // The title-only post stays exactly as it is. A plain post is better
-      // than no post, and much better than a half-written one.
-      console.error("intro failed for " + userId + ": " + String(err));
-      return json({ error: String(err instanceof Error ? err.message : err) }, 502);
+      // than no post, and much better than a half-written one. The failure
+      // keeps its own status and code all the way out, so a caller can tell
+      // "try again in a moment" from "somebody has to top up the balance".
+      const e = asIntroError(err);
+      console.error(`intro failed for ${userId} (${e.code}, ${e.attempts} attempt${e.attempts === 1 ? "" : "s"}): ${e.message}`);
+      return fail(e, { userId });
     }
 
     // One retry, with the clash named rather than merely implied: "do not
@@ -427,21 +667,31 @@ Deno.serve(async (req) => {
     // banned is a sign the model has nothing else to say about this profile,
     // not a sign that asking a third time will help. A slightly similar post
     // beats no post, so a still-clashing retry is accepted and logged.
+    //
+    // ⚠ Skipped outright once the invocation is far enough along. This is a
+    // *taste* improvement on a card that already passed every check, and it is
+    // a whole extra model call; spending the last of the wall clock on it
+    // risks the platform killing us before the update below runs, which would
+    // trade a good post for no post.
     if (usedFingerprints.has(openingFingerprint(written.intro))) {
       const clashing = firstWords(written.intro, OPENING_WORDS);
-      try {
-        const retried = await writeIntro(ai, context, usedOpenings, clashing);
-        if (usedFingerprints.has(openingFingerprint(retried.intro))) {
-          console.warn("intro for " + userId + " still opens like the wall: " + clashing);
+      if (Date.now() - startedAt > CLASH_RETRY_DEADLINE_MS) {
+        console.warn(`intro for ${userId} opens like the wall (${clashing}) but there is no time left to redraft it`);
+      } else {
+        try {
+          const retried = await askIntro(cfg, context, usedOpenings, startedAt, clashing);
+          if (usedFingerprints.has(openingFingerprint(retried.intro))) {
+            console.warn("intro for " + userId + " still opens like the wall: " + clashing);
+          }
+          // Taken either way. It was written knowing about the clash, so even
+          // when the first six words survive, the rest of it has moved.
+          written = retried;
+        } catch (err) {
+          // The first draft is already valid — it went through every check in
+          // askIntroOnce. Losing it because the *optional* second call failed
+          // would trade a good post for no post.
+          console.error("intro retry failed for " + userId + ": " + String(asIntroError(err).message));
         }
-        // Taken either way. It was written knowing about the clash, so even
-        // when the first six words survive, the rest of it has moved.
-        written = retried;
-      } catch (err) {
-        // The first draft is already valid — it went through every check in
-        // writeIntro. Losing it because the *optional* second call failed
-        // would trade a good post for no post.
-        console.error("intro retry failed for " + userId + ": " + String(err));
       }
     }
 
@@ -451,7 +701,7 @@ Deno.serve(async (req) => {
       .eq("id", post.id);
     if (updErr) {
       console.error("update: " + updErr.message);
-      return json({ error: updErr.message }, 500);
+      return fail(new IntroError("write_failed", 500, updErr.message));
     }
 
     return json({
@@ -462,9 +712,43 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error(err);
-    return json({ error: String(err) }, 500);
+    return fail(asIntroError(err));
   }
 });
+
+// Anything arriving at a catch unclassified is a defect in this file, and it
+// must NOT be swept into the retryable bucket: retrying a bug is the same wrong
+// answer at three times the price, reported as though the network were at
+// fault.
+function asIntroError(err: unknown): IntroError {
+  if (err instanceof IntroError) return err;
+  return new IntroError("internal_error", 500, String(err instanceof Error ? err.message : err));
+}
+
+// One shape for every failure, so a caller can branch on `code` and never has
+// to read `error` to find out what happened. `Retry-After` is a real header as
+// well as a body field: the header is what a proxy or an HTTP client honours
+// automatically, the body field is what survives a client that does not expose
+// headers to script (a browser, without the explicit expose list below).
+function fail(err: IntroError, extra: Record<string, unknown> = {}): Response {
+  const retryAfterSeconds = err.retryAfterMs === null
+    ? null
+    : Math.max(1, Math.ceil(err.retryAfterMs / 1000));
+
+  const headers: Record<string, string> = {};
+  if (retryAfterSeconds !== null) {
+    headers["Retry-After"] = String(retryAfterSeconds);
+    headers["Access-Control-Expose-Headers"] = "Retry-After";
+  }
+
+  return json({
+    error: err.message,
+    code: err.code,
+    retryable: err.retryable,
+    ...(retryAfterSeconds !== null ? { retry_after: retryAfterSeconds } : {}),
+    ...extra,
+  }, err.status, headers);
+}
 
 // What the model is allowed to know. Built field by field rather than passing
 // the profile row through, so that a column added to `profiles` later — a
@@ -532,10 +816,266 @@ function firstWords(s: string, n: number): string {
   return String(s ?? "").trim().split(/\s+/).slice(0, n).join(" ");
 }
 
-async function writeIntro(
-  ai: AiConfig,
+// ============================================================
+// Asking the model
+// ============================================================
+//
+// Retries the transient half of the taxonomy, in-process, and gives up early
+// rather than late. `startedAt` is the invocation's start, not this function's:
+// the budget being protected is the Edge Function's wall clock, and it has
+// already been running for the auth lookup and four queries by the time we get
+// here.
+//
+// ---- Why truncation is retried, and why it escalates ----------------------
+//
+// The sibling shipped `output_truncated` as non-retryable, reasoning that "the
+// same input hits the same ceiling every time". That is wrong, and the evidence
+// was already in its logs: two consecutive runs over the same 87 people failed
+// on *different* sets — 27 then 29, six that had succeeded now failing and four
+// the reverse. A deterministic ceiling cannot do that.
+//
+// The mechanism is the one described at MAX_OUTPUT_TOKENS: most of the budget
+// goes on reasoning, reasoning length is sampled rather than fixed, and nothing
+// here pins a seed (reasoning models do not honour temperature in any case). A
+// profile whose total sits near the ceiling therefore fits on some draws and
+// not others. Truncation is a coin flip, not a verdict on the member.
+//
+// But "not deterministic" is not on its own a reason to retry: retrying the
+// *same request* at the *same ceiling* is another flip at unknown odds, bought
+// with latency and spend, and the member is watching their profile finish. So
+// the ceiling escalates. Attempt one asks for `maxOutputTokens`; any attempt
+// after a truncation asks for `maxOutputTokensRetry`. The retry is worth
+// something because it is a different request, not because the first was
+// unlucky.
+async function askIntro(
+  cfg: IntroConfig,
   context: Record<string, unknown>,
   usedOpenings: string[],
+  startedAt: number,
+  forbiddenOpening?: string,
+): Promise<{ intro: string; vibe_tag: string }> {
+  let attempt = 0;
+  let ceiling = cfg.maxOutputTokens;
+  for (;;) {
+    attempt++;
+    let failure: IntroError;
+    try {
+      return await askIntroOnce(cfg, context, usedOpenings, ceiling, forbiddenOpening);
+    } catch (err) {
+      if (err instanceof IntroError) {
+        failure = err;
+      } else {
+        console.error("write-member-intro: unclassified failure in askIntro", err);
+        failure = new IntroError("internal_error", 500, String(err instanceof Error ? err.message : err));
+      }
+      failure.attempts = attempt;
+    }
+
+    // Raise the ceiling for whatever comes next. Done before `planRetry` so
+    // that it also applies when the *next* failure is a rate limit: once we
+    // know this member needs more room, every further attempt gets it.
+    if (failure.code === "output_truncated") ceiling = cfg.maxOutputTokensRetry;
+
+    const plan = planRetry({
+      attempt,
+      maxAttempts: RETRY_MAX_ATTEMPTS,
+      elapsedMs: Date.now() - startedAt,
+      deadlineMs: RETRY_DEADLINE_MS,
+      reserveMs: RETRY_RESERVE_MS,
+      retryable: failure.retryable,
+      retryAfterMs: failure.retryAfterMs,
+      rand: Math.random,
+    });
+
+    if (!plan.retry) {
+      // The distinction the caller needs: we stopped because we ran out of
+      // room, not because the condition cleared. A rate limit that outlives
+      // our budget is still a rate limit, and it leaves here as a 429 with
+      // whatever wait OpenAI asked for.
+      console.error(`openai attempt ${attempt} failed (${failure.code}); not retrying: ${plan.reason}`);
+      throw failure;
+    }
+
+    console.warn(
+      `openai attempt ${attempt} failed (${failure.code}); retrying in ${plan.delayMs}ms at ceiling ${ceiling}`,
+    );
+    await sleep(plan.delayMs);
+  }
+}
+
+// Pure, and separated from the loop so it can be exercised without a network:
+// every input is an argument, including the clock reading and the source of
+// randomness. The three ways it says no are distinguished by `reason` because
+// "we gave up" and "there was nothing to gain" are different operational facts
+// and one of them means raise the budget.
+function planRetry(opts: {
+  attempt: number;
+  maxAttempts: number;
+  elapsedMs: number;
+  deadlineMs: number;
+  reserveMs: number;
+  retryable: boolean;
+  retryAfterMs: number | null;
+  rand: () => number;
+}): { retry: boolean; delayMs: number; reason: string } {
+  if (!opts.retryable) return { retry: false, delayMs: 0, reason: "not_retryable" };
+  if (opts.attempt >= opts.maxAttempts) {
+    return { retry: false, delayMs: 0, reason: "attempts_exhausted" };
+  }
+  const delayMs = backoffDelayMs(opts.attempt, opts.retryAfterMs, opts.rand);
+  // The reserve is room for the attempt the sleep is *for*. Without it the
+  // budget check passes at 49s, the attempt starts, and the invocation is
+  // killed holding a socket — which reaches the caller as a dead connection
+  // rather than as the 429 it should have been.
+  if (opts.elapsedMs + delayMs + opts.reserveMs > opts.deadlineMs) {
+    return { retry: false, delayMs, reason: "budget_exhausted" };
+  }
+  return { retry: true, delayMs, reason: "retry" };
+}
+
+// Exponential with equal jitter: half the window fixed, half random. A
+// `Retry-After` from OpenAI wins whenever it asks for longer than we would have
+// waited anyway — it is the only party that knows when the window actually
+// reopens — and it is deliberately not capped here, because `planRetry`
+// compares the result against the remaining budget and declines rather than
+// sleeping for less than we were told and being refused again.
+function backoffDelayMs(attempt: number, retryAfterMs: number | null, rand: () => number): number {
+  const window = Math.min(RETRY_BASE_MS * 2 ** (attempt - 1), RETRY_CAP_MS);
+  const jittered = Math.round(window / 2 + rand() * (window / 2));
+  return Math.max(jittered, retryAfterMs ?? 0);
+}
+
+// ---- What OpenAI just told us -----------------------------------------
+//
+// Pure: status, body text and the parsed `Retry-After` in, a classified error
+// out. The order is `build-prospect-profile`'s, and the one thing worth naming
+// is that **quota is checked before the rate limit**: OpenAI reports an
+// exhausted balance as HTTP 429 with `insufficient_quota` in the body. Treated
+// as a rate limit it would be retried, backed off, retried again and reported
+// as "busy" for ever, when the true answer is that no amount of waiting will
+// fix it and somebody has to go and add credit.
+function triageOpenAI(status: number, detail: string, retryAfterMs: number | null): IntroError {
+  if (/model_not_found|does not exist|unknown model/i.test(detail)) {
+    return new IntroError(
+      "model_not_configured",
+      503,
+      // Two places the name can come from since 0031, so the sentence names
+      // both rather than sending an operator to change a value that is not
+      // being read.
+      "The configured AI model name isn't valid. Change it under Admin → AI services → New member introduction card if a model is set there, or set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use.",
+    );
+  }
+  if (/insufficient_quota|billing_hard_limit|exceeded your current quota|billing_not_active/i.test(detail)) {
+    return new IntroError(
+      "quota_exhausted",
+      402,
+      "The AI account has run out of credit. Top up the OpenAI billing account, then run this again.",
+    );
+  }
+  if (status === 401 || status === 403 || /invalid_api_key|incorrect api key/i.test(detail)) {
+    // 503 rather than 502, matching both siblings: a key OpenAI rejects is our
+    // configuration being wrong, which is the same class of thing as the key
+    // being absent, and that already answers 503 in the handler above.
+    return new IntroError(
+      "ai_credentials",
+      503,
+      "The AI service rejected our credentials. Check OPENAI_API_KEY.",
+    );
+  }
+  if (status === 429) {
+    return new IntroError(
+      "rate_limited",
+      429,
+      "The AI writer is being rate-limited right now. Nothing is wrong with this profile — try again in a moment.",
+      { retryable: true, retryAfterMs },
+    );
+  }
+  if (status === 408 || status === 409 || status >= 500) {
+    return new IntroError(
+      "upstream_error",
+      502,
+      `The AI writer couldn't answer just now (its status was ${status}). Try again shortly.`,
+      { retryable: true, retryAfterMs },
+    );
+  }
+  if (status === 400 || status === 422) {
+    // OpenAI understood us and said no. That is this function's request being
+    // wrong, which is a bug here — retrying only buys the same refusal more
+    // expensively.
+    //
+    // The one operator-reachable way to land here is a model that is not a
+    // reasoning model: `reasoning` is rejected outright by those, and the model
+    // is settable both in the secret and in the panel. Named, because the
+    // alternative is somebody spending an afternoon on the ceiling.
+    return new IntroError(
+      "upstream_rejected_request",
+      500,
+      "The AI service rejected the request this function sent. That is a bug here, not a problem with the profile — unless the model chosen under Admin → AI services is not a reasoning model, in which case it is the `reasoning` parameter being refused.",
+    );
+  }
+  return new IntroError(
+    "upstream_error",
+    502,
+    `The AI writer couldn't answer just now (its status was ${status}). Try again shortly.`,
+    { retryable: true, retryAfterMs },
+  );
+}
+
+// `Retry-After` is seconds or an HTTP date. OpenAI also sends
+// `x-ratelimit-reset-requests` / `-tokens` as a duration string ("6m0s",
+// "1.5s", "200ms"), which is often the only one present on a 429 — reading it
+// is the difference between waiting the right amount and guessing.
+//
+// Pure: takes a lookup function and the current time, so it can be tested
+// without a Response and without a clock.
+function parseRetryAfterMs(get: (name: string) => string | null, nowMs: number): number | null {
+  const header = (get("retry-after") ?? "").trim();
+  if (header) {
+    const seconds = Number(header);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+    const at = Date.parse(header);
+    if (Number.isFinite(at)) return Math.max(0, at - nowMs);
+  }
+  for (const name of ["x-ratelimit-reset-requests", "x-ratelimit-reset-tokens"]) {
+    const ms = parseDurationMs((get(name) ?? "").trim());
+    if (ms !== null) return ms;
+  }
+  return null;
+}
+
+// "6m0s", "1.5s", "200ms", "1h2m3s" → milliseconds. Anything that is not wholly
+// made of duration parts returns null rather than a number built out of the
+// parts it recognised: half-parsing "soon" into 0 would look like an
+// instruction to retry immediately.
+function parseDurationMs(v: string): number | null {
+  if (!v) return null;
+  const re = /(\d+(?:\.\d+)?)(ms|s|m|h)/gy;
+  const unit: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000 };
+  let total = 0;
+  let end = 0;
+  let matched = false;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(v)) !== null) {
+    total += Number(match[1]) * unit[match[2]];
+    // Recorded inside the loop, not read off `re` afterwards: a sticky regex
+    // resets `lastIndex` to 0 the moment `exec` fails, which is exactly when
+    // this loop ends.
+    end = re.lastIndex;
+    matched = true;
+  }
+  if (!matched || end !== v.length) return null;
+  return Math.round(total);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function askIntroOnce(
+  cfg: IntroConfig,
+  context: Record<string, unknown>,
+  usedOpenings: string[],
+  maxOutputTokens: number,
   forbiddenOpening?: string,
 ): Promise<{ intro: string; vibe_tag: string }> {
   const avoid = usedOpenings.length
@@ -555,38 +1095,56 @@ async function writeIntro(
     banned,
   ].filter(Boolean).join("\n");
 
-  const res = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      "Authorization": "Bearer " + OPENAI_API_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: ai.model,
-      instructions: part(ai, "system", SYSTEM_PROMPT),
-      max_output_tokens: ai.maxOutputTokens,
-      input: [{ role: "user", content: [{ type: "input_text", text: userPrompt }] }],
-      text: {
-        format: { type: "json_schema", name: "member_intro", strict: true, schema: INTRO_SCHEMA },
+  // One hung socket must not spend the whole invocation: the caller would get a
+  // killed connection, which carries none of the triage below. Aborted attempts
+  // are retryable — a timeout is the most transient thing in the set.
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), ATTEMPT_TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      signal: abort.signal,
+      headers: {
+        "Authorization": "Bearer " + OPENAI_API_KEY,
+        "Content-Type": "application/json",
       },
-    }),
-  });
+      body: JSON.stringify({
+        model: cfg.model,
+        instructions: cfg.systemPrompt,
+        // Both keys matter, and neither substitutes for the other. See
+        // MAX_OUTPUT_TOKENS: the ceiling is shared with the model's own
+        // reasoning tokens, so capping effort is what makes the ceiling
+        // predictable, and raising the ceiling is what survives the profile
+        // nobody anticipated.
+        reasoning: { effort: REASONING_EFFORT },
+        max_output_tokens: maxOutputTokens,
+        input: [{ role: "user", content: [{ type: "input_text", text: userPrompt }] }],
+        text: {
+          format: { type: "json_schema", name: "member_intro", strict: true, schema: INTRO_SCHEMA },
+        },
+      }),
+    });
+  } catch (err) {
+    const aborted = abort.signal.aborted;
+    console.error("OpenAI request failed: " + String(err instanceof Error ? err.message : err));
+    throw new IntroError(
+      aborted ? "upstream_timeout" : "upstream_unreachable",
+      502,
+      aborted
+        ? "The AI writer took too long to answer. Try again shortly."
+        : "Couldn't reach the AI writer just now. Try again shortly.",
+      { retryable: true },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const detail = await res.text();
     console.error("OpenAI " + res.status + ": " + detail.slice(0, 500));
-    if (/model_not_found|does not exist|unknown model/i.test(detail)) {
-      // Names whichever setting is actually in play — since 0031 the model can
-      // come from the admin panel instead of the secret.
-      throw new Error(
-        ai.model === MODEL
-          ? "The configured AI model name isn't valid. Set OPENAI_MODEL in the Supabase Edge Function secrets to a model your account can use."
-          : `The model chosen in Admin → AI services for member introductions (${ai.model}) isn't valid for this account. Change it there, or reset that service to its code default.`,
-      );
-    }
-    if (res.status === 401) throw new Error("The AI service rejected our credentials. Check OPENAI_API_KEY.");
-    if (res.status === 429) throw new Error("The AI service is busy right now — try again in a moment.");
-    throw new Error("OpenAI " + res.status);
+    throw triageOpenAI(res.status, detail, parseRetryAfterMs((n) => res.headers.get(n), Date.now()));
   }
 
   const data = await res.json();
@@ -594,45 +1152,152 @@ async function writeIntro(
   const parts = message?.content ?? [];
 
   if (parts.some((p: { type?: string }) => p.type === "refusal")) {
-    throw new Error("The model declined to write this one");
+    // A judgement about this person's profile, not a hiccup. Retrying asks the
+    // same question and pays for the same answer, so it is not retried and it
+    // is not a 500 — nothing is broken.
+    throw new IntroError("model_refused", 422, "The model declined to write this one");
   }
+
+  // ---- Stop here, before anything is read out of a half-written answer ----
+  //
+  // This check stays AHEAD of the `output_text` read, and that ordering is the
+  // safety property rather than a stylistic preference. A truncated response
+  // still carries an `output_text` part; it is simply cut off mid-string.
+  // Parsing it would either throw on malformed JSON or — worse, and the case
+  // this guards — succeed on an introduction whose last clause is missing, and
+  // put half a sentence about a real person on a wall the whole club reads. A
+  // card that does not exist yet is recoverable; the title-only post is still
+  // sitting there. A card that is quietly wrong is read by the person it
+  // describes.
   if (data.status === "incomplete") {
-    throw new Error("Ran out of output tokens before finishing");
+    const reason = data.incomplete_details?.reason ?? "unknown";
+    console.error(
+      `openai returned incomplete (${reason}) at max_output_tokens=${maxOutputTokens}; ` +
+        `reasoning tokens used: ${data.usage?.output_tokens_details?.reasoning_tokens ?? "unreported"} ` +
+        `of ${data.usage?.output_tokens ?? "unreported"} output tokens`,
+    );
+
+    // A different condition wearing the same status. The model's own filter
+    // stopped it; no ceiling is involved and raising ours would not change the
+    // answer. Reported as truncation — which is what this function did before,
+    // for every `incomplete` there is — it sends somebody to edit a number that
+    // was never the problem. That is the exact failure this taxonomy exists to
+    // prevent, so it gets its own code and is not retried.
+    if (reason === "content_filter") {
+      throw new IntroError(
+        "content_filtered",
+        422,
+        "The AI writer stopped partway through this one. Not a size problem — look at what this member wrote in their profile.",
+      );
+    }
+
+    // Retryable, and `askIntro` escalates the ceiling before going again — see
+    // the comment there for why "not deterministic" alone would not justify a
+    // retry. The 503 is deliberate and is the one retryable 503 in the set: if
+    // the escalated attempt truncates too, the remaining action is to raise a
+    // configured number, which is what every other 503 here also means.
+    throw new IntroError(
+      "output_truncated",
+      503,
+      `The AI writer ran out of room mid-sentence (ceiling ${maxOutputTokens} tokens, shared with its own ` +
+        `reasoning). Nothing is wrong with this profile. If this persists, raise the ceiling under ` +
+        `Admin → AI services → New member introduction card (or MAX_OUTPUT_TOKENS_RETRY in write-member-intro, ` +
+        `which is what the panel's value scales from), or lower REASONING_EFFORT there — re-running at the same ` +
+        `settings will not reliably fix it.`,
+      { retryable: true },
+    );
   }
 
   const textPart = parts.find((p: { type?: string }) => p.type === "output_text");
-  if (!textPart?.text) throw new Error("No introduction came back");
+  if (!textPart?.text) {
+    // An empty 200 is the upstream misbehaving rather than refusing, and it
+    // does clear on a second ask — so unlike the two above, this one is
+    // retryable.
+    throw new IntroError(
+      "upstream_bad_response",
+      502,
+      "Nothing came back from the AI writer. Try again shortly.",
+      { retryable: true },
+    );
+  }
 
-  const parsed = JSON.parse(textPart.text);
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(textPart.text);
+  } catch {
+    throw new IntroError(
+      "upstream_bad_response",
+      502,
+      "The AI writer's answer wasn't readable. Try again shortly.",
+      { retryable: true },
+    );
+  }
+
   const intro = String(parsed.intro ?? "").trim();
-  if (!intro) throw new Error("The introduction came back empty");
+  if (!intro) {
+    throw new IntroError(
+      "upstream_bad_response",
+      502,
+      "The introduction came back empty. Try again shortly.",
+      { retryable: true },
+    );
+  }
 
+  // ---- The checks that reject a draft ----------------------------------
+  //
+  // All three are `draft_rejected`, 502, **retryable**, and that is a change
+  // worth naming: they used to be bare throws that ended the invocation. A
+  // draft that named the licence tier is not a broken profile and not a broken
+  // function — it is one unlucky sample, and the honest response to an unlucky
+  // sample is another sample. `askIntro` retries at the SAME ceiling, which is
+  // right: nothing here says the model needed more room. Only
+  // `output_truncated` escalates.
+  //
   // Rule 2 is checked, not trusted — it is the one with a real-world cost, and
   // this text goes on a wall the whole club reads. Failing here leaves the
   // title-only post in place, which is the safe outcome.
   if (/\bA1\b|office\s*365\s*a1/i.test(intro)) {
-    throw new Error("Draft named the licence tier — regenerate this one");
+    throw new IntroError(
+      "draft_rejected",
+      502,
+      "The draft named the licence tier, which is never allowed on a public card. Writing it again.",
+      { retryable: true },
+    );
   }
   if (/\[[A-Za-z ]+\]/.test(intro)) {
-    throw new Error("Draft contains an unfilled placeholder");
+    throw new IntroError(
+      "draft_rejected",
+      502,
+      "The draft came back with an unfilled placeholder in it. Writing it again.",
+      { retryable: true },
+    );
   }
-  // The column is capped at 5000 in 0014; two or three sentences that somehow
-  // ran long should fail here rather than at the database.
-  if (intro.length > 1200) {
-    throw new Error("Draft is far longer than a card — regenerate this one");
+  // A term in the MAX_OUTPUT_TOKENS sum, and a runaway guard rather than a
+  // database one — `feed_posts.body` allows 5000 in 0014. Two or three
+  // sentences that reach 1200 characters means the model stopped honouring the
+  // brief, not that this member needed more words.
+  if (intro.length > INTRO_MAX_CHARS) {
+    console.warn(`intro came back at ${intro.length} chars, over the ${INTRO_MAX_CHARS} cap`);
+    throw new IntroError(
+      "draft_rejected",
+      502,
+      "The draft is far longer than a card. Writing it again.",
+      { retryable: true },
+    );
   }
 
   // Normalised so the UI's colour lookup has one shape to handle. Unknown
   // words are expected — the page hashes anything it does not recognise into
-  // a palette slot rather than dropping the accent.
-  const vibe = String(parsed.vibe_tag ?? "").toLowerCase().replace(/[^a-z]/g, "").slice(0, 16);
+  // a palette slot rather than dropping the accent. Sliced rather than
+  // rejected: see VIBE_TAG_MAX_CHARS.
+  const vibe = String(parsed.vibe_tag ?? "").toLowerCase().replace(/[^a-z]/g, "").slice(0, VIBE_TAG_MAX_CHARS);
 
   return { intro, vibe_tag: vibe || "member" };
 }
 
-function json(body: unknown, status = 200) {
+function json(body: unknown, status = 200, extraHeaders: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json", ...extraHeaders },
   });
 }
