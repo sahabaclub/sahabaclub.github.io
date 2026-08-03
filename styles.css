@@ -2320,8 +2320,8 @@ html.light-mode .hl { background: rgba(139, 92, 246, 0.22); }
 .footer-theme-label { font-size: 13px; color: var(--text-secondary); }
 .footer-theme .theme-choice-btn { padding: 7px 16px; font-size: 13px; }
 
-/* login.html and admin.html had no footer at all. They get one carrying
-   nothing but the switch, rather than losing the ability to change theme. */
+/* login.html had no footer at all. It gets one carrying nothing but the
+   switch, rather than losing the ability to change theme. */
 .footer-slim { padding-top: 24px; }
 .footer-slim .footer-theme { margin-top: 0; padding-top: 0; border-top: none; }
 
@@ -2550,21 +2550,12 @@ html.light-mode .lightbox-close,
 html.light-mode .lightbox-nav { color: #fff; }
 html.light-mode .lightbox-counter { color: rgba(255, 255, 255, 0.8); }
 
-/* Admin panel in light mode (its own styles live inline in admin.html) */
-html.light-mode .admin-card { background: #fff; box-shadow: 0 2px 10px rgba(16, 22, 39, 0.06); }
-html.light-mode .admin-field input[type="text"],
-html.light-mode .admin-field input[type="date"],
-html.light-mode .admin-field input[type="password"],
-html.light-mode .admin-field input[type="url"],
-html.light-mode .admin-field select,
-html.light-mode .admin-field textarea {
-  background: #fff;
-  color: var(--text);
-  border-color: var(--glass-border);
-}
-html.light-mode .admin-btn-primary { color: #fff; }
-html.light-mode .admin-btn-secondary { background: #fff; }
-html.light-mode .admin-event-row { background: #fff; }
+/* The light-mode overrides for the old root admin.html lived here. That page
+   is gone — it asked any visitor for a GitHub write token and had no auth
+   guard at all — and app/admin/ carries its own stylesheets and never links
+   this one, so every selector in that block matched nothing. Removed rather
+   than left as a hint that a page still exists. `.admin-hidden` near the top
+   of this file is unrelated and still used by the nav's Admin link. */
 
 /* ============================================================
    Podcast — Tech Talk with Zoka

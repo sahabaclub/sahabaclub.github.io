@@ -52,7 +52,7 @@
       <a href="inbox.html" class="nav-link" data-member-only>Inbox</a>
       <a href="../index.html" class="nav-link" data-guest-only>Home</a>
       <a href="../events.html" class="nav-link">Events</a>
-      <a href="../login.html" class="btn btn-glow" data-guest-only>Join free</a>
+      <a href="../login.html" class="btn btn-glow" data-guest-only data-login-next>Join free</a>
     </div>
   </div>
 </header>
@@ -103,9 +103,9 @@
         <li>Follow someone, or send them a message</li>
       </ul>
       <div class="sc-gate-actions">
-        <a class="btn btn-glow btn-lg" href="../login.html">Create a free account</a>
+        <a class="btn btn-glow btn-lg" href="../login.html" data-login-next>Create a free account</a>
       </div>
-      <p class="sc-gate-alt">Already a member? <a href="../login.html">Sign in</a></p>
+      <p class="sc-gate-alt">Already a member? <a href="../login.html" data-login-next>Sign in</a></p>
       <p class="sc-gate-note">
         Free, and free is the whole of it — there is no paid tier that unlocks
         this. Google, Microsoft, LinkedIn, a phone number or an email address;
@@ -136,11 +136,36 @@
     </div>
   </div>
 
-  <p class="cx-count" id="count" data-member-only hidden></p>
+  <!-- The result count is the only thing that reports what a search or a
+       filter change did. Without role="status" a screen-reader user changes a
+       filter and hears nothing at all. -->
+  <p class="cx-count" id="count" role="status" data-member-only hidden></p>
   <div id="results" data-member-only>
     <div class="cx-state"><p class="cx-state-text">Loading members…</p></div>
   </div>
 </main>
+
+<!-- Where they were trying to go, carried into the gate.
+     ----------------------------------------------------------------------
+     Somebody clicks a specific person, or Register on a specific event, and
+     is asked to sign up. Every CTA here used to be a bare ../login.html, so
+     after signing up they arrived at a dashboard with no memory of why they
+     came, and the thing they wanted was gone.
+
+     ?next= is the whole of this side of the contract. login.html owns
+     stashing it and honouring it after the round trip; nothing here touches
+     sessionStorage. Classic script, not the module: this must still work if
+     the module fails to load, because a stranger seeing a dead Join button is
+     the funnel ending. -->
+<script>
+  (function () {
+    var next = encodeURIComponent(window.location.pathname + window.location.search);
+    var links = document.querySelectorAll("a[data-login-next]");
+    for (var i = 0; i < links.length; i++) {
+      links[i].setAttribute("href", "../login.html?next=" + next);
+    }
+  })();
+</script>
 
 <script type="module">
   import {
@@ -272,10 +297,10 @@
     // "derived from events they actually turned up to", which this is not.
     var chips = m.is_member
       ? topics.slice(0, 3).map(function (t) {
-          return '<span class="cx-tag cx-tag-topic">' + escapeHtml(t) + "</span>";
+          return '<span class="cx-tag cx-tag-topic" dir="auto">' + escapeHtml(t) + "</span>";
         })
       : (m.skills || []).filter(Boolean).slice(0, 3).map(function (t) {
-          return '<span class="cx-tag">' + escapeHtml(t) + "</span>";
+          return '<span class="cx-tag" dir="auto">' + escapeHtml(t) + "</span>";
         });
 
     var flags = "";
@@ -285,11 +310,16 @@
     return '<article class="cx-member' + (m.is_member ? "" : " is-notyet") + '">' +
       '<a class="cx-member-link" href="' + href + '">' +
         avatarHtml(m) +
+        // dir="auto" on everything a member wrote or the club imported for
+        // them. Much of this community writes Arabic, and without it a name
+        // or a headline in Arabic script renders left-to-right with its
+        // punctuation thrown to the wrong end. Same rule promptarena.js
+        // states for the legacy prompts, applied to the directory.
         '<div class="cx-member-body">' +
-          '<p class="cx-member-name">' + escapeHtml(m.full_name || (m.is_member ? "Member" : "Someone from EduHackAI")) +
+          '<p class="cx-member-name" dir="auto">' + escapeHtml(m.full_name || (m.is_member ? "Member" : "Someone from EduHackAI")) +
             (isMe ? " (you)" : "") + "</p>" +
-          (m.headline ? '<p class="cx-member-headline">' + escapeHtml(m.headline) + "</p>" : "") +
-          (sub ? '<p class="cx-member-sub">' + escapeHtml(sub) + "</p>" : "") +
+          (m.headline ? '<p class="cx-member-headline" dir="auto">' + escapeHtml(m.headline) + "</p>" : "") +
+          (sub ? '<p class="cx-member-sub" dir="auto">' + escapeHtml(sub) + "</p>" : "") +
         "</div>" +
       "</a>" +
       (flags ? '<div class="cx-flags">' + flags + "</div>" : "") +
@@ -347,15 +377,25 @@
     btn.disabled = true;
     var res = on ? await unfollow(userId) : await follow(userId);
     btn.disabled = false;
+
+    function paint(state) {
+      btn.textContent = state ? "Following" : "Follow";
+      btn.className = "cx-btn cx-btn-sm" + (state ? " is-on" : "");
+      btn.setAttribute("aria-pressed", state ? "true" : "false");
+    }
+
     if (res.off || res.error) {
+      // Nothing changed, so aria-pressed still describes the truth and must
+      // be left alone. The label used to become "Try again" and stay that way
+      // for good — the button forgot it was a Follow toggle, and to a screen
+      // reader it read "Try again, not pressed" for ever after. It says what
+      // happened, then goes back to being itself.
       btn.textContent = "Try again";
+      window.setTimeout(function () { paint(followingSet.has(userId)); }, 2400);
       return;
     }
     if (on) followingSet.delete(userId); else followingSet.add(userId);
-    var nowOn = followingSet.has(userId);
-    btn.textContent = nowOn ? "Following" : "Follow";
-    btn.className = "cx-btn cx-btn-sm" + (nowOn ? " is-on" : "");
-    btn.setAttribute("aria-pressed", nowOn ? "true" : "false");
+    paint(followingSet.has(userId));
   });
 
   var FILTER_IDS = ["f-kind", "f-country", "f-industry", "f-experience", "f-topic"];

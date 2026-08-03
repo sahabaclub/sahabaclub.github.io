@@ -379,7 +379,11 @@
         <div class="dash-pc-top">
           <span class="dash-pc-avatar" id="pc-avatar" aria-hidden="true"></span>
           <div class="dash-pc-id">
-            <h2 id="pc-name">Your profile</h2>
+            <!-- dir="auto" here and on everything below that renders a
+                 member's own words. Much of this community writes Arabic, and
+                 without it an Arabic name or headline renders left-to-right
+                 with its punctuation thrown to the wrong end. -->
+            <h2 id="pc-name" dir="auto">Your profile</h2>
           </div>
           <div class="dash-pc-actions">
             <button type="button" class="dash-icon-btn" id="choice-manual" title="Edit my profile" aria-label="Edit my profile">
@@ -391,7 +395,7 @@
           </div>
         </div>
 
-        <p class="dash-pc-headline" id="pc-headline"></p>
+        <p class="dash-pc-headline" id="pc-headline" dir="auto"></p>
         <ul class="dash-pc-meta" id="pc-meta"></ul>
         <div class="dash-pc-tags" id="pc-tags"></div>
 
@@ -776,7 +780,17 @@
       window.location.href = "../login.html";
       return;
     }
-    var done = await hasCompletedOnboarding(session.user.id);
+    // Onboarding sets `?from=onboarding` on every way out of itself. Without
+    // that flag this test is a trap: hasCompletedOnboarding() returns false
+    // for a failed read as well as for an unset date, so any member whose
+    // timestamp could not be written — a missing column, a missing grant, an
+    // offline moment — gets bounced back to onboarding, presses "I'll do this
+    // later", and arrives here to be bounced again. One arrival straight off
+    // that page is always honoured; the profile card below says what is still
+    // missing without throwing anyone out of the page to say it.
+    var fromOnboarding =
+      new URLSearchParams(window.location.search).get("from") === "onboarding";
+    var done = fromOnboarding || (await hasCompletedOnboarding(session.user.id));
     if (!done) {
       window.location.href = "onboarding.html";
       return;
@@ -815,8 +829,11 @@
     return t ? t.charAt(0).toUpperCase() : "?";
   }
 
+  // dir="auto" on the span rather than the <li>: the icon is ours and the
+  // member's job title, company or industry is theirs, and only the latter
+  // should be deciding which way the line reads.
   function metaRow(icon, text) {
-    return "<li>" + icon + "<span>" + esc(text) + "</span></li>";
+    return "<li>" + icon + '<span dir="auto">' + esc(text) + "</span></li>";
   }
 
   var ICON_WORK = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7.5" width="18" height="12.5" rx="2"/><path d="M8.5 7.5V6a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v1.5"/></svg>';
@@ -870,7 +887,7 @@
       .concat(Array.isArray(p.skills) ? p.skills : []);
     var shown = tags.slice(0, 8);
     var html = shown.map(function (t) {
-      return '<span class="dash-pc-tag">' + esc(t) + "</span>";
+      return '<span class="dash-pc-tag" dir="auto">' + esc(t) + "</span>";
     });
     if (tags.length > shown.length) {
       html.push('<span class="dash-pc-tag is-more">+' + (tags.length - shown.length) + "</span>");

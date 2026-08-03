@@ -49,7 +49,7 @@
       <a href="../index.html" class="nav-link" data-guest-only>Home</a>
       <a href="connect.html" class="nav-link">Connect</a>
       <a href="../events.html" class="nav-link">Events</a>
-      <a href="../login.html" class="btn btn-glow" data-guest-only>Join free</a>
+      <a href="../login.html" class="btn btn-glow" data-guest-only data-login-next>Join free</a>
     </div>
   </div>
 </header>
@@ -68,17 +68,31 @@
         This is practice, not an exam — play as often as you like, and a low score is just
         the most useful feedback you'll get all week.
       </p>
-      <div class="pa-gauges" id="gauges" aria-live="polite">
+      <!-- The gauges are a member's own record, so they are member-only like
+           the stage and the tabs. `data-member-only` was on those two and not
+           on this, which left a signed-out visitor looking at five dials
+           reading "—" above the invitation: a page that had failed to load,
+           on the first screen a stranger from the campaign ever sees.
+
+           role="status", not aria-live on the container: this speaks when the
+           numbers arrive, once, rather than being a permanently live region.
+           A visitor is told what the dials are for instead of being shown
+           empty ones. -->
+      <div class="pa-gauges" id="gauges" role="status" data-member-only>
         <div class="pa-gauge"><div class="pa-gauge-num is-none">—</div><div class="pa-gauge-label">Rating</div></div>
         <div class="pa-gauge"><div class="pa-gauge-num is-none">—</div><div class="pa-gauge-label">Challenges</div></div>
         <div class="pa-gauge"><div class="pa-gauge-num is-none">—</div><div class="pa-gauge-label">Best score</div></div>
         <div class="pa-gauge"><div class="pa-gauge-num is-none">—</div><div class="pa-gauge-label">Streak</div></div>
         <div class="pa-gauge"><div class="pa-gauge-num is-none">—</div><div class="pa-gauge-label">Board</div></div>
       </div>
+      <p class="pa-hero-lead" data-guest-only style="margin-top:18px">
+        Your rating, challenges completed, best score and streak are kept from your
+        very first attempt &mdash; they appear here once you have an account.
+      </p>
     </div>
   </section>
 
-  <div id="page-status"></div>
+  <div id="page-status" role="status"></div>
 
   <!-- ---- Signed out: the invitation ----
        This page used to call window.location.replace("../login.html") the
@@ -106,9 +120,9 @@
         <li>Every attempt kept, and a leaderboard you can stay off if you'd rather</li>
       </ul>
       <div class="sc-gate-actions">
-        <a class="btn btn-glow btn-lg" href="../login.html">Create a free account</a>
+        <a class="btn btn-glow btn-lg" href="../login.html" data-login-next>Create a free account</a>
       </div>
-      <p class="sc-gate-alt">Already a member? <a href="../login.html">Sign in</a></p>
+      <p class="sc-gate-alt">Already a member? <a href="../login.html" data-login-next>Sign in</a></p>
       <p class="sc-gate-note">
         Free means free: no card, and no paid tier that plays more than you do.
         Sign up with Google, Microsoft, LinkedIn, a phone number or an email
@@ -117,8 +131,19 @@
     </div>
   </section>
 
-  <!-- ---- The play surface ---- -->
-  <section class="pa-section" id="stage" aria-live="polite" data-member-only>
+  <!-- ---- The play surface ----
+       No aria-live here. #stage is the ENTIRE play surface — brief,
+       constraints, textarea, buttons, verdict — and marking it polite meant
+       every repaint queued the whole lot for announcement. Worse, the wait
+       screen inside it writes a clock on every poll tick, so a three-minute
+       judging wait produced roughly twenty-five announcements, each of them
+       "14s · check 6".
+
+       The live regions are on the specific things that should speak instead:
+       #core-status (the wait line, which changes every third poll and says
+       something), #compose-status, and #page-status. The clock is
+       aria-hidden. -->
+  <section class="pa-section" id="stage" data-member-only>
     <div class="pa-empty">
       <p class="pa-empty-title">Warming up…</p>
       <p class="pa-empty-text">Loading the arena.</p>
@@ -133,12 +158,19 @@
        is described in the panel above instead, which is the honest version of
        the same tease. -->
   <div class="pa-tabs" role="tablist" aria-label="PromptArena sections" data-member-only>
+    <!-- Roving tabindex: exactly one tab is in the Tab order at a time, and
+         the arrow keys move between them. All three used to be tabbable and
+         the arrows did nothing, which is the shape of a tablist without any
+         of its keyboard behaviour — a keyboard user had to Tab past every tab
+         to reach the panel, and the ARIA roles promised a pattern the page
+         did not implement. The selected tab is the one that carries
+         tabindex="0"; see the handler below. -->
     <button type="button" class="pa-tab" role="tab" id="tab-board"
-            aria-controls="panel-board" aria-selected="true">Leaderboard</button>
+            aria-controls="panel-board" aria-selected="true" tabindex="0">Leaderboard</button>
     <button type="button" class="pa-tab" role="tab" id="tab-attempts"
-            aria-controls="panel-attempts" aria-selected="false">My attempts</button>
+            aria-controls="panel-attempts" aria-selected="false" tabindex="-1">My attempts</button>
     <button type="button" class="pa-tab" role="tab" id="tab-legacy"
-            aria-controls="panel-legacy" aria-selected="false">Event history</button>
+            aria-controls="panel-legacy" aria-selected="false" tabindex="-1">Event history</button>
   </div>
 
   <section class="pa-panel" id="panel-board" role="tabpanel" aria-labelledby="tab-board" tabindex="0" data-member-only>
@@ -184,6 +216,26 @@
   </section>
 
 </main>
+
+<!-- Where they were trying to go, carried into the gate.
+     ----------------------------------------------------------------------
+     Every CTA here used to be a bare ../login.html, so a visitor who came for
+     PromptArena signed up and landed on a dashboard, with the arena nowhere
+     in sight and nothing saying where it had gone.
+
+     ?next= is the whole of this side of the contract. login.html owns
+     stashing it and honouring it after the round trip; nothing here touches
+     sessionStorage. Classic script, not the module: this must still work if
+     the module fails to load. -->
+<script>
+  (function () {
+    var next = encodeURIComponent(window.location.pathname + window.location.search);
+    var links = document.querySelectorAll("a[data-login-next]");
+    for (var i = 0; i < links.length; i++) {
+      links[i].setAttribute("href", "../login.html?next=" + next);
+    }
+  })();
+</script>
 
 <script type="module">
   import {
@@ -324,7 +376,14 @@
 
           '<div class="pa-compose">' +
             '<label class="pa-compose-label" for="prompt">Your prompt</label>' +
-            '<textarea class="pa-input" id="prompt" dir="auto" maxlength="' + PROMPT_MAX + '" ' +
+            // No maxlength. It made the counter's .is-over state unreachable
+            // — the box simply refused the 4001st character — and on a paste
+            // it silently dropped the overflow, so a member who pasted a long
+            // prompt lost the end of it with nothing said. Letting the text in
+            // and colouring the counter is the honest version: submitPrompt
+            // already refuses anything over the limit, client-side, with a
+            // message that says by how much.
+            '<textarea class="pa-input" id="prompt" dir="auto" ' +
               'placeholder="Write the prompt you would actually send…"></textarea>' +
             '<div class="pa-compose-foot">' +
               '<span class="pa-count" id="count">0 / ' + PROMPT_MAX + "</span>" +
@@ -333,7 +392,9 @@
                 '<button type="button" class="pa-btn pa-btn-fire" id="btn-submit">Submit to the judge</button>' +
               "</span>" +
             "</div>" +
-            '<div id="compose-status"></div>' +
+            // Its own live region now that #stage is not one. This is where a
+            // refused or failed submission reports itself.
+            '<div id="compose-status" role="status"></div>' +
           "</div>" +
         "</div>" +
       "</div>";
@@ -399,6 +460,15 @@
       box.focus();
       return;
     }
+    // Said here as well as in submitPrompt, so the member reading a red
+    // counter gets the same sentence from the button they just pressed.
+    if (value.length > PROMPT_MAX) {
+      slot.innerHTML = statusBox("warn",
+        "That's " + (value.length - PROMPT_MAX) + " characters over the " + PROMPT_MAX +
+        " limit. Trim it and try again.");
+      box.focus();
+      return;
+    }
 
     btn.disabled = true;
     slot.innerHTML = "";
@@ -436,7 +506,11 @@
         "</div>" +
         '<h2 class="pa-core-title">The judge is reading your prompt</h2>' +
         '<p class="pa-core-status" id="core-status" role="status">' + esc(WAIT_LINES[0]) + "</p>" +
-        '<p class="pa-core-clock" id="core-clock">0s</p>' +
+        // aria-hidden: this is rewritten on every poll tick — "14s · check 6",
+        // then "17s · check 7" — and there is nothing in it worth hearing
+        // twenty-five times. The wait line above carries the meaning; the
+        // clock is reassurance for the eye.
+        '<p class="pa-core-clock" id="core-clock" aria-hidden="true">0s</p>' +
         '<p class="pa-core-sub">Scoring takes a few seconds to a minute or so. Nothing is lost if you ' +
           'close this tab — the result is stored against your account and shows up under ' +
           '<strong>My attempts</strong>.</p>' +
@@ -582,7 +656,11 @@
 
     stage.innerHTML =
       '<div class="pa-panel pa-verdict">' +
-        '<div class="pa-verdict-top">' +
+        // role="status" on the result, not on #stage. #stage used to be the
+        // live region and announced the whole play surface on every repaint;
+        // this is the one thing here that has to speak when it arrives — the
+        // dial's aria-label, the band and its line, read once.
+        '<div class="pa-verdict-top" role="status">' +
           '<div class="pa-dial" id="dial" role="img" aria-label="You scored ' + esc(row.score) + ' out of 10">' +
             '<span class="pa-dial-face">' +
               '<span class="pa-dial-num" id="dial-num">' + esc(row.score) + "</span>" +
@@ -742,6 +820,16 @@
     // has certainly never opted in.
     box.checked = Boolean(stats && stats.show_in_ranking);
     box.disabled = arenaOff;
+    // A permanently greyed checkbox beside a paragraph explaining what
+    // switching it on would do reads as "we have decided you may not", which
+    // is not what has happened: the database update PromptArena needs has not
+    // been applied, and nobody can be on the board yet. Say so where the
+    // greyed control is, not three panels away.
+    if (arenaOff) {
+      optInNote("warn",
+        "This can't be switched on yet — the database update PromptArena needs hasn't been " +
+        "applied, so there is no leaderboard to join. Nothing about you has changed.");
+    }
 
     box.addEventListener("change", async function () {
       var wanted = box.checked;
@@ -792,9 +880,28 @@
       feedback = text(row.feedback_summary, "p", "pa-round-c");
     }
 
+    // ⚠ Band the row ONLY when there is a real score behind it.
+    //
+    // scoreBand falls through to the lowest band for anything that is not a
+    // finite number, and Number(null) is 0 — so a prompt still being judged
+    // and a prompt the judge errored on were both headed "Starting out",
+    // sitting next to a mark that read "Still judging" or "Not judged". The
+    // interface was asserting the worst possible verdict on a prompt that had
+    // never been scored, which is precisely the claim renderJudgeFailed goes
+    // out of its way to refuse to make. A neutral title says nothing, which
+    // is the only honest thing to say about an unscored attempt.
+    //
+    // (The hardening of scoreBand itself belongs in lib/promptarena.js and is
+    // another agent's to make; this is the call site holding the line.)
+    var scored =
+      row.judge_status === "judged" &&
+      row.score !== null && row.score !== undefined &&
+      isFinite(Number(row.score));
+    var title = scored ? scoreBand(row.score).label : "Your prompt";
+
     return '<div class="pa-item">' +
       '<div class="pa-item-top">' +
-        '<p class="pa-item-title">' + esc(scoreBand(row.score).label) + "</p>" +
+        '<p class="pa-item-title">' + esc(title) + "</p>" +
         mark +
       "</div>" +
       '<p class="pa-item-when">' + esc(when) + "</p>" +
@@ -952,13 +1059,37 @@
     { tab: "tab-attempts", panel: "panel-attempts" },
     { tab: "tab-legacy", panel: "panel-legacy" },
   ];
-  TABS.forEach(function (t) {
-    document.getElementById(t.tab).addEventListener("click", function () {
-      TABS.forEach(function (other) {
-        var on = other.tab === t.tab;
-        document.getElementById(other.tab).setAttribute("aria-selected", on ? "true" : "false");
-        document.getElementById(other.panel).hidden = !on;
-      });
+
+  // aria-selected, hidden and tabindex move together. The roving tabindex is
+  // the half that was missing: without it all three tabs sat in the Tab order,
+  // so reaching the panel meant tabbing through the lot.
+  function selectTab(index, moveFocus) {
+    TABS.forEach(function (t, i) {
+      var on = i === index;
+      var el = document.getElementById(t.tab);
+      el.setAttribute("aria-selected", on ? "true" : "false");
+      el.tabIndex = on ? 0 : -1;
+      document.getElementById(t.panel).hidden = !on;
+      if (on && moveFocus) el.focus();
+    });
+  }
+
+  TABS.forEach(function (t, i) {
+    var el = document.getElementById(t.tab);
+    el.addEventListener("click", function () { selectTab(i, false); });
+
+    // Left/Right wrap, Home/End jump to the ends — the standard tablist keys.
+    // Selection follows focus, which is right for tabs whose panels are
+    // already in the document and cost nothing to reveal.
+    el.addEventListener("keydown", function (ev) {
+      var next = null;
+      if (ev.key === "ArrowRight") next = (i + 1) % TABS.length;
+      else if (ev.key === "ArrowLeft") next = (i - 1 + TABS.length) % TABS.length;
+      else if (ev.key === "Home") next = 0;
+      else if (ev.key === "End") next = TABS.length - 1;
+      if (next === null) return;
+      ev.preventDefault();
+      selectTab(next, true);
     });
   });
 

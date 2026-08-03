@@ -22,6 +22,17 @@
     }
   } catch (e) {}
 </script>
+<!-- Settles whether <html> carries sc-signed-in or sc-signed-out, before a
+     single element of this page has been parsed.
+
+     In <head> here, where the public pages load it after </header> instead.
+     That placement exists so the file has the header in the DOM to paint an
+     avatar and a name into; this page has no identity markup for it to touch,
+     so there is nothing to wait for — and the header on this page *does* have
+     a guest/member split of its own (Inbox against Home and Join free).
+     Running first means that split is decided before the header is laid out,
+     rather than one parser-stall away from being. -->
+<script src="../header-identity.js"></script>
 </head>
 <body>
 
@@ -36,25 +47,113 @@
       <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
     </a>
     <div class="nav-actions">
+      <!-- Inbox is a place a visitor cannot go, so it isn't offered to one.
+           Connect stays in the list either way: it now explains itself to a
+           visitor rather than bouncing them. Which set shows is the same class
+           the gate below uses, set before this header paints. -->
       <a href="connect.html" class="nav-link">Connect</a>
-      <a href="inbox.html" class="nav-link">Inbox</a>
+      <a href="inbox.html" class="nav-link" data-member-only>Inbox</a>
+      <a href="../index.html" class="nav-link" data-guest-only>Home</a>
       <a href="../events.html" class="nav-link">Events</a>
+      <a href="../login.html" class="btn btn-glow" data-guest-only data-login-next>Join free</a>
     </div>
   </div>
 </header>
 
 <main class="cx-wrap">
-  <a class="cx-back" href="connect.html">&larr; Back to Connect</a>
-  <div id="member-root">
+  <!-- Two back links because there are two ways in. A member is here from
+       Connect and that is where "back" means. A visitor almost certainly is
+       not: the roster on the public hackathons page links every participant
+       straight here, so for them "back to Connect" would point at a page they
+       have never seen. -->
+  <a class="cx-back" href="connect.html" data-member-only>&larr; Back to Connect</a>
+  <a class="cx-back" href="../index.html" data-guest-only>&larr; Back to Sahaba Club</a>
+
+  <!-- ---- Signed out: the invitation ----
+       This page called requireUser("../login.html") — a
+       window.location.replace — the instant it found no session. That is two
+       clicks from the homepage: hackathons.html is deliberately public, and
+       every linked name in a team roster arrives here. A visitor who clicked
+       a person's name landed on a bare sign-in form having never been told
+       whose profile they had just been thrown out of, or that there was a
+       profile at all.
+
+       No tease behind this panel, unlike Connect. There the blurred shapes
+       stand for a directory, and a directory of abstract blocks is honest
+       about being abstract. Here the page is one named person, so a single
+       blurred card would not read as "a profile exists" — it would read as
+       *their* profile, invented. The list below says what is behind the door
+       instead.
+
+       Nothing here is what keeps this private: `member_directory` and
+       `prospect_directory` are granted to `authenticated` only, so a
+       signed-out visitor gets nothing from the database whatever this panel
+       says. This is the explanation for a door that was already locked. -->
+  <div class="sc-gate" data-guest-only>
+    <p class="sc-gate-eyebrow">Members only</p>
+    <!-- h1, not h2. Connect and PromptArena each keep a real h1 in a hero
+         that both states share; this page has no hero, and its only h1 is the
+         member's name inside #member-root, which is data-member-only. So a
+         signed-out visitor got a document with no h1 at all — no heading to
+         jump to and nothing naming the page. The two headings can never be on
+         screen together: [data-guest-only] and [data-member-only] are
+         display:none in the opposite state, so exactly one h1 renders. -->
+    <h1 class="sc-gate-title">Profiles are for members</h1>
+    <p class="sc-gate-text">
+      Somebody real is behind this link — a member who chose to be findable, or
+      one of the EduHackAI builders whose history the club has kept for them.
+      They're visible to <strong>the club, not the internet</strong>, and that
+      promise is most of why they're willing to be here at all.
+    </p>
+    <ul class="sc-gate-list">
+      <li>The whole profile: what they build, where they've worked, what they're into</li>
+      <li>Their hackathon rounds and placings, and any events you were both at</li>
+      <li>Follow them, or send them a message</li>
+    </ul>
+    <div class="sc-gate-actions">
+      <a class="btn btn-glow btn-lg" href="../login.html" data-login-next>Create a free account</a>
+    </div>
+    <p class="sc-gate-alt">Already a member? <a href="../login.html" data-login-next>Sign in</a></p>
+    <p class="sc-gate-note">
+      Free, and free is the whole of it — there is no paid tier that unlocks
+      this. Google, Microsoft, LinkedIn, a phone number or an email address;
+      whichever you pick takes about a minute. You choose whether you appear in
+      Connect yourself, and you can change your mind.
+    </p>
+  </div>
+
+  <div id="member-root" data-member-only>
     <div class="cx-state">
       <p class="cx-state-text">Loading…</p>
     </div>
   </div>
 </main>
 
+<!-- Where they were trying to go, carried into the gate.
+     ----------------------------------------------------------------------
+     This page is the sharpest case: every linked name on the public
+     hackathons roster arrives here, at one named person. A visitor who
+     clicked that person and signed up used to land on a dashboard with no
+     memory of who they had come to see.
+
+     ?next= is the whole of this side of the contract. login.html owns
+     stashing it and honouring it after the round trip; nothing here touches
+     sessionStorage. `?u=` is inside location.search, so the specific profile
+     survives. Classic script, not the module: this must still work if the
+     module fails to load. -->
+<script>
+  (function () {
+    var next = encodeURIComponent(window.location.pathname + window.location.search);
+    var links = document.querySelectorAll("a[data-login-next]");
+    for (var i = 0; i < links.length; i++) {
+      links[i].setAttribute("href", "../login.html?next=" + next);
+    }
+  })();
+</script>
+
 <script type="module">
   import {
-    requireUser, getMember, getProspect, getActivity, myFollowing, follow, unfollow,
+    currentUser, getMember, getProspect, getActivity, myFollowing, follow, unfollow,
     roundsWithPlacings, summarise, escapeHtml, initialOf, linkList, placeOf,
     experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
   } from "../lib/connect.js";
@@ -118,11 +217,15 @@
     );
   }
 
+  // dir="auto" on every chip. Skills and interests are member-authored or
+  // imported from a CV, and much of this community writes Arabic — without it
+  // an Arabic tag renders left-to-right with its punctuation at the wrong end.
   function tagsHtml(list, extraClass) {
     var items = (list || []).filter(Boolean);
     if (!items.length) return "";
     return '<div class="cx-tags">' + items.map(function (t) {
-      return '<span class="cx-tag' + (extraClass ? " " + extraClass : "") + '">' + escapeHtml(t) + "</span>";
+      return '<span class="cx-tag' + (extraClass ? " " + extraClass : "") + '" dir="auto">' +
+        escapeHtml(t) + "</span>";
     }).join("") + "</div>";
   }
 
@@ -217,10 +320,10 @@
           : (position || company || '<span class="cx-tl-at">Role not recorded</span>');
 
         return '<li class="cx-tl-item' + (current ? " is-current" : "") + '">' +
-            '<p class="cx-tl-role">' + heading +
+            '<p class="cx-tl-role" dir="auto">' + heading +
               (current ? '<span class="cx-tl-now">Current</span>' : "") + "</p>" +
-            (when ? '<p class="cx-tl-when">' + escapeHtml(when) + "</p>" : "") +
-            (summary ? '<p class="cx-tl-summary">' + escapeHtml(summary) + "</p>" : "") +
+            (when ? '<p class="cx-tl-when" dir="auto">' + escapeHtml(when) + "</p>" : "") +
+            (summary ? '<p class="cx-tl-summary" dir="auto">' + escapeHtml(summary) + "</p>" : "") +
           "</li>";
       }).join("") +
       "</ol></div></div>";
@@ -354,8 +457,13 @@
         "the club has for you and all of this attaches to your own profile automatically. " +
         "None of it appears in Connect under your name until you've seen it and chosen to " +
         "be listed.</p>" +
+      // Same ?next= contract as the gate CTAs above: "if this is you, sign
+      // up" should bring them back to the profile they are being told about,
+      // not to a dashboard with no memory of it.
       '<div class="cx-state-actions">' +
-        '<a class="cx-btn cx-btn-primary" href="../login.html">Create an account</a>' +
+        '<a class="cx-btn cx-btn-primary" href="../login.html?next=' +
+          encodeURIComponent(window.location.pathname + window.location.search) +
+          '">Create an account</a>' +
         '<a class="cx-btn" href="connect.html">Browse Connect</a>' +
       "</div></div>";
   }
@@ -385,8 +493,11 @@
         '<div class="cx-head">' +
           avatarHtml(member) +
           '<div class="cx-head-text">' +
-            '<h1 class="cx-name glow-text">' + escapeHtml(name) + "</h1>" +
-            (member.headline ? '<p class="cx-headline">' + escapeHtml(member.headline) + "</p>" : "") +
+            // A member's own name and their own headline. dir="auto" or an
+            // Arabic name renders left-to-right with its punctuation thrown
+            // to the wrong end — see the rule in lib/promptarena.js.
+            '<h1 class="cx-name glow-text" dir="auto">' + escapeHtml(name) + "</h1>" +
+            (member.headline ? '<p class="cx-headline" dir="auto">' + escapeHtml(member.headline) + "</p>" : "") +
             (meta.length ? '<div class="cx-meta">' + meta.join("") + "</div>" : "") +
           "</div>" +
         "</div>" +
@@ -405,6 +516,12 @@
         '<a class="cx-btn" href="profile.html">Edit my profile</a></div>' +
         '<p class="cx-note">This is your profile exactly as other members see it.</p>';
     } else {
+      // #member-status lives here, next to the button that writes to it.
+      // It used to be the very last element of a long profile — bio, work
+      // history, skills, interests, links — so a failed Follow reported
+      // itself several screens below the control the member had just
+      // pressed, where nobody would ever see it. role="status" so it is
+      // spoken when it changes rather than only found by someone scrolling.
       html += '<div class="cx-actions">' +
         '<button type="button" class="cx-btn" id="btn-follow">Follow</button>' +
         (member.accepts_messages
@@ -412,6 +529,7 @@
             encodeURIComponent(member.user_id) + '">Message</a>'
           : "") +
         "</div>" +
+        '<div id="member-status" role="status"></div>' +
         (member.accepts_messages ? "" :
           '<p class="cx-note">This member has messages switched off. You can still follow them.</p>');
     }
@@ -493,7 +611,7 @@
     var bio = text(member.bio);
     if (bio) {
       html += '<div class="cx-section"><p class="cx-section-title">About</p>' +
-        '<div class="cx-card"><p class="cx-bio">' + escapeHtml(bio) + "</p>" +
+        '<div class="cx-card"><p class="cx-bio" dir="auto">' + escapeHtml(bio) + "</p>" +
         (isProspect
           ? '<p class="cx-note">Written by the club from EduHackAI records and what they had ' +
             "made public, not by them. If it gets anything wrong, claiming the profile " +
@@ -522,7 +640,8 @@
         "</div></div></div>";
     }
 
-    html += '<div id="member-status"></div>';
+    // (#member-status is written next to .cx-actions above, not appended
+    // here at the foot of the page.)
     root.innerHTML = html;
 
     var btn = document.getElementById("btn-follow");
@@ -535,25 +654,34 @@
     btn.setAttribute("aria-pressed", following ? "true" : "false");
   }
 
+  // The line beside the Follow button. escapeHtml because CONNECT_OFF_MESSAGE
+  // comes from lib/connect.js rather than from this template.
+  function memberStatus(kind, text) {
+    var el = document.getElementById("member-status");
+    if (!el) return;
+    el.innerHTML = text
+      ? '<div class="cx-status is-' + kind + '">' + escapeHtml(text) + "</div>"
+      : "";
+  }
+
   function wireFollow(btn, otherId) {
     paintFollow(btn);
     btn.addEventListener("click", async function () {
       btn.disabled = true;
+      memberStatus("", "");
       var res = following ? await unfollow(otherId) : await follow(otherId);
       btn.disabled = false;
       if (res.off) {
-        document.getElementById("member-status").innerHTML =
-          '<div class="cx-status is-info">' + CONNECT_OFF_MESSAGE + "</div>";
+        memberStatus("info", CONNECT_OFF_MESSAGE);
         return;
       }
       if (res.error) {
-        document.getElementById("member-status").innerHTML =
-          '<div class="cx-status is-err">Couldn\'t save that. Try again in a moment.</div>';
+        memberStatus("err", "Couldn't save that. Try again in a moment.");
         return;
       }
       following = !following;
       paintFollow(btn);
-      document.getElementById("member-status").innerHTML = "";
+      memberStatus("", "");
     });
   }
 
@@ -591,8 +719,23 @@
   }
 
   (async function init() {
-    me = await requireUser("../login.html");
-    if (!me) return;
+    me = await currentUser();
+    if (!me) {
+      // The gate is already on screen — header-identity.js put the class on
+      // <html> before this page painted, and the panel has been visible since
+      // the first frame. This is the confirmation, and it only ever has work
+      // to do in the case that pass didn't cover: a token that was still in
+      // localStorage but is no longer a session. Same class, so there is one
+      // switch and not two opinions.
+      //
+      // Not called `root` — that name is taken by the member-root element at
+      // the top of this module, and a `var` here would hoist over it for the
+      // whole of init().
+      var html = document.documentElement;
+      html.classList.remove("sc-signed-in");
+      html.classList.add("sc-signed-out");
+      return;
+    }
 
     if (!targetId && !prospectId) {
       state("No member selected",
