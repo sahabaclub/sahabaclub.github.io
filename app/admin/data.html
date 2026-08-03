@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data — Sahaba Club Admin</title>
+
+<!-- ⚠ THIS IS THE WIDEST SURFACE ON THE PLATFORM. Everything else built here
+     limits who sees what; this deliberately hands staff the whole of 2,200
+     people's contact details, with an editor, an importer and an exporter
+     attached. noindex/nofollow is the least of the controls. The real ones,
+     all of them in the database:
+
+       1. `requireStaff()` below sends a member away. A courtesy, not a gate.
+       2. `marketing_contacts` and `profiles` carry `is_staff()` RLS policies
+          (0010, 0001). `contact_link_status` reads auth.users, so it is
+          security_invoker = off and carries `is_staff()` INSIDE its own body —
+          RLS does not apply to a view that reads with the owner's rights.
+       3. Every write goes through a `security definer` function that checks
+          `is_staff()` on its first line (0033 §5–§6). No page on this site can
+          write these tables directly: `profiles` has had its table-wide UPDATE
+          revoked since 0002, and the staff path deliberately does NOT widen
+          the member column allowlist to get around that.
+       4. Every write is recorded by trigger in `data_admin_audit` — by
+          trigger, so a write that goes round this page is still recorded.
+       5. Every export is recorded in `data_export_log`, which staff hold no
+          INSERT on. The only writer is the `data-admin` Edge Function, in the
+          same call that produces the file.
+       6. That function does its reads and writes WITH THE CALLER'S OWN JWT.
+          The service-role key is used for one statement — the export-log
+          insert — and never reaches this page.
+
+     Point 4 is the one to re-read before changing anything here: the audit is
+     not something this page does, it is something the database does to it. -->
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<link rel="stylesheet" href="data-admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body class="admin">
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>Data</h1>
+      <p>See, edit, add, import and export the club&rsquo;s people data. Every change and every export is recorded.</p>
+    </div>
+
+    <div id="dm-warnings"></div>
+
+    <div class="ad-panel-head" style="border-bottom:none;padding-left:0;padding-top:0;">
+      <div class="dm-dataset" id="dm-dataset" role="group" aria-label="Which data">
+        <button type="button" data-ds="marketing_contacts" class="is-active">Marketing contacts</button>
+        <button type="button" data-ds="profiles">Members</button>
+      </div>
+      <div class="ad-spacer"></div>
+      <span class="ad-cell-dim" id="dm-dataset-note"></span>
+    </div>
+
+    <div class="ad-stats" id="dm-stats"></div>
+
+    <div class="dm-tabs" id="dm-tabs" role="tablist">
+      <button type="button" class="dm-tab is-active" data-tab="fix" role="tab">Microsoft 365 mapping<span class="dm-tab-count" id="dm-count-fix"></span></button>
+      <button type="button" class="dm-tab" data-tab="browse" role="tab">Browse &amp; edit</button>
+      <button type="button" class="dm-tab" data-tab="fields" role="tab">Fields</button>
+      <button type="button" class="dm-tab" data-tab="import" role="tab">Import</button>
+      <button type="button" class="dm-tab" data-tab="export" role="tab">Export</button>
+      <button type="button" class="dm-tab" data-tab="history" role="tab">Who changed what</button>
+    </div>
+
+    <!-- ============================================================
+         The Microsoft 365 mapping — first, because it is the job
+         ============================================================ -->
+    <section id="dm-pane-fix" class="dm-pane">
+      <div class="ad-panel">
+        <div class="ad-panel-head"><h2>Before you start typing</h2></div>
+        <div class="ad-panel-body">
+          <p class="dm-note">
+            <strong>What is wrong with these records.</strong> When somebody signs up, the club matches them
+            against this contact list <em>on their personal email address</em>. Where we only ever recorded a
+            person&rsquo;s <code>@sahabaclub.com</code> mailbox and never a personal address, that match can never
+            succeed &mdash; however many times they sign in. Filling the address in is what fixes it.
+          </p>
+          <p class="dm-note">
+            <strong>Two different situations, and the second is the one that catches people out.</strong>
+            If they have <em>not signed up yet</em>, typing the address in is enough: the match runs
+            automatically when they do. If they have <em>already signed up</em>, the match already ran and
+            will not run again on its own &mdash; so saving here re-runs it for them straight away. The row
+            tells you which case you are in before you type.
+          </p>
+          <p class="dm-note">
+            <strong>What this does not do.</strong> It does not claim the mailbox on their behalf. Claiming a
+            Microsoft 365 account is the member&rsquo;s own act &mdash; they confirm they know the password, or ask
+            for a reset &mdash; and it starts a three-month licence clock the moment they do. What saving an
+            address achieves is that the club now recognises them: the next time they open the site they are
+            <em>offered</em> their mailbox, with the reset request as the alternative.
+          </p>
+        </div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>People who need a personal email address</h2>
+          <div class="ad-spacer"></div>
+          <select class="ad-search" id="dm-fix-filter" style="min-width:auto;">
+            <option value="needs_email">Has a mailbox, no personal address</option>
+            <option value="account_exists">Signed up but never linked</option>
+            <option value="mailbox_all">Everyone with a mailbox</option>
+          </select>
+          <span class="ad-cell-dim" id="dm-fix-count"></span>
+        </div>
+        <div id="dm-fix-list"><p class="ad-empty">Loading&hellip;</p></div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Browse and edit
+         ============================================================ -->
+    <section id="dm-pane-browse" class="dm-pane ad-hidden">
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <input type="search" class="ad-search" id="dm-q" placeholder="Search&hellip;">
+          <select class="ad-search" id="dm-seg" style="min-width:auto;"></select>
+          <div class="ad-spacer"></div>
+          <span class="ad-cell-dim" id="dm-browse-count"></span>
+          <button class="ad-btn ad-btn-sm" type="button" id="dm-choose-cols">Columns</button>
+          <button class="ad-btn ad-btn-sm ad-btn-primary" type="button" id="dm-new">Add a contact</button>
+        </div>
+        <div class="dm-cols ad-hidden" id="dm-col-picker" style="padding:14px 17px;border-bottom:1px solid var(--ad-line);"></div>
+        <div class="ad-tablewrap">
+          <table class="ad-table" id="dm-table">
+            <thead><tr></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="ad-empty ad-hidden" id="dm-browse-empty">Nothing matches.</p>
+        <div class="ad-panel-head" id="dm-more-wrap" style="justify-content:center;">
+          <button class="ad-btn" type="button" id="dm-more">Show more</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Fields — "organize the data visibility"
+         ============================================================ -->
+    <section id="dm-pane-fields" class="dm-pane ad-hidden">
+      <div class="ad-panel">
+        <div class="ad-panel-head"><h2>What this reading of &ldquo;organise the data visibility&rdquo; is</h2></div>
+        <div class="ad-panel-body">
+          <p class="dm-note">
+            Every field the club holds about a person, how many records actually have it filled in, who is
+            allowed to write it, and whether a spreadsheet may. The rows marked
+            <span class="ad-pill warn">visibility</span> are the ones that decide what other members can see.
+          </p>
+          <p class="dm-note">
+            <strong>This is not a per-person permission system, and deliberately so.</strong> Everyone who can
+            open this page can already read every one of these fields straight from the database &mdash; the
+            access rules are per table, not per field. A screen that offered to hide a column from a colleague
+            would look like a control and be a preference. If per-field access is ever wanted it is a change to
+            the database grants first and a screen second.
+          </p>
+        </div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head"><h2 id="dm-fields-title">Fields</h2></div>
+        <div class="ad-tablewrap">
+          <table class="ad-table" id="dm-fields-table">
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Filled in</th>
+                <th>Who may write it</th>
+                <th>Import</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Import
+         ============================================================ -->
+    <section id="dm-pane-import" class="dm-pane ad-hidden">
+      <div class="ad-panel">
+        <div class="ad-panel-head"><h2>How importing works here</h2></div>
+        <div class="ad-panel-body">
+          <p class="dm-note">
+            <strong>Nothing is written until you have read what would change.</strong> Choosing a file shows
+            you a plan &mdash; which records would be created, which updated and exactly which fields, which
+            clash with something a member wrote themselves, and which rows are rejected and why. Applying it is
+            a separate button, and if anything about the plan has changed in between, it is refused rather
+            than applied.
+          </p>
+          <p class="dm-note">
+            <strong>Start from an export.</strong> The file needs the <code>id</code> column
+            (<code>user_id</code> for members) to know which person each row is. That is what lets you correct
+            somebody&rsquo;s email address rather than accidentally creating a second copy of them. A contacts
+            file with no <code>id</code> is matched on the email address instead, and can only add people or
+            fill in blanks &mdash; it cannot change an address.
+          </p>
+          <p class="dm-note">
+            <strong>An empty cell means &ldquo;leave this alone&rdquo;, never &ldquo;erase this&rdquo;.</strong>
+            And a field a member wrote themselves &mdash; their bio, their headline, their skills &mdash; is never
+            replaced by a spreadsheet without you saying so, row by row, in front of what they wrote.
+          </p>
+          <p class="dm-note" id="dm-import-scope"></p>
+        </div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head"><h2>Choose a file</h2></div>
+        <div class="ad-panel-body">
+          <div class="dm-drop" id="dm-drop" tabindex="0" role="button">
+            <strong>Drop a CSV here, or click to choose one</strong>
+            <span>Saved from Excel as <em>CSV UTF-8 (Comma delimited)</em></span>
+          </div>
+          <input type="file" id="dm-file" accept=".csv,text/csv" class="ad-hidden">
+          <div id="dm-import-msg"></div>
+        </div>
+      </div>
+
+      <div class="ad-panel ad-hidden" id="dm-plan-panel">
+        <div class="ad-panel-head">
+          <h2>What would change</h2>
+          <div class="ad-spacer"></div>
+          <button class="ad-btn ad-btn-sm" type="button" id="dm-plan-cancel">Discard</button>
+          <button class="ad-btn ad-btn-sm ad-btn-primary" type="button" id="dm-plan-apply">Apply</button>
+        </div>
+        <div class="ad-panel-body" id="dm-plan-summary"></div>
+        <label class="ad-check ad-hidden" id="dm-overwrite-wrap" style="padding:0 17px 14px;">
+          <input type="checkbox" id="dm-overwrite">
+          <span id="dm-overwrite-label"></span>
+        </label>
+        <div class="dm-plan-scroll" id="dm-plan-rows"></div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         Export
+         ============================================================ -->
+    <section id="dm-pane-export" class="dm-pane ad-hidden">
+      <div class="ad-panel">
+        <div class="ad-panel-head"><h2>Before you export</h2></div>
+        <div class="ad-panel-body">
+          <p class="dm-note">
+            <strong>This is recorded.</strong> Taking a few thousand people&rsquo;s email addresses and phone
+            numbers out of the platform is not a page view, so who exported what, how many records and which
+            columns is written down &mdash; and it cannot be turned off from here.
+          </p>
+          <p class="dm-note">
+            <strong>The default is what you are looking at</strong>, not the whole table. Filter the list on
+            <em>Browse &amp; edit</em> first and export that.
+          </p>
+          <p class="dm-note">
+            <strong>Excel and this data do not get on.</strong> The file is UTF-8 with a byte-order mark, so
+            Arabic names open correctly rather than as mojibake. Phone numbers are the other half of the
+            problem: left as plain text, Excel turns <code>0501234567</code> into <code>501234567</code> and
+            <code>971504216499</code> into <code>9.71504E+11</code>, silently. Tick the box below and those
+            values are written in a form Excel shows exactly as stored &mdash; and this page strips the wrapper
+            again when you import the file back, so the round trip changes nothing.
+          </p>
+        </div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head"><h2>Columns</h2><div class="ad-spacer"></div>
+          <button class="ad-btn ad-btn-sm" type="button" id="dm-exp-all-cols">Select all</button>
+          <button class="ad-btn ad-btn-sm" type="button" id="dm-exp-no-cols">Select none</button>
+        </div>
+        <div class="ad-panel-body">
+          <div class="dm-cols" id="dm-exp-cols"></div>
+        </div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-body">
+          <label class="ad-check">
+            <input type="checkbox" id="dm-exp-safe" checked>
+            Protect phone numbers and dates from Excel <span class="ad-cell-dim">&mdash; recommended when you plan to edit and re-import</span>
+          </label>
+          <label class="ad-check">
+            <input type="checkbox" id="dm-exp-all">
+            <span id="dm-exp-all-label">Export the whole table instead of the list I am looking at</span>
+          </label>
+          <div class="ad-modal-actions">
+            <button class="ad-btn ad-btn-primary" type="button" id="dm-do-export">Export</button>
+          </div>
+          <div id="dm-export-msg"></div>
+        </div>
+      </div>
+
+      <div class="ad-panel">
+        <div class="ad-panel-head"><h2>Exports so far</h2></div>
+        <div class="ad-tablewrap dm-log-scroll">
+          <table class="ad-table" id="dm-export-log">
+            <thead><tr><th>When</th><th>Who</th><th>What</th><th class="ad-num">Records</th><th>Contained</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         The audit trail
+         ============================================================ -->
+    <section id="dm-pane-history" class="dm-pane ad-hidden">
+      <div class="ad-panel">
+        <div class="ad-panel-head"><h2>Every change to a person&rsquo;s record</h2></div>
+        <div class="ad-panel-body">
+          <p class="dm-note">
+            Recorded by the database itself rather than by this page, so a change made from the Supabase
+            dashboard, by a scheduled job, or by any other part of the platform appears here too. Routine
+            machine updates &mdash; engagement counters, avatar generation, the timestamp of the last campaign
+            &mdash; are deliberately left out; this is a record of decisions.
+          </p>
+          <p class="dm-note">
+            A change whose author is the member themselves is shown as such. That is the record that says a
+            bio was written by the person it is about.
+          </p>
+        </div>
+      </div>
+      <div class="ad-panel">
+        <div class="ad-panel-head">
+          <h2>Recent changes</h2>
+          <div class="ad-spacer"></div>
+          <button class="ad-btn ad-btn-sm" type="button" id="dm-audit-refresh">Refresh</button>
+        </div>
+        <div class="dm-log-scroll" id="dm-audit-list"><p class="ad-empty">Loading&hellip;</p></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Row editor -->
+<div class="ad-modal-back ad-hidden" id="dm-modal-back">
+  <div class="ad-modal">
+    <h2 id="dm-edit-title">Edit</h2>
+    <p class="ad-modal-sub" id="dm-edit-sub"></p>
+    <div id="dm-edit-warnings"></div>
+    <div id="dm-edit-body"></div>
+    <div class="ad-modal-actions">
+      <button type="button" class="ad-btn ad-btn-primary" id="dm-edit-save">Save</button>
+      <button type="button" class="ad-btn" id="dm-edit-close">Cancel</button>
+    </div>
+    <div id="dm-edit-msg"></div>
+  </div>
+</div>
+
+<script type="module" src="data-admin.js"></script>
+</body>
+</html>
