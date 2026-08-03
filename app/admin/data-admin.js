@@ -125,10 +125,12 @@ async function loadDataset() {
       " — if this says the function does not exist, migration 0033 has not been applied yet.",
       "err",
     );
+    stopLoading("the field catalogue could not be read");
     return;
   }
   if (rowRes.error) {
     warn("Couldn't read " + ds.label.toLowerCase() + ": " + rowRes.error.message, "err");
+    stopLoading("the records could not be read");
     return;
   }
 
@@ -1117,6 +1119,29 @@ function warn(text, kind) {
   const box = document.getElementById("dm-warnings");
   box.innerHTML = msg(text, kind);
   box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// ⚠ A panel that says "Loading…" for ever is worse than one that says it
+// failed. `loadDataset` returns early when the catalogue or the records cannot
+// be read, and it does say why — but into `#dm-warnings`, at the very top of
+// the page, above the tab strip. Anyone scrolled down to the list they came
+// for sees a spinner that never resolves and reasonably concludes the page is
+// still working. This puts the outcome where the person is looking, and points
+// at the message that carries the detail.
+function stopLoading(reason) {
+  const note = '<p class="ad-empty">Nothing loaded — ' + escapeHtml(reason) +
+    ". See the message at the top of this page for the reason.</p>";
+  ["dm-fix-list", "dm-audit-list"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = note;
+  });
+  const body = document.querySelector("#dm-table tbody");
+  if (body) {
+    body.innerHTML = '<tr><td colspan="99" class="ad-empty">Nothing loaded — ' +
+      escapeHtml(reason) + ". See the message at the top of this page.</td></tr>";
+  }
+  const count = document.getElementById("dm-fix-count");
+  if (count) count.textContent = "";
 }
 
 // uuids and column names are our own and match a narrow character set, but
