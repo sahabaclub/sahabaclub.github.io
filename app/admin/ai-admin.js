@@ -37,6 +37,80 @@ const state = {
   openSlug: null,
 };
 
+// ============================================================
+// ⚠ THE CODE DEFAULT IS THE FLOOR, AND THIS PANEL HAS TO SHOW IT
+// ============================================================
+//
+// `_shared/ai-config.ts` resolves a ceiling like this: a stored
+// `max_output_tokens` that is a positive integer WINS, and anything else falls
+// back to the calling function's own `MAX_OUTPUT_TOKENS`. A stored value is
+// therefore not a suggestion layered on top of the code — it REPLACES it, in
+// both directions, including downwards.
+//
+// `ai_services.recommended_max_output_tokens` is what this panel pre-fills the
+// box with, and for three services 0031 seeds it BELOW the code default:
+// write-member-intro (1200 against 4000), write-contact-email (2000 against
+// 7000) and import-event (3000 against 6000). So a staff member could open a
+// service, press Test run, press Save & activate, change nothing, and lower the
+// ceiling that service runs at — by accepting the panel's own suggestion.
+//
+// That is not a cost saving. On the gpt-5 family the ceiling is shared with the
+// model's own reasoning tokens, so a low ceiling is spent before the first
+// visible character is written; the answer comes back truncated rather than
+// erroring, and both writers retry a truncation at DOUBLE the ceiling. A
+// ceiling set too low is paid for twice and still fails.
+//
+// Migration 0032 corrects the seeded numbers, but it is on an unmerged branch
+// and may not be applied here — so this table is what makes the mistake
+// impossible by clicking whatever the database holds. `ai_services` carries no
+// column for the code ceiling (only `code_default_model`), so it is mirrored
+// from the `MAX_OUTPUT_TOKENS` constant in each function, named here so the
+// pair can be checked by opening one file:
+//
+//   supabase/functions/parse-profile-document/index.ts   MAX_OUTPUT_TOKENS
+//   supabase/functions/promptarena-judge/index.ts        MAX_OUTPUT_TOKENS
+//   supabase/functions/write-member-intro/index.ts       MAX_OUTPUT_TOKENS
+//   supabase/functions/write-contact-email/index.ts      MAX_OUTPUT_TOKENS
+//   supabase/functions/import-event/index.ts             VISIBLE_TOKENS + REASONING_TOKENS
+//
+// A slug that is absent sends no ceiling of its own and must not acquire one:
+// the two image services, and `promptarena-challenge`, which computes its
+// ceiling per call from the batch size. `ai-config.ts` ignores a stored number
+// for those, and so does this file.
+const CODE_DEFAULT_CEILINGS = {
+  "parse-profile-document": 8000,
+  "promptarena-judge": 13000,
+  "write-member-intro": 4000,
+  "write-contact-email": 7000,
+  "import-event": 6000,
+};
+
+function codeCeiling(slug) {
+  const n = CODE_DEFAULT_CEILINGS[slug];
+  return typeof n === "number" && Number.isFinite(n) ? n : null;
+}
+
+// What the service is ACTUALLY running at, right now — which is the number the
+// box should open showing. With nothing activated that is the code default, not
+// the recommendation: the recommendation is a number nothing has ever used, and
+// pre-filling with it is how the low value gets saved by accident.
+function effectiveCeiling(s) {
+  const active = Number(s.active_max_output_tokens);
+  if (Number.isInteger(active) && active > 0) return active;
+  const code = codeCeiling(s.slug);
+  if (code !== null) return code;
+  const rec = Number(s.recommended_max_output_tokens);
+  return Number.isFinite(rec) ? rec : null;
+}
+
+// True when what is stored — or what the box is about to offer — would lower
+// the ceiling below what the code would have used on its own.
+function belowCode(s, value) {
+  const code = codeCeiling(s.slug);
+  const n = Number(value);
+  return code !== null && Number.isFinite(n) && n < code;
+}
+
 const user = await requireStaff();
 if (user) {
   renderShell(user, "ai.html");
@@ -186,9 +260,17 @@ function card(s) {
       "</div>" +
       '<div class="ai-card-facts">' +
         '<div><div class="ai-fact-label">Model</div><div class="ai-fact-value mono">' + escapeHtml(s.effective_model) + "</div></div>" +
+        // ⚠ The EFFECTIVE ceiling, not the recommendation. With nothing
+        // activated a service runs at its code default, so showing the
+        // recommendation here would name a number nothing is using — and for
+        // three services that number is lower than the truth.
         '<div><div class="ai-fact-label">Ceiling</div><div class="ai-fact-value">' +
           (s.max_output_tokens_editable
-            ? escapeHtml(String(s.active_max_output_tokens || s.recommended_max_output_tokens))
+            ? escapeHtml(String(effectiveCeiling(s))) +
+              (belowCode(s, s.active_max_output_tokens)
+                ? ' <span class="ad-pill danger">below the code default of ' +
+                  escapeHtml(String(codeCeiling(s.slug))) + "</span>"
+                : "")
             : "n/a") +
         "</div></div>" +
         '<div><div class="ai-fact-label">Changed</div><div class="ai-fact-value">' +
@@ -208,7 +290,13 @@ function editor(s) {
   const defaults = state.defaults[s.slug] || {};
   const models = s.kind === "image" ? state.models.image : state.models.text;
   const chosenModel = s.active_model || s.code_default_model;
-  const ceiling = s.active_max_output_tokens || s.recommended_max_output_tokens;
+  // ⚠ Pre-filled with what the service is RUNNING at, not with the stored
+  // recommendation. This box's old default was `recommended_max_output_tokens`,
+  // which for write-member-intro, write-contact-email and import-event is
+  // seeded below the code default — so opening a service and pressing
+  // Test run → Save & activate, changing nothing, silently lowered its ceiling.
+  // See CODE_DEFAULT_CEILINGS.
+  const ceiling = effectiveCeiling(s);
 
   let out = '<div class="ai-editor" id="ed-' + escapeHtml(s.slug) + '">';
 
@@ -302,10 +390,24 @@ function editor(s) {
   out += "</div>";
 
   if (s.max_output_tokens_editable) {
+    const code = codeCeiling(s.slug);
+    // All three numbers, named, because they are three different things and
+    // the panel used to show only the one that is neither what is running nor
+    // what the code would use.
+    const facts = [
+      code === null
+        ? "" : "Code default: " + escapeHtml(String(code)) +
+          " &mdash; what this service uses when nothing is saved here, and what a saved number replaces.",
+      "Tuned value stored in the database: " + escapeHtml(String(s.recommended_max_output_tokens)) + ".",
+      s.active_max_output_tokens
+        ? "Currently saved: " + escapeHtml(String(s.active_max_output_tokens)) + "."
+        : "Nothing is saved for this service, so it is running on its code default.",
+    ].filter(Boolean).join(" ");
+
     out += '<div class="ad-field"><label for="ceil-' + escapeHtml(s.slug) + '">Max output tokens</label>' +
       '<input id="ceil-' + escapeHtml(s.slug) + '" type="number" min="256" max="128000" step="100" ' +
         'data-ceiling="' + escapeHtml(s.slug) + '" value="' + escapeHtml(String(ceiling)) + '">' +
-      '<span class="ad-hint">Tuned value: ' + escapeHtml(String(s.recommended_max_output_tokens)) + ".</span>" +
+      '<span class="ad-hint">' + facts + "</span>" +
     "</div>";
   } else {
     out += '<div class="ad-field"><label>Max output tokens</label>' +
@@ -374,24 +476,70 @@ function rotaLabel(key, i) {
 // the number attached. `build-prospect-profile` failed 42.9% of its live calls
 // at a ceiling that looked generous for the answer and was not, because on the
 // gpt-5 family the reasoning is drawn from the same budget.
+//
+// The comparison that comes FIRST is against the code default, not against the
+// stored recommendation. A number below the recommendation is a judgement call;
+// a number below the code default is a regression against what the service runs
+// at today, and for three services the stored recommendation IS below the code
+// default — so a note that only ever compared against the recommendation stayed
+// silent for exactly the click that does the damage.
 function ceilingNote(s, value) {
   const n = Number(value);
   const tuned = Number(s.recommended_max_output_tokens);
-  if (!Number.isFinite(n)) return "";
-  if (n < tuned) {
-    return "<strong>Below the tuned value of " + escapeHtml(String(tuned)) + ".</strong> " +
+  const code = codeCeiling(s.slug);
+
+  const bits = [];
+
+  // An emptied box is not "zero", and it is not "whatever the database thinks"
+  // either — `collect()` substitutes the running ceiling. Say which number that
+  // is instead of measuring 0 against the code default.
+  if (String(value).trim() === "" || !Number.isFinite(n) || n <= 0) {
+    return "<strong>Empty.</strong> Saving now would store " +
+      escapeHtml(String(effectiveCeiling(s))) + " &mdash; what this service is running at &mdash; rather " +
+      "than leaving the ceiling to the database, which would fill it from the tuned value. " +
+      escapeHtml(s.ceiling_note || "");
+  }
+
+  if (code !== null && n < code) {
+    bits.push(
+      "<strong>This is below the code default of " + escapeHtml(String(code)) +
+      ", which is what this service runs at today.</strong> " +
+      "A saved ceiling does not sit alongside the code default, it replaces it — so activating " +
+      escapeHtml(String(n)) + " would lower every call from " + escapeHtml(String(code)) + " to " +
+      escapeHtml(String(n)) + ". On the gpt-5 family the ceiling is shared with the model's own reasoning " +
+      "tokens and can be spent before the first visible character is written; the symptom is a truncated " +
+      "answer rather than an error, and a truncation is retried at double the ceiling — so a ceiling set too " +
+      "low is paid for twice and still fails. The prospect-profile importer lost 42.9% of its live calls " +
+      "exactly this way.");
+  } else if (Number.isFinite(tuned) && n < tuned) {
+    bits.push(
+      "<strong>Below the tuned value of " + escapeHtml(String(tuned)) + ".</strong> " +
       "On the gpt-5 family this ceiling is shared with the model's own reasoning tokens and can be spent " +
       "before the first visible character is written — the prospect-profile importer failed 42.9% of its live " +
       "calls that way, and the symptom was a truncated answer rather than an error. If this is too low the " +
-      "test run below will fail with a truncation, which is the honest check. " +
-      escapeHtml(s.ceiling_note);
-  }
-  if (n > tuned * 4) {
-    return "<strong>Well above the tuned value of " + escapeHtml(String(tuned)) + ".</strong> " +
+      "test run below will fail with a truncation, which is the honest check.");
+  } else if (Number.isFinite(tuned) && n > tuned * 4) {
+    bits.push(
+      "<strong>Well above the tuned value of " + escapeHtml(String(tuned)) + ".</strong> " +
       "Nothing unused is billed — OpenAI charges for tokens generated, not tokens permitted — so this is " +
-      "safe, just unlikely to be needed. " + escapeHtml(s.ceiling_note);
+      "safe, just unlikely to be needed.");
   }
-  return escapeHtml(s.ceiling_note);
+
+  // ⚠ The database's own suggestion is wrong for this service. Said whatever
+  // the operator has typed, because the number in the box came from here and
+  // the next person to open the page will be offered it again. Migration 0032
+  // fixes the seeded value; this fires when 0032 has not been applied.
+  if (code !== null && Number.isFinite(tuned) && tuned < code) {
+    bits.push(
+      "<strong>The tuned value stored for this service (" + escapeHtml(String(tuned)) +
+      ") is itself below the code default of " + escapeHtml(String(code)) + ".</strong> " +
+      "That seeded number is wrong, and migration 0032 &mdash; which corrects it &mdash; has evidently not " +
+      "been applied to this database. Do not save " + escapeHtml(String(tuned)) +
+      " merely because the panel offered it.");
+  }
+
+  if (s.ceiling_note) bits.push(escapeHtml(s.ceiling_note));
+  return bits.join(" ");
 }
 
 // ---- Wiring ----------------------------------------------------------
@@ -488,11 +636,30 @@ function collect(slug) {
   const ceilEl = document.querySelector('[data-ceiling="' + cssEscape(slug) + '"]');
   const noteEl = document.querySelector('[data-note="' + cssEscape(slug) + '"]');
 
+  // ⚠ AN EMPTY BOX MUST NOT MEAN "LET THE DATABASE CHOOSE". 0031's version
+  // trigger fills a null `max_output_tokens` from
+  // `recommended_max_output_tokens` — the very number that is seeded too low
+  // for write-member-intro, write-contact-email and import-event. So clearing
+  // this field and pressing save would store 1200 for the introduction writer
+  // by the back door, past every warning on this page, and the panel would
+  // then correctly report a ceiling nobody chose.
+  //
+  // A service that has an editable ceiling therefore always sends a number, and
+  // an empty or nonsensical box falls back to what the service is running at
+  // now rather than to the seed. A service with no editable ceiling still sends
+  // null, which is what the trigger wants: it nulls the column anyway, because
+  // an image call carries no ceiling.
+  let ceiling = null;
+  if (ceilEl) {
+    const typed = Number(ceilEl.value);
+    ceiling = Number.isInteger(typed) && typed > 0 ? typed : effectiveCeiling(s);
+  }
+
   return {
     service_slug: slug,
     parts,
     model: modelEl ? modelEl.value : (s.active_model || s.code_default_model),
-    max_output_tokens: ceilEl ? Number(ceilEl.value) || null : null,
+    max_output_tokens: ceiling,
     note: noteEl ? noteEl.value.trim().slice(0, 200) : "",
   };
 }

@@ -69,6 +69,7 @@ const state = {
   linkStatus: [],        // contact_link_status, contacts only
   columns: [],           // which columns the table shows
   limit: 100,
+  total: null,           // rows in the table itself, from data_field_stats
   editing: null,
   plan: null,            // the dry run currently on screen
   planFileName: "",
@@ -87,19 +88,35 @@ if (user) {
 // Loading
 // ============================================================
 
+// ⚠ EVERY NUMBER ON THIS PAGE IS COMPUTED FROM THE ROWS THE BROWSER HOLDS.
+// The stat tiles, the segment counts, the search, and — the one that matters —
+// the key list an export is built from all read `state.rows`. So a cap here is
+// not "the table is paged", it is "every count on this screen is wrong and
+// nothing says so". The cap stays, because 2,200 rows of ~30 columns is
+// already several megabytes of personal data in a tab and the alternative is a
+// rewrite onto server-side paging; what changes is that exceeding it is now
+// stated, in the one place the operator cannot miss, rather than silently
+// truncating.
+//
+// `data_field_stats` already returns the real `count(*)` of the table, so the
+// comparison costs nothing extra — and it is exact, rather than the usual
+// "we got back exactly the limit, so there is probably more" guess.
+const ROW_LIMIT = 3000;
+
 async function loadDataset() {
   const ds = DATASETS[state.dataset];
   document.getElementById("dm-dataset-note").textContent = ds.note;
   state.limit = 100;
   state.rows = [];
   state.linkStatus = [];
+  state.total = null;
 
   // The field catalogue and the populated counts in one call. It is the same
   // list the editor builds itself from and the same list the importer honours,
   // so a field that is not here is a field nothing on this page can write.
   const [fieldRes, rowRes] = await Promise.all([
     supabase.rpc("data_field_stats", { p_table: state.dataset }),
-    supabase.from(state.dataset).select("*").limit(3000),
+    supabase.from(state.dataset).select("*").limit(ROW_LIMIT),
   ]);
 
   if (fieldRes.error) {
@@ -117,10 +134,12 @@ async function loadDataset() {
 
   state.fields = fieldRes.data || [];
   state.rows = rowRes.data || [];
+  // Every catalogue row carries the same `count(*)`; the first one will do.
+  state.total = state.fields.length ? Number(state.fields[0].total) : null;
   state.columns = ds.defaultColumns.filter((c) => state.fields.some((f) => f.column_name === c));
 
   if (state.dataset === "marketing_contacts") {
-    const link = await supabase.from("contact_link_status").select("*").limit(3000);
+    const link = await supabase.from("contact_link_status").select("*").limit(ROW_LIMIT);
     if (link.error) {
       warn("Couldn't read the Microsoft 365 mapping: " + link.error.message, "warn");
     } else {
@@ -128,6 +147,7 @@ async function loadDataset() {
     }
   }
 
+  renderTruncation();
   renderSegments();
   renderStats();
   renderFix();
@@ -150,6 +170,37 @@ async function loadLogs() {
 }
 
 // ============================================================
+// "You are not looking at everybody"
+// ============================================================
+//
+// Said out loud, and left on screen, because the alternative is a page whose
+// every number is quietly wrong. Nothing here is a guess: `state.total` is the
+// database's own `count(*)`.
+function renderTruncation() {
+  const box = document.getElementById("dm-truncation");
+  const ds = DATASETS[state.dataset];
+  const total = state.total;
+  const got = state.rows.length;
+
+  if (total === null || !Number.isFinite(total) || got >= total) {
+    box.innerHTML = "";
+    return;
+  }
+
+  box.innerHTML =
+    '<div class="ad-msg warn">' +
+      "<strong>This page is showing " + got + " of " + total + " " +
+      escapeHtml(ds.label.toLowerCase()) + ".</strong> " +
+      "The browser loads at most " + ROW_LIMIT + " records at a time, and the club has passed that. " +
+      "Everything computed from the list &mdash; the counts above, the search, the segments, and " +
+      "<em>the records an export contains</em> &mdash; covers those " + got + " only. " +
+      "Export with <em>the whole table</em> ticked to get all " + total + ", and treat the tiles above as " +
+      "a count of what is loaded rather than of the club. Raising this properly means server-side paging, " +
+      "which is a change to this page and not a setting." +
+    "</div>";
+}
+
+// ============================================================
 // Stat tiles
 // ============================================================
 
@@ -161,7 +212,9 @@ function renderStats() {
     const needsEmail = needsEmailRows().length;
     const orphanAccounts = state.linkStatus.filter((c) => c.link_state === "account_exists").length;
     tiles = [
-      { l: "contacts", v: state.rows.length },
+      // The one tile that can be honest whatever the browser holds: it is the
+      // database's own count, not a length of a truncated array.
+      { l: "contacts", v: state.total === null ? state.rows.length : state.total },
       { l: "has a mailbox", v: withBox },
       { l: "needs a personal email", v: needsEmail, warn: needsEmail > 0 },
       { l: "signed up, not linked", v: orphanAccounts, warn: orphanAccounts > 0 },
@@ -169,7 +222,7 @@ function renderStats() {
     ];
   } else {
     tiles = [
-      { l: "members", v: state.rows.length },
+      { l: "members", v: state.total === null ? state.rows.length : state.total },
       { l: "in Connect", v: state.rows.filter((r) => r.is_discoverable).length },
       { l: "wrote a bio", v: state.rows.filter((r) => (r.bio || "").trim()).length },
       { l: "finished onboarding", v: state.rows.filter((r) => r.onboarding_completed_at).length },
@@ -302,12 +355,29 @@ async function saveFixEmail(id, btn) {
   // The result says what actually happened to the link rather than assuming it
   // worked, because "the address saved but nobody was matched" is a real and
   // perfectly ordinary outcome.
-  const link = (data && data.link) || {};
-  const note = (data && data.ms365_note) ||
-    (link.outcome === "linked" ? "Linked." : "Saved. Nobody has signed up with that address yet.");
-  box.innerHTML = msg(note, link.outcome === "linked" ? "ok" : "info");
+  //
+  // ⚠ `ms365_note` is the database's own sentence and is the best one to show —
+  // but 0033 returns it as NULL in two ordinary cases: when the address did not
+  // actually change, and when the contact has no `sahaba_mailbox` at all (which
+  // the "signed up but never linked" filter above is full of). The fallback
+  // therefore has to answer for every outcome `admin_link_contact` can report.
+  // It previously said "Nobody has signed up with that address yet" for all of
+  // them, which told an operator who had just linked somebody the opposite of
+  // what had happened.
+  const link = (data && data.link) || null;
+  const outcome = link && link.outcome;
+  const note = (data && data.ms365_note) || {
+    linked: "Saved, and linked. Their history is now attached to their account.",
+    already_linked: "Saved. They were already linked to an account.",
+    no_account: "Saved. Nobody has signed up with either address yet — the match runs by itself the moment they do.",
+    no_match: "Saved. No confirmed account uses that address, so there was nothing to link.",
+  }[outcome] || (data && data.email_changed === false
+    ? "Saved. That is the address already on the record, so the match was not re-run."
+    : "Saved.");
+  const linkedNow = outcome === "linked" || outcome === "already_linked";
+  box.innerHTML = msg(note, linkedNow ? "ok" : "info");
 
-  await refreshLinkStatus();
+  await refreshRow(id, false);
 }
 
 async function linkNow(id, btn) {
@@ -327,20 +397,53 @@ async function linkNow(id, btn) {
     no_match: "No match. The address on this record does not belong to any confirmed account.",
   }[outcome] || outcome, outcome === "linked" || outcome === "already_linked" ? "ok" : "info");
 
-  await refreshLinkStatus();
+  await refreshRow(id, false);
 }
 
-async function refreshLinkStatus() {
-  const [link, rows] = await Promise.all([
-    supabase.from("contact_link_status").select("*").limit(3000),
-    supabase.from(state.dataset).select("*").limit(3000),
-  ]);
-  if (!link.error) state.linkStatus = link.data || [];
-  if (!rows.error) state.rows = rows.data || [];
+// ⚠ ONE ROW CHANGED, SO ONE ROW IS RE-READ. This used to re-pull the whole of
+// `marketing_contacts` AND the whole of `contact_link_status` — up to 6,000
+// rows of personal data over the network — after every single-field save, so
+// correcting six email addresses in the list above moved 36,000 rows. The
+// database has already told us what it did; the only thing this page does not
+// know afterwards is the state of the one record it just wrote.
+//
+// `isNew` is separate because an insert has no row to replace and moves the
+// table's count, which the "you are not looking at everybody" banner reads.
+//
+// The known and accepted staleness: `link_contact_to_user` (0010) links EVERY
+// unlinked contact matching the address, so where two records share one
+// `sahaba_mailbox` a second row can change too. 0033 §5 documents that edge and
+// deliberately keeps it; switching dataset and back re-reads everything.
+async function refreshRow(keyValue, isNew) {
+  const key = DATASETS[state.dataset].key;
+  const id = String(keyValue);
+
+  const reads = [supabase.from(state.dataset).select("*").eq(key, id).maybeSingle()];
+  if (state.dataset === "marketing_contacts") {
+    reads.push(supabase.from("contact_link_status").select("*").eq("id", id).maybeSingle());
+  }
+  const [rowRes, linkRes] = await Promise.all(reads);
+
+  if (!rowRes.error && rowRes.data) {
+    splice(state.rows, key, rowRes.data);
+    if (isNew && state.total !== null) {
+      state.total += 1;
+      renderTruncation();
+    }
+  }
+  if (linkRes && !linkRes.error && linkRes.data) {
+    splice(state.linkStatus, "id", linkRes.data);
+  }
+
   renderStats();
   renderFix();
   renderTable();
   loadLogs();
+}
+
+function splice(list, key, row) {
+  const at = list.findIndex((r) => String(r[key]) === String(row[key]));
+  if (at === -1) list.unshift(row); else list[at] = row;
 }
 
 // ============================================================
@@ -607,10 +710,28 @@ async function saveEditor() {
   btn.disabled = false;
   if (error) { showMessage("dm-edit-msg", error.message, "err"); return; }
 
+  // `admin_create_contact` returns the id it minted; the update functions echo
+  // the key back. Either way the one row to re-read is known, so nothing here
+  // needs the whole table again.
+  const savedKey = isNew ? (data && data.id) : state.editing.key;
+  const link = (data && data.link) || null;
+
   closeEditor();
-  const note = (data && data.ms365_note) || "Saved.";
+
+  // `ms365_note` is only written by the update path. A create says nothing
+  // about the mailbox, so the link outcome is reported instead of a bare
+  // "Saved." that leaves the operator guessing whether the match ran.
+  const note = (data && data.ms365_note) || (isNew
+    ? ({
+      linked: "Contact added, and linked to the account that already uses that address.",
+      no_account: "Contact added. Nobody has signed up with that address yet — the match runs by itself when they do.",
+      no_match: "Contact added. No confirmed account uses that address, so nothing was linked.",
+    }[link && link.outcome] || "Contact added.")
+    : "Saved.");
   warn(note, "ok");
-  await refreshLinkStatus();
+
+  if (savedKey) await refreshRow(savedKey, isNew);
+  else await loadDataset();
 }
 
 function closeEditor() {
@@ -658,12 +779,37 @@ function renderImportScope() {
     : "<strong>Members cannot be created from a file, only updated.</strong> A profile needs an account behind it, and only a real signup creates one — inventing accounts for people who never asked would make them reachable by password-reset mail.";
 }
 
+// ⚠ THE OPTIONS ARE PART OF THE PLAN HASH, SO PREVIEW AND COMMIT MUST SEND THE
+// SAME OBJECT. 0033 computes the confirm token as
+// `md5(plan::text || p_options::text || p_table)` and refuses a commit whose
+// hash does not match. The preview used to be sent with no `options` key at all
+// — which the Edge Function turns into `{}` — while the commit always sent
+// `{"overwrite_member_authored": false}`. Those hash differently.
+//
+// The consequence was total and silent: on the ordinary path — a file with no
+// conflicts, where the tick box below stays hidden and is never touched — every
+// single Apply was refused with "this is not the change you were shown — re-run
+// the preview", and re-running the preview could not fix it, because the
+// preview kept sending `{}`. The import worked only if the operator happened to
+// tick the overwrite box and untick it again, which is not a workflow, it is a
+// coincidence.
+//
+// One function, called by all three request sites, so they cannot disagree.
+function importOptions() {
+  return { overwrite_member_authored: document.getElementById("dm-overwrite").checked };
+}
+
 async function previewImport(file) {
   const box = "dm-import-msg";
   showMessage(box, "Reading " + file.name + "…", "info");
   const text = await file.text();
 
-  const res = await invoke("import_preview", { csv: text });
+  // A new file has its own conflicts, so the decision about somebody else's
+  // file does not carry over into this one. Reset before the options are read,
+  // or the plan is computed under a setting the operator cannot see.
+  document.getElementById("dm-overwrite").checked = false;
+
+  const res = await invoke("import_preview", { csv: text, options: importOptions() });
   if (!res.ok) { showMessage(box, res.error, "err"); return; }
 
   state.plan = res.data;
@@ -677,6 +823,8 @@ function renderPlan() {
   const plan = state.plan;
   const counts = plan.counts || {};
   document.getElementById("dm-plan-panel").classList.remove("ad-hidden");
+  // A freshly computed plan is appliable again, whatever the last one did.
+  document.getElementById("dm-plan-apply").disabled = false;
 
   const conflicts = (plan.plan || []).filter((p) => Object.keys(p.conflicts || {}).length);
   const raggedNote = (plan.ragged || []).length
@@ -765,17 +913,27 @@ async function applyImport() {
     // colleague edited it — the database refuses rather than applying
     // something the operator has not read.
     plan_hash: state.plan.plan_hash,
-    options: { overwrite_member_authored: document.getElementById("dm-overwrite").checked },
+    // ⚠ Must be byte-identical to what the preview sent. See `importOptions`.
+    options: importOptions(),
   });
 
   btn.disabled = false;
   if (!res.ok) { showMessage("dm-import-msg", res.error, "err"); return; }
 
+  // `applied` holds one entry per row the plan tried to write, successful or
+  // not; `failed` counts the ones the database refused. See 0033's commit loop.
   const failed = res.data.failed || 0;
   const applied = (res.data.applied || []).length;
   showMessage("dm-import-msg",
     applied - failed + " record(s) written" + (failed ? ", " + failed + " refused by the database — see below" : "") + ".",
     failed ? "warn" : "ok");
+
+  // ⚠ A PLAN CAN ONLY BE APPLIED ONCE. The hash is over the plan, and the plan
+  // was computed against rows this commit has just changed — so a second press
+  // is guaranteed to be refused with "this is not the change you were shown",
+  // which reads like a fault rather than like the safety rule it is. Take the
+  // button away instead of letting somebody earn that message.
+  btn.disabled = true;
 
   if (failed) {
     document.getElementById("dm-plan-rows").innerHTML =
@@ -784,12 +942,16 @@ async function applyImport() {
         '<span class="ad-pill danger">refused</span>' +
         '<span class="dm-plan-key">' + escapeHtml(String(a.key)) + "</span>" +
         '<span class="dm-plan-line">row ' + a.row + "</span></div>" +
-        '<div class="ad-msg err" style="margin-top:0;">' + escapeHtml(a.error || "") + "</div></div>").join("");
+        '<div class="ad-msg err" style="margin-top:0;">' + escapeHtml(a.error || "") + "</div></div>").join("") +
+      '<p class="ad-empty">Fix these rows in the file and choose it again — this plan has been applied and ' +
+      "cannot be applied a second time.</p>";
   } else {
     discardPlan();
   }
 
-  await refreshLinkStatus();
+  // A bulk write changes rows all over the table, so this is the one path where
+  // reading everything again is the right amount of work. Once, not twice:
+  // `loadDataset` already re-reads the rows, the mapping and the logs.
   await loadDataset();
 }
 
@@ -798,6 +960,10 @@ function discardPlan() {
   state.planCsv = "";
   document.getElementById("dm-plan-panel").classList.add("ad-hidden");
   document.getElementById("dm-file").value = "";
+  // Part of the plan, so it goes with the plan. Left ticked it would silently
+  // become the setting the next file's preview is computed under.
+  document.getElementById("dm-overwrite").checked = false;
+  document.getElementById("dm-plan-apply").disabled = false;
 }
 
 // ============================================================
@@ -960,20 +1126,59 @@ function cssEscape(s) {
   return String(s).replace(/["\\]/g, "\\$&");
 }
 
-function showTab(name) {
+// ⚠ THE CLASS AND THE ARIA STATE ARE SET IN THE SAME STATEMENT, deliberately.
+// `.is-active` is a colour; `aria-selected` is the only thing that tells
+// somebody listening to this page which of six panes of 2,200 people's contact
+// details they are in. Setting them apart is how they drift.
+//
+// `tabindex` is roving: exactly one tab is in the tab order and the other five
+// are reached with the arrow keys (see `wire()`), which is what the tablist
+// pattern requires. Six tab stops would be the wrong shape and would put the
+// panel itself five presses away from the first tab.
+function showTab(name, opts) {
   state.tab = name;
-  document.querySelectorAll(".dm-tab").forEach((t) =>
-    t.classList.toggle("is-active", t.getAttribute("data-tab") === name));
+  document.querySelectorAll(".dm-tab").forEach((t) => {
+    const on = t.getAttribute("data-tab") === name;
+    t.classList.toggle("is-active", on);
+    t.setAttribute("aria-selected", on ? "true" : "false");
+    t.setAttribute("tabindex", on ? "0" : "-1");
+    // Only when the move came from the keyboard. Focusing on every click would
+    // steal focus from whatever was clicked inside the pane.
+    if (on && opts && opts.focus) t.focus();
+  });
   document.querySelectorAll(".dm-pane").forEach((p) =>
     p.classList.toggle("ad-hidden", p.id !== "dm-pane-" + name));
+}
+
+const TAB_ORDER = ["fix", "browse", "fields", "import", "export", "history"];
+
+// Left/Right move between tabs and open as they go — the pattern's
+// "automatic activation", which is right here because every pane is already
+// rendered and switching costs nothing. Home/End jump to the ends.
+function onTabKey(e) {
+  const from = TAB_ORDER.indexOf(state.tab);
+  if (from === -1) return;
+  let to = null;
+  if (e.key === "ArrowRight") to = (from + 1) % TAB_ORDER.length;
+  else if (e.key === "ArrowLeft") to = (from - 1 + TAB_ORDER.length) % TAB_ORDER.length;
+  else if (e.key === "Home") to = 0;
+  else if (e.key === "End") to = TAB_ORDER.length - 1;
+  if (to === null) return;
+  e.preventDefault();
+  showTab(TAB_ORDER[to], { focus: true });
 }
 
 function wire() {
   document.getElementById("dm-dataset").addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-ds]");
     if (!btn) return;
-    document.querySelectorAll("#dm-dataset button").forEach((b) => b.classList.remove("is-active"));
-    btn.classList.add("is-active");
+    // Same rule as the tabs: the pressed state is announced, not merely
+    // coloured, and it is written where the class is written.
+    document.querySelectorAll("#dm-dataset button").forEach((b) => {
+      const on = b === btn;
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
     state.dataset = btn.getAttribute("data-ds");
     discardPlan();
     // Contacts is the only dataset the mapping tab means anything for.
@@ -981,10 +1186,12 @@ function wire() {
     await loadDataset();
   });
 
-  document.getElementById("dm-tabs").addEventListener("click", (e) => {
+  const tabs = document.getElementById("dm-tabs");
+  tabs.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-tab]");
     if (btn) showTab(btn.getAttribute("data-tab"));
   });
+  tabs.addEventListener("keydown", onTabKey);
 
   document.getElementById("dm-fix-filter").addEventListener("change", renderFix);
 
@@ -1027,11 +1234,18 @@ function wire() {
   // recomputed rather than applied with an option the preview did not include.
   document.getElementById("dm-overwrite").addEventListener("change", async () => {
     if (!state.planCsv) return;
-    const res = await invoke("import_preview", {
-      csv: state.planCsv,
-      options: { overwrite_member_authored: document.getElementById("dm-overwrite").checked },
-    });
-    if (res.ok) { state.plan = res.data; renderPlan(); }
+    const res = await invoke("import_preview", { csv: state.planCsv, options: importOptions() });
+    if (res.ok) {
+      state.plan = res.data;
+      renderPlan();
+    } else {
+      // The plan on screen is now the one for the OTHER setting of this box, so
+      // applying it would apply something that was not read. Say so rather than
+      // leaving a stale plan behind a changed tick box.
+      showMessage("dm-import-msg",
+        "Couldn't recompute the plan for that setting: " + res.error +
+        " — the plan below is the one for the previous setting. Choose the file again.", "err");
+    }
   });
 
   document.getElementById("dm-do-export").addEventListener("click", doExport);
