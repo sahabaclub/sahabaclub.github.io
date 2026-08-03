@@ -157,6 +157,31 @@ Run `write` after editing one of those `index.ts` files or anything in
 stale twin does not fail to deploy — it deploys the previous version of the
 function, silently, which is the whole reason the check exists.
 
+**EduHackAI-5 interest form.** `register-interest` takes the popup form on
+the public hackathons page, stores it, and emails the club. It is the only
+**anonymous** function in the project, and that changes how it deploys:
+
+```bash
+supabase functions deploy register-interest --no-verify-jwt
+```
+
+**`--no-verify-jwt` is not optional here.** Every other function is called
+by a signed-in member or by the service role, so the gateway's JWT check is
+free protection. This one is called by a visitor who has no account, using
+the `sb_publishable_…` key in `lib/supabase-client.js` — and a publishable
+key is not a JWT. Deploy it without the flag and the gateway returns 401
+before the function runs, so the form fails for everyone and **nothing
+appears in the function logs to say why**. The auth that matters is inside
+the function: it writes only through `register_hackathon_interest()`, and
+`send-transactional-email` ignores the caller's `to` for this template, so
+it cannot be turned into a mailer for anyone but the club.
+
+Needs migration `0036` applied first — the function calls an RPC that
+`0036` creates, and reports that by name if it is missing.
+
+Optional: `INTEREST_NOTIFY_EMAIL` overrides where the notification goes.
+Both functions default to the club address if it is unset.
+
 **Avatars.** `generate-avatar` turns a member's photo into an illustrated
 club-style portrait and then discards the photo. It uses the same
 `OPENAI_API_KEY` as everything above, plus `OPENAI_IMAGE_MODEL`:

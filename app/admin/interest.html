@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interest — Sahaba Club Admin</title>
+
+<!-- The people who filled in the interest form on the public hackathons page.
+     Two things worth knowing before changing anything here:
+
+       1. Every value on this page was typed by somebody who is NOT signed in.
+          The form behind it is the only anonymous write path on the platform.
+          interest.js runs all of it through escapeHtml(); keep it that way.
+       2. This page must never say "nobody has registered" because a read
+          failed. That exact bug shipped on the Data panel today. The flag that
+          prevents it is `state.loadedOk` in interest.js.
+
+     Read-only by design: nothing here writes, because none of this data is
+     the club's to edit. -->
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body class="admin">
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>Interest</h1>
+      <p>People who asked to hear about the next EduHackAI round, from the form on the public hackathons page. Newest first.</p>
+    </div>
+
+    <!-- Failures land here, above everything, and the table repeats the fact
+         so a reader scrolled down to it cannot mistake a broken read for an
+         empty list. -->
+    <div id="ri-notice"></div>
+
+    <div class="ad-stats" id="ri-stats"></div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <h2>Registrations</h2>
+        <span class="ad-cell-dim" id="ri-round"></span>
+        <div class="ad-spacer"></div>
+        <input type="search" class="ad-search" id="ri-q" placeholder="Search name, email, mobile or job&hellip;">
+        <span class="ad-cell-dim" id="ri-count"></span>
+        <button class="ad-btn ad-btn-sm" type="button" id="ri-refresh">Refresh</button>
+      </div>
+      <div class="ad-tablewrap">
+        <table class="ad-table" id="ri-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Mobile</th>
+              <th>Currently doing</th>
+              <th>Registered</th>
+              <th>Notified</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="6" class="ad-empty">Loading&hellip;</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head"><h2>What &ldquo;notified&rdquo; means here</h2></div>
+      <div class="ad-panel-body">
+        <p class="ad-cell-dim" style="font-size:13.5px;line-height:1.7;margin:0 0 10px;">
+          A registration is recorded first and the club is emailed second. The timestamp in that
+          last column is written only once the mail has actually been accepted for delivery &mdash;
+          so a row marked <span class="ad-pill warn">not emailed</span> is a real registration whose
+          notification never went out, not a half-finished one. The person on it registered
+          successfully and is waiting to hear from somebody.
+        </p>
+        <p class="ad-cell-dim" style="font-size:13.5px;line-height:1.7;margin:0;">
+          Details are unverified. Nobody signing this form was asked to prove the email address or
+          the phone number is theirs, and they were not asked to create an account &mdash; that is
+          the point of a public interest form. Treat it as a lead, not a record.
+        </p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module" src="interest.js"></script>
+</body>
+</html>
