@@ -4315,7 +4315,7 @@ html.light-mode .hk-medal::before {
    one labelled section even though the tiles now sit inside it visually. */
 .hk-story-h {
   margin: 18px 0 12px;
-  font-size: 25px;
+  font-size: 34px;
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.015em;
@@ -4410,14 +4410,14 @@ html.light-mode .hk-country { background: rgba(0, 0, 0, 0.04); }
    so it is gone rather than left to look like it still decides something. */
 .hk-thanks-h {
   margin: 0 0 4px;
-  font-size: 22px;
+  font-size: 34px;
   font-weight: 800;
   letter-spacing: -0.015em;
   text-align: center;
 }
 .hk-coach-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   gap: 12px;
   margin-top: 18px;
 }
@@ -4480,9 +4480,9 @@ a.hk-coach:hover .hk-coach-link-cue,
 a.hk-coach:focus-visible .hk-coach-link-cue { color: var(--text); }
 .hk-coach-face {
   position: relative;
-  width: 84px;
-  height: 84px;
-  margin-bottom: 8px;
+  width: 128px;
+  height: 128px;
+  margin-bottom: 12px;
   border-radius: 50%;
   overflow: hidden;
   border: 1px solid var(--glass-border);
@@ -4493,7 +4493,7 @@ a.hk-coach:focus-visible .hk-coach-link-cue { color: var(--text); }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 26px;
+  font-size: 40px;
   font-weight: 800;
   letter-spacing: 0.03em;
   color: var(--text);
@@ -4502,20 +4502,27 @@ a.hk-coach:focus-visible .hk-coach-link-cue { color: var(--text); }
 html.light-mode .hk-coach-mono {
   background: linear-gradient(140deg, rgba(139, 92, 246, 0.30), rgba(34, 211, 238, 0.20));
 }
-/* Hidden until it has decoded, so a 404 never paints and never moves
-   anything. Positioned over the monogram rather than replacing it. */
+/* Transparent until it has decoded, so a 404 never paints and never moves
+   anything. Positioned over the monogram rather than replacing it.
+   ⚠ opacity, NOT display:none. These images carry loading="lazy", and a
+   display:none image never intersects the viewport, so the browser never
+   fetches it — `complete` stays false, `load` never fires, `is-ready` is never
+   added, and it stays hidden for ever. It could not load until it was shown
+   and could not be shown until it loaded. Every coach rendered as a monogram
+   with all eight files sitting on the server returning 200. An opacity-0
+   image is still laid out and still loads normally. */
 .hk-coach-photo {
-  display: none;
+  opacity: 0;
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.hk-coach-photo.is-ready { display: block; }
+.hk-coach-photo.is-ready { opacity: 1; }
 .hk-coach-name {
   margin: 0;
-  font-size: 14.5px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.35;
   color: var(--text);
@@ -4562,7 +4569,7 @@ html.light-mode .hk-coach-round { background: rgba(0, 0, 0, 0.04); }
 .hk-videos { margin: 34px 0 0; padding-top: 26px; border-top: 1px solid var(--glass-border); }
 .hk-videos-h {
   margin: 0 0 4px;
-  font-size: 22px;
+  font-size: 34px;
   font-weight: 800;
   letter-spacing: -0.015em;
   text-align: center;
@@ -4813,7 +4820,7 @@ html.light-mode .hk-cta {
    heading and not by whichever ancestor happens to be centred today. */
 .hk-cta-h {
   margin: 0 0 8px;
-  font-size: 24px;
+  font-size: 34px;
   font-weight: 800;
   letter-spacing: -0.015em;
   text-align: center;
@@ -5115,14 +5122,14 @@ html.reduce-motion .hk-spin { animation: none; border-top-color: transparent; }
   .hk-round-logo { --hk-logo-h: 38px; }
   .hk-brand { --hk-logo-h: 104px; }
   .hk-story { padding: 18px 16px 16px; }
-  .hk-story-h { font-size: 21px; }
+  .hk-story-h { font-size: 26px; }
   .hk-cta { padding: 24px 18px 22px; }
   /* How many cards show is set by --hk-rail-show at 900px and 620px, next to
      the rail itself, so the whole answer is in one place. What is left here is
      the cue, which shrinks so it does not fill a phone-width poster. */
   .hk-video-cue { width: 48px; height: 48px; }
   .hk-video-cue svg { width: 19px; height: 19px; }
-  .hk-coach-grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
+  .hk-coach-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
   .hk-modal { padding: 14px; }
   .hk-modal-box { padding: 22px 18px 20px; }
   .hk-form-actions { flex-direction: column; align-items: stretch; }
