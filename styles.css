@@ -3847,25 +3847,104 @@ html.light-mode .hk-soon {
    clears it at 5.58:1. Same finding as .hk-place.is-rank-1 in the inline
    sheet, same fix. */
 html.light-mode .hk-soon-flag { color: #0b5c73; }
-/* One statement: the round's mark (or its name), then "is coming". The two
-   sit on a baseline-ish row and wrap as a unit on a narrow screen. */
+/* One statement: the round's mark (or its name), then "Coming Soon".
+   ------------------------------------------------------------
+   The mark and the words are ONE lockup, which is the thing Ahmed asked for:
+   not a logo with text hanging off the bottom of it, but two halves of a single
+   line that agree on where their middle is.
+
+   .hk-soon-lockup is the flex row that does it. align-items:center centres the
+   two children on each other's CROSS AXIS, and the row's cross size is set by
+   the tallest child — the logo. So the words land on the vertical centre line
+   of the logo's height, and they keep landing there if --hk-logo-h changes at a
+   breakpoint or if the logo file 404s and the text fallback (which is a
+   different height again) renders instead. Nothing here depends on the two
+   being the same size.
+
+   .hk-soon-verb carries line-height:1 so its box is the height of its own
+   glyphs rather than 1.14 of them: an inherited line-height puts unequal
+   half-leading above and below the text, and centring the BOX then leaves the
+   text itself a pixel or two off the logo's middle. It is the tight box that
+   gets centred, so the optical centre is the geometric one. */
 .hk-soon-h {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 14px;
   margin: 8px 0 0;
   font-size: 32px;
   font-weight: 800;
   letter-spacing: -0.015em;
   line-height: 1.14;
 }
+.hk-soon-lockup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
 .hk-soon-logo { --hk-logo-h: 56px; }
 .hk-soon-name { font: inherit; }
+
+/* "Coming Soon", in the EduHackAI mark's own colour.
+   ------------------------------------------------------------
+   The mark is a horizontal blue-to-magenta ramp. Sampled out of
+   assets/eduhack/eduhackai-dark.png rather than eyeballed — the artwork's own
+   run is #0017ff at the left end through to #f200c3 at the right, with a cyan
+   #00acff accent — so what follows is that ramp, not a guess at it.
+
+   NEITHER RAW BRAND COLOUR CAN BE USED AS TEXT. Measured against the
+   coming-soon panel this text sits on:
+
+       #0017ff  1.57:1 on the dark panel      6.09:1 on the light panel
+       #f200c3  3.40:1 on the dark panel      2.81:1 on the light panel
+
+   — so the mark's blue is invisible on the dark panel and its magenta fails AA
+   on both. The ramp is therefore re-voiced per theme: the same blue-to-magenta
+   journey, lifted for the dark surface and deepened for the light one. Both
+   ends and every point between them clear 4.5:1, which is stricter than this
+   text's size requires (32px is WCAG "large" at 3:1) and is the bar the rest of
+   this page is held to. tools/hackathons-checks/contrast.mjs samples the ramp
+   at 21 points in each theme and reports the worst:
+
+       dark   #9aa5ff -> #ff9ae8    worst 5.62:1, at the blue end
+       light  #1a1fd6 -> #9c0080    worst 5.73:1, at the magenta end
+
+   ---- the fallback ----
+   `color` is set FIRST and unconditionally, to the worst end of that theme's
+   ramp — so anything that cannot paint gradient text gets a solid fill that is
+   already measured at the gradient's own worst number, and it is a brand
+   colour rather than a neutral. The gradient is then applied inside an
+   @supports gate, so a browser without background-clip:text never reaches
+   -webkit-text-fill-color:transparent and can never render this invisible.
+   That ordering is the whole safety property: the transparent fill only ever
+   exists where the thing that paints over it also exists. */
 .hk-soon-verb {
   font-size: 26px;
-  font-weight: 700;
-  color: var(--text-secondary);
+  font-weight: 800;
+  line-height: 1;
+  color: #9aa5ff;
+}
+html.light-mode .hk-soon-verb { color: #9c0080; }
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  .hk-soon-verb {
+    background-image: linear-gradient(90deg, #9aa5ff 0%, #ff9ae8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  html.light-mode .hk-soon-verb {
+    background-image: linear-gradient(90deg, #1a1fd6 0%, #9c0080 100%);
+  }
+  /* Windows high contrast throws the gradient away and would leave the text
+     painted in a transparent fill. Hand it back to the system colour. */
+  @media (forced-colors: active) {
+    /* Both selectors, so the light-mode `color` rule above — which is more
+       specific than a bare .hk-soon-verb — cannot win here. */
+    .hk-soon-verb,
+    html.light-mode .hk-soon-verb {
+      background-image: none;
+      -webkit-text-fill-color: currentColor;
+      color: CanvasText;
+    }
+  }
 }
 .hk-soon-tagline { margin: 10px 0 0; font-size: 15.5px; color: var(--text-secondary); }
 .hk-soon-desc {
@@ -4147,18 +4226,30 @@ html.light-mode .hk-medal::before {
   border: 1px solid var(--glass-border);
   border-radius: 18px;
   background: var(--glass);
+  /* Ahmed asked for the description to be centred. It is set here rather than
+     on .hk-story-p so the country tag row centres with it — the row is a
+     sibling of the paragraphs, and two rules that have to agree are one rule
+     that cannot disagree. */
+  text-align: center;
 }
 /* The section's title. Sized above the surrounding prose rather than level
    with the other card headings: it is the one heading on this page that names
-   what the whole programme is, and Ahmed asked for it to be clear. It keeps
-   the position it already had, at the top of the story card. */
+   what the whole programme is, and Ahmed asked for it to be clear.
+
+   It has MOVED OUT of the story card. It now renders into #hack-story-head,
+   which sits above the four stat tiles, so the page reads: coming-soon panel →
+   this heading → the tiles → the prose. The tiles are the first thing the
+   story says, so the heading that names the story belongs in front of them.
+   The card below still points at it with aria-labelledby, so the section is
+   one labelled section even though the tiles now sit inside it visually. */
 .hk-story-h {
-  margin: 0 0 14px;
+  margin: 18px 0 12px;
   font-size: 25px;
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.015em;
   color: var(--text);
+  text-align: center;
 }
 /* No max-width. This rule carried `max-width: 78ch`, and that — not the
    1080px site cap, not a grid column, not a flex basis — was why the owner
@@ -4187,18 +4278,33 @@ html.light-mode .hk-medal::before {
   color: var(--text-secondary);
 }
 .hk-story-p:last-child { margin-bottom: 0; }
-/* The Demo Day venues. A list rather than a comma-joined clause: most of
-   these names contain a comma of their own, so in a sentence the separators
-   and the names were the same character. */
-.hk-venues {
+/* Where the EduHackers came from.
+   ------------------------------------------------------------
+   This replaces the Demo Day venue tags, which Ahmed asked to be removed along
+   with the sentence that introduced them. Each round's own Demo Day venue is
+   still on that round's chip line, which is where a venue belongs.
+
+   ⚠ THIS ROW RENDERS NOTHING TODAY, AND THAT IS THE CORRECT BEHAVIOUR. It is
+   ⚠ driven by EDUHACKER_COUNTRIES in hackathons-ui.js, which is empty because
+   ⚠ no table on this project records a participant's country — see the ⚠ block
+   ⚠ on that object. When the config is empty the <ul>, the tags and the
+   ⚠ sentence that introduces them are all absent from the DOM, so there is no
+   ⚠ empty strip and no placeholder to explain away. These rules are here for
+   ⚠ the day somebody has the real list.
+
+   Centred with the prose above it, and a list rather than a comma-joined
+   clause, which is what the venue tags were and is still the right form for a
+   set of short names. */
+.hk-countries {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 6px;
   margin: 2px 0 10px;
   padding: 0;
   list-style: none;
 }
-.hk-venue {
+.hk-country {
   font-size: 12.5px;
   font-weight: 600;
   padding: 4px 12px;
@@ -4207,7 +4313,7 @@ html.light-mode .hk-medal::before {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--glass-border);
 }
-html.light-mode .hk-venue { background: rgba(0, 0, 0, 0.04); }
+html.light-mode .hk-country { background: rgba(0, 0, 0, 0.04); }
 /* The computed figures. Colour and weight only — no boxes, because these
    are sentences and a number in a box stops being part of one. */
 .hk-story-p strong {
@@ -4361,6 +4467,133 @@ html.light-mode .hk-coach-mono {
   white-space: nowrap;
 }
 html.light-mode .hk-coach-round { background: rgba(0, 0, 0, 0.04); }
+
+/* ============================================================
+   Demo videos — a click-to-play façade, not nine embeds
+   ------------------------------------------------------------
+   Nothing here is an <iframe> until somebody presses one. What renders is
+   YouTube's own poster for each video and a play button over it;
+   hackathons-ui.js swaps the button for a youtube-nocookie.com frame on click.
+   The alternative — nine live players above the fold-and-a-bit of a page that
+   already loads a starfield canvas, the Supabase client, twelve logo files and
+   nine coach photographs — is nine player bundles and nine tracking cookies
+   before the reader has asked for any of them.
+
+   The poster is hqdefault.jpg, which YouTube serves at a real 480x360, and
+   those are the width/height attributes on the <img>. The media box is pinned
+   to 16/9 with aspect-ratio and the poster is cropped into it with object-fit,
+   which does two things: it removes the black bars hqdefault carries around its
+   16:9 frame, and it makes the box the SAME shape as the player that replaces
+   it — so pressing play moves nothing on the page.
+   ============================================================ */
+.hk-videos { margin: 34px 0 0; padding-top: 26px; border-top: 1px solid var(--glass-border); }
+.hk-videos-h {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+.hk-videos-intro {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.hk-video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  gap: 16px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.hk-video { display: flex; flex-direction: column; min-width: 0; }
+
+/* The box both the poster button and the frame live in. Its size is the
+   wrapper's, not the child's, which is what makes the swap free. */
+.hk-video-media {
+  display: block;
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+}
+.hk-video-play {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+}
+.hk-video-thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;   /* crops hqdefault's letterbox bars out of the 16:9 box */
+}
+.hk-video-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+/* The play cue. A real filled disc rather than an outline: it sits on a poster
+   frame whose colour is whatever the video happens to open on, so the cue
+   carries its own background and cannot end up drawn on top of itself. */
+.hk-video-cue {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: rgba(10, 12, 20, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  transition: background 0.18s, transform 0.18s;
+}
+.hk-video-cue svg { width: 22px; height: 22px; margin-left: 2px; }
+.hk-video-play:hover .hk-video-cue {
+  background: rgba(139, 92, 246, 0.92);
+  transform: translate(-50%, -50%) scale(1.06);
+}
+html.reduce-motion .hk-video-cue { transition: none; }
+html.reduce-motion .hk-video-play:hover .hk-video-cue { transform: translate(-50%, -50%); }
+.hk-video-play:focus-visible { outline: 3px solid var(--violet); outline-offset: 3px; }
+
+.hk-video-title {
+  margin: 11px 0 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.hk-video-desc {
+  margin: 5px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.hk-videos-more { margin: 18px 0 0; }
+.hk-videos-link {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--cyan);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.hk-videos-link:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
 
 /* ============================================================
    Closing call to action
@@ -4565,6 +4798,10 @@ html.light-mode .hk-done-mark {
   .hk-round-caret { transition: none; }
   .hk-round-toggle { transition: none; }
   .hk-spin { animation: none; border-top-color: transparent; }
+  /* The play cue grows on hover. It keeps its colour change — that is the
+     affordance — and loses only the movement. */
+  .hk-video-cue { transition: none; }
+  .hk-video-play:hover .hk-video-cue { transform: translate(-50%, -50%); }
 }
 html.reduce-motion .hk-medal::after { animation: none; }
 html.reduce-motion .hk-round-caret { transition: none; }
@@ -4586,7 +4823,14 @@ html.reduce-motion .hk-spin { animation: none; border-top-color: transparent; }
   .hk-round-logo { --hk-logo-h: 38px; }
   .hk-brand { --hk-logo-h: 104px; }
   .hk-story { padding: 18px 16px 16px; }
+  .hk-story-h { font-size: 21px; }
   .hk-cta { padding: 24px 18px 22px; }
+  /* One video per row below 720px, and a smaller cue so it does not fill the
+     poster. The grid's own 272px minimum would already do this on most phones;
+     stating it means a 320px viewport gets it too. */
+  .hk-video-grid { grid-template-columns: 1fr; gap: 18px; }
+  .hk-video-cue { width: 48px; height: 48px; }
+  .hk-video-cue svg { width: 19px; height: 19px; }
   .hk-coach-grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }
   .hk-modal { padding: 14px; }
   .hk-modal-box { padding: 22px 18px 20px; }
