@@ -539,17 +539,31 @@ ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(RE
     "...but each round still shows its own Demo Day venue on its chip line");
 
   // ---- the country tags ----
-  // ⚠ The row is DRIVEN BY EDUHACKER_COUNTRIES AND RENDERS NOTHING, because no
-  // ⚠ table on this project records a participant's country. These assertions
-  // ⚠ are the guard against somebody "fixing" the blank by inventing a list:
-  // ⚠ the row must be absent, not empty, and no country name may appear.
-  ok(!/hk-countries|hk-country/.test(storyHtml),
-    "the country tag row is absent entirely while the config is empty", storyHtml);
-  ok(!/came from/.test(storyHtml),
-    "...and so is the sentence that would introduce it");
-  for (const c of ["Egypt", "UAE", "India", "KSA", "Emirates", "Saudi"]) {
-    ok(!new RegExp(`\\b${c}\\b`).test(storyHtml), `no country is invented: "${c}" does not appear`);
+  // ⚠ These assertions USED to say the row was absent and no country name could
+  // ⚠ appear, because nothing on this project recorded a participant's country.
+  // ⚠ That changed: the owner supplied a file of 95 participants' countries, so
+  // ⚠ the guard changes with it rather than being deleted. The property is no
+  // ⚠ longer "nothing is shown" — it is "ONLY what he supplied is shown".
+  // ⚠ A country that is not in his list appearing here would be exactly the
+  // ⚠ invention the old checks existed to prevent.
+  ok(/hk-countries|hk-country/.test(storyHtml),
+    "the country tag row renders now that there is a real list behind it", storyHtml);
+  const shown = [...storyHtml.matchAll(/class="hk-country[^"]*"[^>]*>([^<]+)</g)].map((m) => m[1].trim());
+  ok(shown.length === 13, `all thirteen supplied countries render (${shown.length})`, shown.join(", "));
+  for (const c of ["Egypt", "India", "Bangladesh", "Pakistan", "Jordan", "Palestine",
+                   "Albania", "Argentina", "Ethiopia", "Qatar", "Saudi Arabia",
+                   "Sudan", "United Arab Emirates"]) {
+    ok(shown.includes(c), `"${c}" is one of the tags, exactly as supplied`);
   }
+  // The one that matters: nothing outside his file may appear.
+  const allowed = new Set(["Egypt", "India", "Bangladesh", "Pakistan", "Jordan", "Palestine",
+    "Albania", "Argentina", "Ethiopia", "Qatar", "Saudi Arabia", "Sudan", "United Arab Emirates"]);
+  ok(shown.every((c) => allowed.has(c)),
+    "⚠ no country appears that the owner did not supply", shown.filter((c) => !allowed.has(c)).join(", "));
+  // Counts are deliberately not published — the file covers 95 of 139 people, so
+  // a per-country number would be a share of an incomplete sample shown as a total.
+  ok(!/\b55\b|\b16\b\s*(?:×|x)?\s*India/.test(storyHtml),
+    "no per-country count is printed beside a tag");
   ok(!/undefined|NaN|null/.test(storyHtml), "no unresolved value reaches the prose");
 }
 
@@ -1419,48 +1433,54 @@ ok(T.coachPhotoSlug("") === "" && T.coachPhotoSlug(null) === "", "nothing in, no
     "every configured app count is either null or a real positive number");
 }
 
-// -- the country tags: a config that is EMPTY on purpose -------------------
-// ⚠ These are the assertions that keep the row honest. `hackathon_participants`
-// ⚠ holds email, full_name and university_or_company and nothing else, and the
-// ⚠ roster view exposes none of them, so there is no country data anywhere on
-// ⚠ this project. The config must therefore stay empty until somebody has a
-// ⚠ real list, and the row must render nothing while it is.
+// -- the country tags: a flat list, because the source is a flat list -------
+// ⚠ This block used to assert the config was EMPTY, because no table on this
+// ⚠ project records a participant's country. The owner has since supplied a
+// ⚠ file of 95 participants' countries, so the guard moved rather than went
+// ⚠ away. What it protects now:
+// ⚠   * the list is exactly the thirteen he gave, in a flat programme-wide
+// ⚠     array — NOT keyed by round, because his file has no round column and
+// ⚠     splitting it would invent the one fact it does not contain;
+// ⚠   * `countriesForRounds` cannot start narrowing by round again while the
+// ⚠     source cannot support it.
 {
   const cfg = T.eduhackerCountries;
-  ok(Object.keys(cfg).join(",") === "1,2,3,4",
-    "the country config has APPS_BY_ROUND's shape: one entry per round that ran",
-    Object.keys(cfg).join(","));
-  const filled = Object.keys(cfg).filter((k) => (cfg[k] || []).length);
-  ok(filled.length === 0,
-    "⚠ the country config is EMPTY — nothing has been invented for it",
-    filled.map((k) => `${k}: ${JSON.stringify(cfg[k])}`).join(" | "));
+  const SUPPLIED = ["Egypt", "India", "Bangladesh", "Pakistan", "Jordan", "Palestine",
+    "Albania", "Argentina", "Ethiopia", "Qatar", "Saudi Arabia", "Sudan", "United Arab Emirates"];
 
-  const rounds = [{ round_number: 1 }, { round_number: 2 }, { round_number: 9 }];
-  ok(T.countriesForRounds(rounds).length === 0, "so the tag row has nothing to render");
-  ok(T.countriesForRounds([]).length === 0, "no rounds, no countries");
-  ok(T.countriesForRounds(null).length === 0, "no argument, no countries");
+  ok(Array.isArray(cfg),
+    "the country config is a FLAT array — the source carries no round column",
+    Object.prototype.toString.call(cfg));
+  ok(cfg.length === 13, `all thirteen supplied countries are configured (${cfg.length})`);
+  ok(SUPPLIED.every((c) => cfg.includes(c)),
+    "every country the owner supplied is present",
+    SUPPLIED.filter((c) => !cfg.includes(c)).join(", "));
+  ok(cfg.every((c) => SUPPLIED.includes(c)),
+    "⚠ and NOTHING has been added that he did not supply",
+    cfg.filter((c) => !SUPPLIED.includes(c)).join(", "));
+  ok(cfg[0] === "Egypt" && cfg[1] === "India" && cfg[2] === "Bangladesh",
+    "ordered by how many people came from each, commonest first");
 
-  // The mechanism itself, exercised against a stand-in config so that "it
-  // renders nothing" is known to be the data's doing and not a dead function.
-  // countriesForRounds() reads the module's own object, so this reaches in and
-  // fills it, then puts it back exactly as it was.
-  const saved = { 1: cfg[1], 2: cfg[2], 3: cfg[3], 4: cfg[4] };
+  // The rounds argument is accepted and ignored, on purpose. If somebody
+  // reintroduces per-round narrowing without a per-round source, these fail.
+  const all = T.countriesForRounds([{ round_number: 1 }]);
+  ok(all.length === 13, "one round asks and still gets the whole programme's list", String(all.length));
+  ok(T.countriesForRounds([]).length === 13, "no rounds, same list — it is not per-round");
+  ok(T.countriesForRounds(null).length === 13, "no argument, same list");
+
+  // Dedup/trim still works, since the config is hand-edited.
+  const saved = cfg.slice();
   try {
-    cfg[1] = ["Egypt", "UAE"];
-    cfg[2] = ["UAE", "  ", "India", null];       // duplicate, blank and null
-    cfg[3] = [];
-    const got = T.countriesForRounds([{ round_number: 1 }, { round_number: 2 }, { round_number: 3 }]);
-    ok(got.join("|") === "Egypt|UAE|India",
-      "a filled config produces the union, deduplicated, in first-seen order", got.join("|"));
-    ok(T.countriesForRounds([{ round_number: 3 }]).length === 0,
-      "a round whose entry is empty contributes nothing");
-    ok(T.countriesForRounds([{ round_number: 9 }]).length === 0,
-      "a round the config says nothing about contributes nothing");
+    cfg.length = 0;
+    cfg.push("Egypt", "  ", "Egypt", null, "India");
+    const got = T.countriesForRounds(null);
+    ok(got.join("|") === "Egypt|India",
+      "blanks, nulls and duplicates are dropped", got.join("|"));
   } finally {
-    for (const k of Object.keys(saved)) cfg[k] = saved[k];
+    cfg.length = 0;
+    for (const c of saved) cfg.push(c);
   }
-  ok(T.countriesForRounds([{ round_number: 1 }]).length === 0,
-    "...and the real config is still empty afterwards");
+  ok(T.countriesForRounds(null).length === 13, "...and the real list is restored afterwards");
 }
 
 // -- per-round figures, computed from the rows ----------------------------
@@ -1515,12 +1535,20 @@ ok(T.listSentence([]) === "", "no items");
   for (const gone of ["demoDays", "venues", "arabicRounds"]) {
     ok(!(gone in f), `storyFacts no longer computes ${gone}`, JSON.stringify(Object.keys(f)));
   }
-  ok(Array.isArray(f.countries) && f.countries.length === 0,
-    "...and countries is the empty list the empty config produces",
+  ok(Array.isArray(f.countries) && f.countries.length === 13,
+    "...and countries is the supplied list, which is not derived from the rows",
     JSON.stringify(f.countries));
   const none = T.storyFacts([], {}, {});
-  ok(none.rounds === 0 && none.firstStart === null && none.countries.length === 0,
-    "a programme with nothing in it computes to nothing");
+  // ⚠ `countries` is deliberately NOT zero here. Every other figure in
+  // storyFacts is computed from the rows, so an empty programme drives them to
+  // nothing — but the country list is a fact the owner supplied about the
+  // programme, not something the rows imply. It survives an empty page, and
+  // that asymmetry is the point: those are two different kinds of truth.
+  ok(none.rounds === 0 && none.firstStart === null,
+    "a programme with no rows computes every DERIVED figure to nothing");
+  ok(none.countries.length === 13,
+    "...but the supplied country list is not a derived figure and stays put",
+    String(none.countries.length));
 }
 
 // -- coaches, deduplicated across rounds ------------------------------------
