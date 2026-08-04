@@ -229,6 +229,59 @@ Supabase dashboard: Table Editor → `profiles` → find your row → set
 `role` to `admin`. The dashboard connects as the service role, which is
 what the revoke exempts.
 
+## 6. Google Analytics
+
+Already wired, and unlike everything above it needs no key, no secret and no
+deploy — the whole of it is `analytics.js` in the repo root, included by the
+seven public pages.
+
+**The measurement id is in the file, in plain sight, and that is correct.** It
+is the constant `GA_MEASUREMENT_ID` at the top of `analytics.js`. A GA4
+measurement id is served to every visitor in the page source by design — it is
+an address telling the tag which property to report to, not a key that grants
+anything — so it does not belong in an environment variable or a secret store,
+and hiding it would imply a confidentiality it cannot have. What does need
+guarding is the Google Analytics account itself, which is a login and is not
+in this repository.
+
+To point the site at a different property, change that one constant. To switch
+analytics off entirely, set it to `""` — the file then goes completely inert:
+no script fetched, no cookie, no consent bar. That branch is deliberate, so
+that a fork or a half-configured deploy never shows anyone a consent prompt
+for tracking that cannot happen, and it is covered by the tests.
+
+**Two things to set in the Google Analytics admin, not here.**
+
+1. **Data retention** — Admin → Data settings → Data retention. The privacy
+   page deliberately does not quote a number; it says the setting lives in the
+   property and offers to tell anyone who asks. Set it, and then that sentence
+   is answerable.
+2. **Nothing else.** Do not switch on Google Signals or ad personalisation.
+   `analytics.js` sends `allow_google_signals: false` on every page, and the
+   privacy page tells people so.
+
+**What it will and will not show you.** Page views on the public pages only.
+There is no click tracking, no scroll depth, no site-search capture and no
+custom events. Two absences that will look like bugs in the reports if nobody
+writes them down:
+
+- **No campaign attribution.** The URL is cut at the first `?`, so `utm_*`
+  tags and `gclid` never arrive and everything lands under direct/organic.
+  That cut exists because `login.html` can carry `?next=` and an OAuth failure
+  returns `#error_description=` or an access token in the fragment. If
+  campaign reporting is wanted later, the fix is an allowlist that keeps
+  `utm_*` and drops the rest — not removing the cut.
+- **No member pages.** Nothing under `app/` carries the script, and a referrer
+  from one of those pages is dropped rather than reported. Sessions will look
+  short for members because the half of their visit that happens after sign-in
+  is invisible on purpose.
+
+**Checking it.** `node tools/analytics-checks/check.mjs` drives the consent
+state machine through every state and asserts that a `<script>` for
+googletagmanager is created in exactly one of them.
+`node tools/analytics-checks/contrast.mjs` measures the consent bar in both
+themes. Neither needs a browser.
+
 ## What's deliberately not built yet
 
 - **`ms365-lifecycle`** (the license revoke → grace → deactivate → delete

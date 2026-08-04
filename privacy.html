@@ -60,6 +60,15 @@
   .legal-table td { color: var(--text-secondary); line-height: 1.6; }
   .legal-table-wrap { overflow-x: auto; }
 
+  /* Storage keys and cookie names, named exactly so they can be looked for.
+     No tinted background: a background would be a new surface, and a new
+     surface is a contrast measurement. --text on the page is one already made. */
+  .legal-wrap code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.92em;
+    color: var(--text);
+  }
+
   .legal-note {
     border-left: 3px solid var(--violet); padding: 4px 0 4px 16px; margin: 0 0 18px;
   }
@@ -112,7 +121,7 @@
       club, so that nobody has to take it on trust.</p>
     <p>Everything below describes what the software actually does. The site is
       open source and public, so it can be checked rather than believed.</p>
-    <p class="legal-updated">Last reviewed 3 August 2026 · Questions:
+    <p class="legal-updated">Last reviewed 4 August 2026 · Questions:
       <a href="mailto:info@sahabaclub.com">info@sahabaclub.com</a></p>
   </div>
 
@@ -130,8 +139,12 @@
       <li><strong>A CV or LinkedIn PDF is read once and thrown away.</strong> You
         review what was extracted before anything is saved. The document itself
         is never kept.</li>
-      <li><strong>No analytics, no tag manager, no advertising pixel.</strong>
-        There is nothing on this site whose job is to watch you.</li>
+      <li><strong>Analytics only if you agree to it, and never on the member
+        pages.</strong> Google Analytics counts page views on the public pages —
+        after you say yes, not before; say no and the script is never even
+        fetched. It is not on the signed-in pages at all. There is no tag
+        manager and no advertising pixel.
+        <a href="#analytics">What it records, and how to change your mind</a>.</li>
       <li><strong>There is no self-service delete button yet.</strong> We would
         rather say so than pretend. Email us and a person will do it.</li>
     </ul>
@@ -329,10 +342,120 @@
       it reaching you.</p>
   </section>
 
+  <section id="analytics">
+    <h2>Analytics, and the question we ask first</h2>
+
+    <!-- Two blocks, and analytics.js decides which one is true by looking at
+         whether a measurement id is actually configured. Both start hidden so
+         neither flashes; the <noscript> below covers the case where nothing
+         can decide, which is also the case where nothing can be measured. -->
+    <div data-ga-when="off" hidden>
+      <p>There is no analytics on this site at the moment. No measurement id is
+        configured, so no analytics script is fetched, no cookie is set and you
+        are never asked anything. Everything below the next heading describes
+        what happens when it is switched on — it is written down in advance so
+        that turning it on is not a change nobody was told about.</p>
+    </div>
+
+    <noscript>
+      <p>You have JavaScript turned off, so no analytics is running on this
+        page. It cannot: the whole thing is a script, and nothing loads it.</p>
+    </noscript>
+
+    <div data-ga-when="on" hidden>
+      <p>We use <strong>Google Analytics 4</strong> on the public pages — the
+        home page, events, hackathons, the podcast, membership, the sign-in
+        page and this one. It is there to tell us which pages people actually
+        read, so that we spend our time on the ones they do. That is the whole
+        of the reason.</p>
+
+      <h3>Nothing loads until you say yes</h3>
+      <p>The first time you arrive, a bar at the bottom of the page asks you.
+        Until you answer, Google's script is not fetched — not fetched and
+        held back, not fetched and ignored: the request does not happen and
+        there is nothing in your browser to make it happen. Say no and it
+        still does not happen, and we remember the no, so the next page does
+        not ask you again.</p>
+      <p>Yes and no are the same button with a different word on it — same
+        size, same weight, same colour, side by side. There is nothing to
+        untick and no longer road to no than to yes.</p>
+      <p>If your browser sends a <strong>Do Not Track</strong> or
+        <strong>Global Privacy Control</strong> signal, we treat that as a no
+        you have already given: analytics never loads and you are never shown
+        the bar.</p>
+      <p>Your answer is kept in your browser's own local storage, under
+        <code>sc_analytics_consent</code>. It is deliberately not a cookie —
+        setting a cookie to record that you may not want cookies would be an
+        odd way to begin — and it never leaves your browser, because there is
+        no server here to send it to.</p>
+
+      <h3>What it records, if you say yes</h3>
+      <ul>
+        <li><strong>The address of the page</strong>, cut off at the first
+          <code>?</code> or <code>#</code>. That cut is deliberate and it is
+          the sign-in page it was written for: that page can carry where you
+          were headed next, and a failed sign-in can come back with an error or
+          a one-time token in the part after the <code>#</code>. Google's
+          default is to send the whole address. Ours sends the site and the
+          page name and stops.</li>
+        <li><strong>The page title, and the page you arrived from</strong>,
+          trimmed the same way — and if you arrived from one of the signed-in
+          pages, no referring page is sent at all. Excluding those pages would
+          not mean much if following the footer link off one of them announced
+          that you had been there.</li>
+        <li><strong>Google's standard set about the visit</strong>: an
+          approximate location worked out from your IP address, your device,
+          browser, screen size and language, and whether you have been here
+          before. We have not added anything to it.</li>
+        <li><strong>Nothing you type.</strong> No name, no email address, no
+          phone number, no member id, nothing out of any form on this site.
+          Google's own terms forbid sending them, and it is a rule here
+          separately from that.</li>
+      </ul>
+      <p>Page views only. There is no click tracking, no scroll tracking, no
+        capture of what you searched for and no custom events of any kind.</p>
+
+      <h3>It sets cookies</h3>
+      <p>Once you agree, Google sets its <code>_ga</code> cookies in your
+        browser. They hold a random id, and their job is to let two page views
+        in a row be counted as one visit rather than two strangers. The
+        advertising side is switched off in how the tag is set up here: no
+        Google Signals, no ad personalisation, no advertising cookie.</p>
+
+      <h3>Not on the member pages</h3>
+      <p>Everything behind the login carries no analytics at all — your
+        dashboard, your profile, Connect, another member's profile, the inbox,
+        PromptArena and the staff tools. This is a decision rather than an
+        omission. Those pages are about named people: which member's profile
+        you opened, whose messages you are reading, which hackathon placing
+        belongs to whom. What members do here stays in the club's own database
+        and does not go to Google.</p>
+
+      <h3>How long Google keeps it</h3>
+      <p>Retention is a setting on the Analytics property itself, chosen in
+        Google's admin rather than written into this site, so this page is not
+        going to quote you a number it cannot check. If you need to know what
+        it is set to, ask at
+        <a href="mailto:info@sahabaclub.com">info@sahabaclub.com</a> and we
+        will read it off and tell you.</p>
+
+      <h3>Changing your mind</h3>
+      <p class="ga-status" data-ga-status></p>
+      <p><button type="button" class="ga-withdraw" data-ga-withdraw>Change my analytics choice</button></p>
+      <p>That clears your answer, stops the tag on this page immediately —
+        no reload needed — expires the <code>_ga</code> cookies it can reach,
+        and puts the question back so you can answer it again. One honest
+        limit: a page can only expire a cookie it could have set, so your
+        browser's own site-data controls remain the complete way to clear
+        everything Google has left there.</p>
+    </div>
+  </section>
+
   <section>
     <h2>Who else touches your details</h2>
     <p>This is the complete list, and it is short because there is no advertising
-      or analytics anywhere in this site.</p>
+      anywhere in this site and the single analytics tool on it does not load
+      unless you have agreed to it.</p>
     <div class="legal-table-wrap">
       <table class="legal-table">
         <thead>
@@ -344,6 +467,7 @@
           <tr><td>Microsoft</td><td>Creating and licensing your <em>@sahabaclub.com</em> mailbox. Only your name is sent — no email address, no phone number, nothing from your profile.</td></tr>
           <tr><td>Resend</td><td>Delivering email: welcome messages, credentials, newsletters and campaigns.</td></tr>
           <tr><td>Google, Microsoft, LinkedIn</td><td>Only if you choose one of them to sign in with. They confirm who you are and hand back your name, email and picture.</td></tr>
+          <tr><td>Google Analytics</td><td>Counting page views on the public pages, and only once you have agreed — <a href="#analytics">the section above</a> is the detail. Never loaded on the signed-in member pages, and never sent anything you typed.</td></tr>
           <tr><td>Google Fonts</td><td>One typeface, loaded by your browser on every page.</td></tr>
           <tr><td>YouTube</td><td>Video embeds. The homepage uses the no-cookie player; the podcast page uses the standard one.</td></tr>
           <tr><td>esm.sh</td><td>Serves the database client library to your browser. It carries no data of yours; it is code, not content.</td></tr>
@@ -443,6 +567,10 @@
   <p class="footer-watermark">Developed by Sahaba Club Technologies</p>
 </footer>
 
+<!-- Analytics, page views only, and only after the visitor says yes. PUBLIC PAGES ONLY:
+     never add this under app/ — those pages are behind a login and their URLs and
+     titles describe real named members. The reasoning is in analytics.js. -->
+<script src="analytics.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
