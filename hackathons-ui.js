@@ -35,6 +35,79 @@
 (function () {
   "use strict";
 
+  // ============================================================
+  // CONFIG — the two things on this page that the database cannot answer
+  // ------------------------------------------------------------
+  // Everything else rendered here is computed from the rows that come back.
+  // These two objects are the exceptions, and they are at the top of the file
+  // rather than buried next to the code that reads them precisely so that
+  // "what on this page is not derived from data" is one place a person can
+  // look at, in full, without reading any logic.
+  // ============================================================
+
+  // ---- 1. "No of Apps", per round ----
+  //
+  // There is no column anywhere in `hackathons`, `hackathon_teams` or
+  // `hackathon_roster` that counts the applications a round shipped, and it is
+  // NOT the team count: round 1 had 8 teams and 6 apps. So it cannot be
+  // derived, and this is the only honest way to show it.
+  //
+  // null means "not known yet", and a null round renders NO Apps chip at all —
+  // not 0, not "—", not "TBC". A zero here would be a claim that a round
+  // shipped nothing, which is false for every round that has run.
+  //
+  // Round 1 = 6 is Ahmed's figure. Rounds 2–4 are outstanding with him; fill
+  // each in as its answer arrives and the chip appears on its own.
+  var APPS_BY_ROUND = { 1: 6, 2: null, 3: null, 4: null };
+
+  // ---- 2. Coach display names and LinkedIn profiles ----
+  //
+  // Keyed by the coach photo slug — i.e. by coachPhotoSlug(full_name) — so one
+  // entry supplies both the LinkedIn URL and, where present, a display name.
+  //
+  // ⚠ WHY A NAME OVERRIDE EXISTS HERE AT ALL. It is not that this page prefers
+  // ⚠ its own spelling of anybody's name — it does not, and every other name on
+  // ⚠ this page is printed exactly as the database spells it. It is that the
+  // ⚠ DATA HAS NOT CAUGHT UP. Ahmed asked for "Mahmoud" to be listed as
+  // ⚠ "Mahmoud ATALLAH"; that is a migration against
+  // ⚠ hackathon_participants.full_name, and it has not been applied yet. Until
+  // ⚠ it is, `hackathon_roster` still returns the bare "Mahmoud" that migration
+  // ⚠ 0036 §3d created from a first name.
+  // ⚠
+  // ⚠ So his entry is registered under BOTH slugs — `mahmoud` (what the
+  // ⚠ database says today) and `mahmoud-atallah` (what it will say once the
+  // ⚠ rename lands) — and they are the SAME object, not two copies. The page is
+  // ⚠ therefore correct on both sides of that migration, and his photo resolves
+  // ⚠ either way: the photo slug is taken from the DISPLAY name, which is
+  // ⚠ "Mahmoud ATALLAH" -> mahmoud-atallah.jpg no matter which spelling the
+  // ⚠ roster hands over.
+  // ⚠
+  // ⚠ When the rename is applied, the `mahmoud` key becomes dead and can be
+  // ⚠ deleted. Nothing else in this object should ever grow a `name`.
+  //
+  // A coach with no entry here is not a bug and not a dead link: they render as
+  // a plain, non-interactive card with their stored name. See coachCardHtml().
+  //
+  // These URLs are public professional profiles that the people concerned
+  // publish themselves, and Ahmed asked for them to be linked. No email
+  // address, mailbox or phone number belongs in this file — this repository is
+  // public.
+  var MAHMOUD_ATALLAH = {
+    name: "Mahmoud ATALLAH",
+    linkedin: "https://www.linkedin.com/in/mahmoudatallah/"
+  };
+  var COACH_PROFILES = {
+    "zoka":                 { linkedin: "https://www.linkedin.com/in/izoka/" },
+    "mahmoud":              MAHMOUD_ATALLAH,   // what the database says today
+    "mahmoud-atallah":      MAHMOUD_ATALLAH,   // what it will say after the rename
+    "ahmed-badawy":         { linkedin: "https://www.linkedin.com/in/ahmedfbadawy/" },
+    "emad-adel":            { linkedin: "https://www.linkedin.com/in/emadadel/" },
+    "gangothri-rajaram":    { linkedin: "https://www.linkedin.com/in/gangothrirajaram/" },
+    "esraa-ahmed":          { linkedin: "https://www.linkedin.com/in/esraa-ahmed-2b5321220/" },
+    "ansari":               { linkedin: "https://www.linkedin.com/in/dataileader/" },
+    "mohamed-mohi-el-dien": { linkedin: "https://www.linkedin.com/in/mohi12/" }
+  };
+
   // ------------------------------------------------------------
   // Module bindings. Every const/var this file uses at load is declared
   // here, above anything that runs — see tools/check-dead-zone.mjs for the
@@ -96,6 +169,10 @@
   // and the top of the page looked stuck loading. Neither is replaced with a
   // different glyph: the fix for too much ornament is less of it.
   var chevron = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  // LinkedIn's "in" mark, filled rather than stroked so it stays legible at the
+  // 13px it renders at. aria-hidden: the link's accessible name already says
+  // whose profile it is and where it goes, so the glyph is decoration.
+  var linkedinIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.78 2.65 4.78 6.1V21h-4v-5.4c0-1.29-.02-2.95-1.8-2.95-1.8 0-2.07 1.4-2.07 2.85V21H9z"/></svg>';
 
   // ------------------------------------------------------------
   // Small helpers
@@ -281,15 +358,69 @@
     return out.slice(0, 3);
   }
 
+  // The programme-wide tiles. `eduhackers` counts roster rows WITHOUT
+  // is_mentor, for the same reason the per-round chips do: the tile is labelled
+  // "EduHackers", and a tile labelled EduHackers that quietly included the
+  // coaches would be a wrong number under a right word. It is a sum of
+  // per-round rows, not distinct people — somebody who came back for two rounds
+  // is two EduHacker seats, which is what "how big were these rounds" means.
   function summarise(rounds, teamsBy, rosterBy) {
-    var teams = 0, builders = 0, medals = 0;
+    var teams = 0, eduhackers = 0, coaches = 0, medals = 0;
     (rounds || []).forEach(function (r) {
       var t = (teamsBy && teamsBy[r.id]) || [];
       teams += t.length;
-      builders += ((rosterBy && rosterBy[r.id]) || []).length;
+      ((rosterBy && rosterBy[r.id]) || []).forEach(function (p) {
+        if (p && p.is_mentor) coaches++;
+        else eduhackers++;
+      });
       medals += t.filter(function (x) { return medalTier(x); }).length;
     });
-    return { rounds: (rounds || []).length, teams: teams, builders: builders, medals: medals };
+    return {
+      rounds: (rounds || []).length,
+      teams: teams,
+      eduhackers: eduhackers,
+      coaches: coaches,
+      medals: medals
+    };
+  }
+
+  // ------------------------------------------------------------
+  // Per-round key figures
+  // ------------------------------------------------------------
+
+  // Coaches, teams and EduHackers are COMPUTED, every time, from the rows this
+  // page already loaded — never typed in. is_mentor is the whole rule: a
+  // participant carrying it is a coach and everybody else in the round is an
+  // EduHacker, which is the same split splitRoster() renders the round with, so
+  // the chip and the list underneath it can never disagree.
+  //
+  // `apps` is the one figure that has no column to come from. It is looked up
+  // in APPS_BY_ROUND at the top of this file and is null for any round whose
+  // count nobody has given us — see figureChipsHtml(), which omits the chip
+  // entirely rather than printing a zero.
+  function roundFigures(round, teams, roster) {
+    var coaches = 0, eduhackers = 0;
+    (roster || []).forEach(function (p) {
+      if (p && p.is_mentor) coaches++;
+      else eduhackers++;
+    });
+    return {
+      coaches: coaches,
+      teams: (teams || []).length,
+      eduhackers: eduhackers,
+      apps: appsForRound(round && round.round_number)
+    };
+  }
+
+  // null for anything not answered yet, and for any round number that is not in
+  // the config at all — a round 6 nobody has been asked about is exactly as
+  // unknown as a round 2 nobody has answered.
+  function appsForRound(roundNumber) {
+    if (roundNumber === null || roundNumber === undefined || roundNumber === "") return null;
+    var key = String(roundNumber);
+    if (!Object.prototype.hasOwnProperty.call(APPS_BY_ROUND, key)) return null;
+    var v = APPS_BY_ROUND[key];
+    return typeof v === "number" && isFinite(v) ? v : null;
   }
 
   // The accordion rule, on its own so it can be reasoned about without a DOM:
@@ -311,22 +442,67 @@
       .replace(/^-+|-+$/g, "");
   }
 
+  // The COACH_PROFILES entry for a stored name, or null. Looked up by slug
+  // rather than by the raw string so that a change of spacing or case in the
+  // database cannot silently drop somebody's link.
+  function coachProfile(name) {
+    var slug = coachPhotoSlug(name);
+    if (!slug) return null;
+    return Object.prototype.hasOwnProperty.call(COACH_PROFILES, slug)
+      ? COACH_PROFILES[slug]
+      : null;
+  }
+
+  // What the page calls a coach. The stored name unless COACH_PROFILES supplies
+  // an override, which today exactly one person has and only because the rename
+  // he asked for has not been migrated yet — see the config block at the top.
+  function coachDisplayName(name) {
+    var entry = coachProfile(name);
+    var stored = String(name == null ? "" : name).trim();
+    return (entry && entry.name) ? entry.name : stored;
+  }
+
+  // assets/eduhack/coaches/<slug>.jpg, slugified from the DISPLAY name.
+  //
+  // That indirection is the whole reason the override and the photo agree: the
+  // file on disk is mahmoud-atallah.jpg, the database says "Mahmoud" today and
+  // will say "Mahmoud ATALLAH" after the rename, and both resolve through the
+  // display name to the same file. Everybody without an override slugifies
+  // their own stored name exactly as before.
+  function coachPhotoSrc(name) {
+    return "assets/eduhack/coaches/" + coachPhotoSlug(coachDisplayName(name)) + ".jpg";
+  }
+
+  // "" for anybody with no profile recorded, which is what stops a coach
+  // without a LinkedIn becoming a link to nowhere.
+  function coachLinkUrl(name) {
+    var entry = coachProfile(name);
+    return (entry && entry.linkedin) ? String(entry.linkedin) : "";
+  }
+
   // One coach per person, across every round, in the order the view handed
   // them over — which is is_mentor first, then display_order, then name, and
   // is where the lead coach's first place is decided. Nothing is re-sorted
   // here, so a change to display_order in the database moves the row on the
   // page and nothing in this file has to know about it.
   //
-  // Matching is on the name casefolded and space-collapsed, because the same
-  // person is a row per round and those rows are what has to fold into one
+  // Matching is on the DISPLAY name casefolded and space-collapsed, because the
+  // same person is a row per round and those rows are what has to fold into one
   // card. Every round they appear in is collected on the way through.
+  //
+  // Display name rather than stored name for one reason: while the rename in
+  // COACH_PROFILES is outstanding, the database could hold "Mahmoud" against one
+  // round and "Mahmoud ATALLAH" against another — mid-migration, or if the rows
+  // are corrected one at a time. Both resolve to the same display name, so they
+  // fold into one card instead of appearing twice. For everybody without an
+  // override this is character-for-character the old behaviour.
   function dedupeCoaches(rounds, rosterBy) {
     var seen = {};
     var out = [];
     (rounds || []).forEach(function (r) {
       ((rosterBy && rosterBy[r.id]) || []).forEach(function (p) {
         if (!p.is_mentor) return;
-        var key = String(p.full_name || "").trim().toLowerCase().replace(/\s+/g, " ");
+        var key = coachDisplayName(p.full_name).toLowerCase().replace(/\s+/g, " ");
         if (!key) return;
         if (!seen[key]) {
           seen[key] = { person: p, rounds: [] };
@@ -574,10 +750,16 @@
   // whole point of the roster view.
   function personHtml(p, opts) {
     opts = opts || {};
-    var name = escapeHtml(p.full_name || "Unnamed participant");
+    // The display-name override applies to COACHES ONLY, and it exists because
+    // the rename it carries has not been migrated yet (see COACH_PROFILES).
+    // Restricting it to is_mentor is not tidiness: 'ansari' is a bare surname,
+    // and a competitor who happened to slug-match a coach key would otherwise
+    // be renamed on a public page. Nobody who is not a coach is ever touched.
+    var shown = p.is_mentor ? coachDisplayName(p.full_name) : (p.full_name || "");
+    var name = escapeHtml(shown || "Unnamed participant");
     var avatar = p.avatar_url
       ? '<img class="hk-face" src="' + escapeHtml(p.avatar_url) + '" alt="" loading="lazy" width="34" height="34">'
-      : '<span class="hk-face hk-face-initials" aria-hidden="true">' + escapeHtml(initials(p.full_name)) + "</span>";
+      : '<span class="hk-face hk-face-initials" aria-hidden="true">' + escapeHtml(initials(shown)) + "</span>";
 
     var badges = "";
     if (p.is_mentor) badges += '<span class="hk-badge is-coach">Coach</span>';
@@ -710,6 +892,48 @@
     return chips.length ? '<div class="hk-chips">' + chips.join("") + "</div>" : "";
   }
 
+  // The round's key figures, as chips, on their OWN row directly under the
+  // mode / venue chips.
+  //
+  // Two decisions here that were made against the phone and not the desktop:
+  //
+  //  * A second row rather than four more chips in the existing one. Seven
+  //    chips in one wrapping flex row at 375px produced a four-line block in
+  //    which "Online", "Demo Day: Cairo, Egypt" and "40 EduHackers" were the
+  //    same object at the same weight, and the figures — which are the thing
+  //    Ahmed wants read at a glance — were whatever happened to land last.
+  //    Split in two, the eye gets "what kind of round was this" and then "how
+  //    big was it", and each row is short enough to scan.
+  //
+  //  * The wording is "5 Coaches", not "No of Coaches: 5 Coaches". The noun
+  //    appears once instead of twice: the figures are the same figures, and at
+  //    375px the doubled noun was what pushed each chip onto its own line. The
+  //    number is set in the page's tabular figures at full text colour with the
+  //    noun beside it muted, so a column of them still reads as a set of counts
+  //    rather than as prose.
+  function figureChipHtml(value, noun) {
+    return '<span class="hk-chip is-figure">' +
+      '<span class="hk-chip-n">' + escapeHtml(value) + "</span>" +
+      '<span class="hk-chip-noun">' + escapeHtml(noun) + "</span>" +
+    "</span>";
+  }
+
+  function figureChipsHtml(f) {
+    if (!f) return "";
+    var chips = [
+      figureChipHtml(f.coaches, plural(f.coaches, "Coach", "Coaches")),
+      figureChipHtml(f.teams, plural(f.teams, "Team", "Teams")),
+      figureChipHtml(f.eduhackers, plural(f.eduhackers, "EduHacker", "EduHackers"))
+    ];
+    // No count, no chip. Not a zero and not a placeholder: nobody has told us
+    // how many apps rounds 2–4 shipped, and "0 AI-Apps" on a round that shipped
+    // some would be worse than saying nothing at all.
+    if (f.apps !== null) {
+      chips.push(figureChipHtml(f.apps, plural(f.apps, "AI-App", "AI-Apps")));
+    }
+    return '<div class="hk-chips hk-figures">' + chips.join("") + "</div>";
+  }
+
   // Splits a round's roster into coaches (is_mentor) and everyone else,
   // and buckets the competitors by team. Coaches are lifted out of the
   // team rosters and shown once per round: a coach attached to a team in
@@ -828,6 +1052,10 @@
           (round.tagline ? '<p class="hk-round-tagline">' + escapeHtml(round.tagline) + "</p>" : "") +
           (when ? '<p class="hk-round-when">' + escapeHtml(when) + whenNote + "</p>" : "") +
           chipsHtml(round) +
+          // Inside .hk-round-head, so the figures are visible while the round
+          // is collapsed — which is how at least three of the four always are,
+          // and the whole point of asking for them.
+          figureChipsHtml(roundFigures(round, teams, roster)) +
         "</div>" +
         medalsHtml(teams) +
         // The control sits at the bottom of the card and spans its full width,
@@ -983,20 +1211,35 @@
   // One card per coach, however many rounds they taught, with the rounds they
   // taught named on the card.
   //
-  // The photo is assets/eduhack/coaches/<slug>.jpg, and none of those files
-  // exist yet, so the monogram underneath is what actually renders today for
-  // every one of them. It is built to be the finished state rather than a
-  // placeholder: the same circle, the same size, the club's own violet-to-cyan
-  // wash, initials set in the page's own type. A photo landing later swaps
-  // into exactly the same box.
+  // The photo is assets/eduhack/coaches/<slug>.jpg, slugified from the coach's
+  // DISPLAY name — see coachPhotoSrc(). Those files now exist for the eight
+  // people who coached these rounds. The monogram stays underneath as the
+  // fallback for anybody who has no file: it is built to be a finished state
+  // rather than a placeholder — the same circle, the same size, the club's own
+  // violet-to-cyan wash, initials set in the page's own type — so a coach
+  // without a photo does not look like a coach with a broken one.
   //
   // Two coaches are recorded under a single name because that is all the
   // database holds for them. They render like everybody else.
+  //
+  // ---- Linked or not ----
+  //
+  // A coach with a LinkedIn in COACH_PROFILES renders as an <a>: new tab,
+  // rel="noopener noreferrer", and an accessible name that says WHOSE profile
+  // it is rather than the word "LinkedIn" eight times over — eight identical
+  // announcements in a links list is the same fault four identical "Show
+  // details" buttons were.
+  //
+  // A coach with no LinkedIn renders as the <article> it always was: not a link
+  // with a dead href, not an <a> with href="#", not a link that goes nowhere on
+  // click. There is no state in which a card looks pressable and is not,
+  // because the element itself is different.
   function coachCardHtml(entry) {
     var p = entry.person;
-    var name = String(p.full_name || "").trim();
-    var slug = coachPhotoSlug(name);
-    var src = p.avatar_url || ("assets/eduhack/coaches/" + slug + ".jpg");
+    var stored = String(p.full_name || "").trim();
+    var name = coachDisplayName(stored);
+    var href = coachLinkUrl(stored);
+    var src = p.avatar_url || coachPhotoSrc(stored);
 
     var rounds = entry.rounds.length
       ? '<span class="hk-coach-rounds">' + entry.rounds.map(function (n) {
@@ -1004,15 +1247,26 @@
         }).join("") + "</span>"
       : "";
 
-    return '<article class="hk-coach">' +
-        '<span class="hk-coach-face">' +
-          '<span class="hk-coach-mono" aria-hidden="true">' + escapeHtml(initials(name)) + "</span>" +
-          '<img class="hk-coach-photo" data-hk-face src="' + escapeHtml(src) + '"' +
-            ' alt="" loading="lazy" width="112" height="112">' +
-        "</span>" +
-        '<h3 class="hk-coach-name">' + escapeHtml(name) + "</h3>" +
-        rounds +
-      "</article>";
+    var inner =
+      '<span class="hk-coach-face">' +
+        '<span class="hk-coach-mono" aria-hidden="true">' + escapeHtml(initials(name)) + "</span>" +
+        '<img class="hk-coach-photo" data-hk-face src="' + escapeHtml(src) + '"' +
+          ' alt="" loading="lazy" width="112" height="112">' +
+      "</span>" +
+      '<h3 class="hk-coach-name">' + escapeHtml(name) + "</h3>" +
+      rounds;
+
+    if (!href) return '<article class="hk-coach">' + inner + "</article>";
+
+    // The visible cue carries the mark and the word, so the affordance is
+    // legible without hovering; aria-hidden on the pair because the link's own
+    // accessible name already says all of it.
+    var cue = '<span class="hk-coach-link-cue" aria-hidden="true">' + linkedinIcon + "LinkedIn</span>";
+    return '<a class="hk-coach is-linked" href="' + escapeHtml(href) + '"' +
+        ' target="_blank" rel="noopener noreferrer"' +
+        ' aria-label="' + escapeHtml(name + " on LinkedIn (opens in a new tab)") + '">' +
+        inner + cue +
+      "</a>";
   }
 
   function coachesHtml(entries) {
@@ -1082,15 +1336,22 @@
 
   function renderChrome() {
     // The summary counts the rounds that have actually run. A round still
-    // waiting for its dates has no teams and no builders, and folding a
+    // waiting for its dates has no teams and no EduHackers, and folding a
     // zero into these tiles would only make them read as a shrinking
     // programme.
+    //
+    // The third tile said "builders" and counted every roster row. It says
+    // "EduHackers" now, which is the word Ahmed uses, and the number moved with
+    // the word rather than staying put underneath it: coaches are no longer in
+    // it. A tile reading "150 EduHackers" while the round it sits above says
+    // "40 EduHackers" and "5 Coaches" would be the page disagreeing with
+    // itself in public.
     var t = summarise(PAST, TEAMS_BY_ROUND, ROSTER_BY_ROUND);
     if (statsEl) {
       statsEl.innerHTML = PAST.length
         ? statHtml(t.rounds, t.rounds === 1 ? "round so far" : "rounds so far") +
           statHtml(t.teams, "teams") +
-          statHtml(t.builders, "builders") +
+          statHtml(t.eduhackers, t.eduhackers === 1 ? "EduHacker" : "EduHackers") +
           statHtml(t.medals, t.medals === 1 ? "medal awarded" : "medals awarded")
         : "";
     }
@@ -1504,6 +1765,14 @@
     safeId: safeId,
     nextOpenRound: nextOpenRound,
     coachPhotoSlug: coachPhotoSlug,
+    coachProfile: coachProfile,
+    coachDisplayName: coachDisplayName,
+    coachPhotoSrc: coachPhotoSrc,
+    coachLinkUrl: coachLinkUrl,
+    coachProfiles: COACH_PROFILES,
+    appsByRound: APPS_BY_ROUND,
+    appsForRound: appsForRound,
+    roundFigures: roundFigures,
     dedupeCoaches: dedupeCoaches,
     demoVenues: demoVenues,
     storyFacts: storyFacts,

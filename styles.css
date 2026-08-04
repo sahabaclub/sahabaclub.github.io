@@ -4148,19 +4148,43 @@ html.light-mode .hk-medal::before {
   border-radius: 18px;
   background: var(--glass);
 }
+/* The section's title. Sized above the surrounding prose rather than level
+   with the other card headings: it is the one heading on this page that names
+   what the whole programme is, and Ahmed asked for it to be clear. It keeps
+   the position it already had, at the top of the story card. */
 .hk-story-h {
-  margin: 0 0 12px;
-  font-size: 22px;
+  margin: 0 0 14px;
+  font-size: 25px;
   font-weight: 800;
+  line-height: 1.2;
   letter-spacing: -0.015em;
   color: var(--text);
 }
+/* No max-width. This rule carried `max-width: 78ch`, and that — not the
+   1080px site cap, not a grid column, not a flex basis — was why the owner
+   reported the story text rendering in about half the page for the SECOND
+   time. The first report was the round description's own 74ch cap, which was
+   removed and the content column widened to 1320px; this block was left with
+   a cap of its own, so widening the column simply moved more empty space to
+   the right of the same ribbon of text.
+
+   Traced rather than guessed. Every rule in styles.css and in the page's
+   inline <style> that can match html > body.hk-page > main > div.hk-wrap >
+   section.hk-story > p.hk-story-p was enumerated: the only width constraint
+   above this element is .hk-wrap's own max-width: min(1320px, 100%), .hk-story
+   sets padding only, and nothing between them is a grid or flex container.
+   max-width does not inherit, so this declaration was the single binding
+   constraint — 78ch at 14.5px is roughly 570px inside a content box of
+   roughly 1230px, i.e. 46% of the width, which is the "half the screen" the
+   report describes.
+
+   The paragraphs now run the full width of .hk-wrap at every breakpoint, the
+   same as .hk-round-desc. */
 .hk-story-p {
   margin: 0 0 10px;
   font-size: 14.5px;
   line-height: 1.7;
   color: var(--text-secondary);
-  max-width: 78ch;
 }
 .hk-story-p:last-child { margin-bottom: 0; }
 /* The Demo Day venues. A list rather than a comma-joined clause: most of
@@ -4195,13 +4219,14 @@ html.light-mode .hk-venue { background: rgba(0, 0, 0, 0.04); }
 /* ============================================================
    Coaches — one card per person, across the whole programme
    ------------------------------------------------------------
-   The monogram is the design, not a placeholder. No file under
-   assets/eduhack/coaches/ exists yet, so it is what every card renders
-   today, and it is built to look finished: the club's violet-to-cyan wash,
-   initials in the page's own type, the same circle a photo will occupy.
-   hackathons-ui.js reveals a photo only once it has decoded, and the photo
-   is absolutely positioned over the monogram in the same box, so a file
-   landing later changes nothing about the layout.
+   assets/eduhack/coaches/ now holds a photo for each of the eight people who
+   coached these rounds, so a photo is what most cards render. The monogram
+   stays underneath as the design for anybody without a file — not a
+   placeholder: the club's violet-to-cyan wash, initials in the page's own
+   type, the same circle a photo occupies. hackathons-ui.js reveals a photo
+   only once it has decoded, and the photo is absolutely positioned over the
+   monogram in the same box, so a file arriving, or 404ing, changes nothing
+   about the layout.
    ============================================================ */
 .hk-thanks { margin: 34px 0 0; padding-top: 26px; border-top: 1px solid var(--glass-border); }
 .hk-thanks-h {
@@ -4228,6 +4253,52 @@ html.light-mode .hk-venue { background: rgba(0, 0, 0, 0.04); }
   background: var(--glass);
   text-align: center;
 }
+/* A coach with a LinkedIn profile. The card is an <a>; a coach without one is
+   still an <article> and gets none of this, so nothing here can make a
+   non-link look pressable — the element itself is different.
+
+   The focus ring is the reason this block exists in the shape it does. A card
+   whose only affordance is a hover tint is invisible to somebody tabbing, so
+   the focus-visible state is a full 2px ring with an offset, drawn on the card
+   and not on the text inside it, and it is not the same treatment as hover:
+   hover is a tint, focus is a ring, and a keyboard user gets the louder of the
+   two. */
+a.hk-coach {
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.18s, background-color 0.18s, transform 0.18s;
+}
+a.hk-coach:hover {
+  border-color: rgba(139, 92, 246, 0.45);
+  background: rgba(139, 92, 246, 0.08);
+  transform: translateY(-2px);
+}
+a.hk-coach:focus-visible {
+  outline: 2px solid var(--violet);
+  outline-offset: 3px;
+  border-color: rgba(139, 92, 246, 0.45);
+}
+html.reduce-motion a.hk-coach { transition: none; }
+html.reduce-motion a.hk-coach:hover { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  a.hk-coach { transition: none; }
+  a.hk-coach:hover { transform: none; }
+}
+/* The visible affordance: the mark and the word, small and quiet until the
+   card is hovered or focused. It sits at the bottom of the card so the name
+   and the rounds keep the positions they had before any of this existed. */
+.hk-coach-link-cue {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.hk-coach-link-cue svg { width: 13px; height: 13px; flex-shrink: 0; }
+a.hk-coach:hover .hk-coach-link-cue,
+a.hk-coach:focus-visible .hk-coach-link-cue { color: var(--text); }
 .hk-coach-face {
   position: relative;
   width: 84px;

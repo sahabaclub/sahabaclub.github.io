@@ -139,6 +139,11 @@ for (const d of describedBy) {
 }
 
 const js = fs.readFileSync(path.join(REPO, "hackathons-ui.js"), "utf8");
+// Both stylesheets, read once here because the width check below resolves the
+// cascade across them together — the page's rules live in an inline <style>
+// and the shared ones in styles.css, and a cap in either would bind.
+const sheetForCascade = fs.readFileSync(path.join(REPO, "styles.css"), "utf8");
+const inlineForCascade = (pageHtml.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || "";
 ok(!/never recorded in the source/.test(js),
   "hackathons-ui.js: the 'placings were never recorded' sentence is gone");
 ok(!/\.order\(/.test(js.split("hackathon_roster")[1].split("]);")[0] || ""),
@@ -414,7 +419,7 @@ ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(RE
   ok(storyHtml.includes("between <strong>1 Feb – 20 Dec 2025</strong>"),
     "the date span runs from the earliest start to the latest end");
   ok(storyHtml.includes("<strong>9</strong> teams"), "the team total is the computed one");
-  ok(storyHtml.includes("<strong>8</strong> people"),
+  ok(storyHtml.includes("<strong>9</strong> people"),
     "people are counted once each across rounds");
   // A list, not a comma-joined clause — most of these names contain a comma.
   const venues = [...storyHtml.matchAll(/<li class="hk-venue">([^<]+)<\/li>/g)].map((m) => m[1]);
@@ -436,15 +441,22 @@ ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(RE
 {
   ok(coachesHtml.includes("Thanks to our coaches in EduHackAI journey"),
     "the section uses the owner's title");
-  const cards = coachesHtml.match(/<article class="hk-coach">/g) || [];
-  ok(cards.length === 4, `one card per distinct coach (${cards.length})`);
-  ok((coachesHtml.match(/Ahmed Zoka/g) || []).length === 1,
+  // Cards are <article> when the coach has no LinkedIn and <a> when they do,
+  // so "how many cards" is the two counted together.
+  const plainCards = coachesHtml.match(/<article class="hk-coach">/g) || [];
+  const linkCards = coachesHtml.match(/<a class="hk-coach is-linked"/g) || [];
+  const cardCount = plainCards.length + linkCards.length;
+  ok(cardCount === 5, `one card per distinct coach (${cardCount})`);
+  ok((coachesHtml.match(/hk-coach-name">Zoka</g) || []).length === 1,
     "a coach who taught three rounds appears exactly once");
-  ok(coachesHtml.indexOf("Ahmed Zoka") < coachesHtml.indexOf("Aaron Second Coach"),
+  ok(coachesHtml.indexOf(">Zoka<") < coachesHtml.indexOf("Aaron Second Coach"),
     "the lead coach is first, in the order the view supplied");
   {
-    const card = coachesHtml.slice(coachesHtml.indexOf("Ahmed Zoka"));
-    const end = card.indexOf("</article>");
+    const card = coachesHtml.slice(coachesHtml.indexOf(">Zoka<"));
+    const end = Math.min(...["</article>", "</a>"].map((t) => {
+      const i = card.indexOf(t);
+      return i === -1 ? Infinity : i;
+    }));
     const zoka = card.slice(0, end);
     ok(zoka.includes("Round 2") && zoka.includes("Round 3") && zoka.includes("Round 4"),
       "...and names every round they coached", zoka);
@@ -456,20 +468,93 @@ ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(RE
     "a coach recorded under one name renders like everybody else");
   ok(coachesHtml.includes('<span class="hk-coach-mono" aria-hidden="true">SO</span>'),
     "...and still gets a monogram");
-  ok(coachesHtml.includes('<span class="hk-coach-mono" aria-hidden="true">AZ</span>'),
+  ok(coachesHtml.includes('<span class="hk-coach-mono" aria-hidden="true">MA</span>'),
     "a two-part name monograms from its first and last parts");
   ok(!coachesHtml.includes("Zed Builder") && !coachesHtml.includes("Someone Else"),
     "competitors are not in the coaches section");
-  ok(coachesHtml.includes('src="assets/eduhack/coaches/ahmed-zoka.jpg"'),
+  ok(coachesHtml.includes('src="assets/eduhack/coaches/zoka.jpg"'),
     "the photo path is the slugified name");
-  // None of these files exist, so the monogram is what renders. It has to be
-  // present on every card, and the photo has to be the thing that is hidden.
-  ok((coachesHtml.match(/class="hk-coach-mono"/g) || []).length === cards.length,
+  // The monogram stays underneath every photo — it is the fallback for anybody
+  // with no file, and the photo is still the thing that is hidden until it
+  // decodes, so a 404 costs nothing.
+  ok((coachesHtml.match(/class="hk-coach-mono"/g) || []).length === cardCount,
     "every card carries the monogram fallback");
-  ok((coachesHtml.match(/data-hk-face/g) || []).length === cards.length,
+  ok((coachesHtml.match(/data-hk-face/g) || []).length === cardCount,
     "every card's photo is wired to reveal only once it decodes");
-  ok(!fs.existsSync(path.join(REPO, "assets/eduhack/coaches")),
-    "the coach photo directory is still absent — the monogram is what renders today");
+
+  // ---- the photos now exist ----
+  // The eight files the eight real coaches resolve to. Named one by one rather
+  // than counted: a directory with eight files in it is not the same claim as
+  // "the file THIS name resolves to is there", and the second is what decides
+  // whether somebody's face or their initials render.
+  {
+    const dir = path.join(REPO, "assets/eduhack/coaches");
+    ok(fs.existsSync(dir), "the coach photo directory exists");
+    const wanted = [
+      "zoka", "mahmoud-atallah", "esraa-ahmed", "ansari",
+      "mohamed-mohi-el-dien", "ahmed-badawy", "gangothri-rajaram", "emad-adel",
+    ];
+    const absent = wanted.filter((s) => !fs.existsSync(path.join(dir, s + ".jpg")));
+    ok(absent.length === 0, "every coach photo the config resolves to is on disk", absent.join(", "));
+    // Every entry in COACH_PROFILES must resolve to a file that is actually
+    // there — otherwise a typo'd slug silently falls back to a monogram and
+    // looks like a design choice.
+    const unresolved = Object.keys(T.coachProfiles).filter((slug) => {
+      const entry = T.coachProfiles[slug];
+      const file = T.coachPhotoSlug(entry.name || slug) + ".jpg";
+      return !fs.existsSync(path.join(dir, file));
+    });
+    ok(unresolved.length === 0,
+      "every COACH_PROFILES entry resolves to a photo that exists", unresolved.join(", "));
+  }
+
+  // ---- LinkedIn: linked coaches, and the ones who must NOT be links ----
+  {
+    ok(linkCards.length === 2,
+      `only the coaches with a profile are links (${linkCards.length})`);
+    ok(/<a class="hk-coach is-linked" href="https:\/\/www\.linkedin\.com\/in\/izoka\/"/.test(coachesHtml),
+      "a coach with a LinkedIn is a link to it");
+    // Every link on a card opens in a new tab, and every one of them carries
+    // BOTH halves of rel — noopener alone still leaks the referrer.
+    const anchors = [...coachesHtml.matchAll(/<a class="hk-coach is-linked"[^>]*>/g)].map((m) => m[0]);
+    ok(anchors.every((a) => /target="_blank"/.test(a)), "...opened in a new tab");
+    ok(anchors.every((a) => /rel="noopener noreferrer"/.test(a)),
+      "...with rel=\"noopener noreferrer\" on every one of them");
+    // The accessible name names the person. "LinkedIn" eight times over in a
+    // links list is the same fault four identical "Show details" buttons were.
+    ok(anchors.every((a) => /aria-label="[^"]+ on LinkedIn \(opens in a new tab\)"/.test(a)),
+      "...and an accessible name that says whose profile it is");
+    ok(/aria-label="Mahmoud ATALLAH on LinkedIn/.test(coachesHtml),
+      "...using the name the reader sees, not the one the database stores");
+    ok(!/aria-label="(LinkedIn|Profile)"/.test(coachesHtml),
+      "no card is announced as just \"LinkedIn\"");
+    // The whole point of the <article> branch: a coach with no profile is not
+    // an anchor at all, so there is no dead href and nothing that looks
+    // pressable and is not.
+    for (const who of ["Solo", "Aaron Second Coach", "Gangothri Example"]) {
+      const at = coachesHtml.indexOf(">" + who + "<");
+      const before = coachesHtml.slice(0, at);
+      const opener = Math.max(before.lastIndexOf("<article class=\"hk-coach\">"),
+                              before.lastIndexOf("<a class=\"hk-coach"));
+      ok(before.slice(opener).startsWith("<article"),
+        `a coach with no LinkedIn is a non-interactive card (${who})`);
+    }
+    ok(!/href="#"/.test(coachesHtml) && !/href=""/.test(coachesHtml),
+      "no coach card carries a dead href");
+    // The visible affordance, so the link is not hover-only.
+    ok((coachesHtml.match(/hk-coach-link-cue/g) || []).length === linkCards.length,
+      "every linked card carries a visible LinkedIn cue");
+  }
+
+  // ---- the display-name override ----
+  {
+    ok(coachesHtml.includes('<h3 class="hk-coach-name">Mahmoud ATALLAH</h3>'),
+      "the coach the data has not caught up with is shown under the name he asked for");
+    ok(!/hk-coach-name">Mahmoud</.test(coachesHtml),
+      "...and never under the bare first name the database still holds");
+    ok(coachesHtml.includes('src="assets/eduhack/coaches/mahmoud-atallah.jpg"'),
+      "...and his photo resolves through the display name, not the stored one");
+  }
 }
 
 // -- the closing CTA -------------------------------------------------------
@@ -509,15 +594,231 @@ ok(!roundsHtml.includes("Team Four D".padEnd(0) + '</h4>') || true, "rank 4 gets
 {
   const r4 = roundsHtml.slice(roundsHtml.indexOf('id="eduhackai-4"'), roundsHtml.indexOf('id="eduhackai-3"'));
   const coachBlock = r4.slice(r4.indexOf("hk-coaches"), r4.indexOf("hk-sub\">Teams"));
-  const lead = coachBlock.indexOf("Ahmed Zoka");
+  const lead = coachBlock.indexOf(">Zoka<");
   const other = coachBlock.indexOf("Aaron Second Coach");
   ok(lead !== -1 && other !== -1 && lead < other,
     "the lead coach is rendered first, in the order the view supplied (not alphabetically)");
   ok(!coachBlock.includes("Zed Builder"), "competitors are not in the coach row");
 }
-// Names are printed as the database spells them — no renderer-side renaming.
-ok(!/"Zoka"/.test(js) && !/LEAD_COACH/.test(js),
-  "the renderer does not special-case a coach display name");
+{
+  // The round's own coach row uses the same override as the coaches section —
+  // one person cannot be "Mahmoud" in one place on the page and "Mahmoud
+  // ATALLAH" in another.
+  const r1 = roundsHtml.slice(roundsHtml.indexOf('id="eduhackai-1"'));
+  const coachBlock = r1.slice(r1.indexOf("hk-coaches"), r1.indexOf("hk-sub\">Teams"));
+  ok(coachBlock.includes("Mahmoud ATALLAH"),
+    "the round's coach row uses the display name too");
+}
+
+// ---- names are the database's, with exactly one documented exception -------
+//
+// This rule used to be flat: no renderer-side renaming at all. It now has one
+// carve-out, and the check is written so that the carve-out cannot quietly
+// become two. Everything a person is called on this page still comes from
+// `full_name`, EXCEPT where COACH_PROFILES supplies a `name:` — which exactly
+// one entry does, because the rename Ahmed asked for has not been migrated
+// yet, and which is registered under both the current and the post-migration
+// slug so the page is right on either side of it.
+{
+  ok(!/LEAD_COACH/.test(js), "there is no lead-coach special case");
+  // Count the overrides in the config by counting `name:` keys in it.
+  const cfg = (js.match(/var COACH_PROFILES = \{[\s\S]*?\n  \};/) || [""])[0];
+  const mahmoud = (js.match(/var MAHMOUD_ATALLAH = \{[\s\S]*?\};/) || [""])[0];
+  const overrides = [...(cfg + mahmoud).matchAll(/\bname:\s*"/g)];
+  ok(overrides.length === 1,
+    `exactly one display-name override exists (${overrides.length})`);
+  ok(/name:\s*"Mahmoud ATALLAH"/.test(mahmoud), "...and it is the documented one");
+  // Both keys, and the SAME object behind them — not two literals that happen
+  // to agree today and drift tomorrow.
+  ok(/"mahmoud":\s*MAHMOUD_ATALLAH/.test(cfg) && /"mahmoud-atallah":\s*MAHMOUD_ATALLAH/.test(cfg),
+    "both spellings point at one shared entry rather than two copies");
+  ok(T.coachProfile("Mahmoud") === T.coachProfile("Mahmoud ATALLAH"),
+    "...and resolve to the identical object at runtime");
+  // Why the override exists has to be stated where the override is, in those
+  // terms: this is not the page preferring its own names.
+  ok(/DATA HAS NOT CAUGHT UP/.test(js) && /has not been applied yet/.test(js),
+    "the config says the override exists because the data has not caught up");
+  ok(!/"Zoka"/.test(cfg), "the renderer does not rename the lead coach");
+}
+
+// -- the round's key figures, on the card and visible while collapsed -------
+{
+  const r1 = roundsHtml.slice(roundsHtml.indexOf('id="eduhackai-1"'));
+  const head = r1.slice(0, r1.indexOf('class="hk-round-panel"'));
+  ok(/class="hk-chips hk-figures"/.test(head),
+    "the figures render on the round card");
+  // The panel is what `hidden` is put on, so anything in the head is visible
+  // while the round is collapsed. That is the requirement, and asserting the
+  // figures are in the head is asserting it.
+  ok(head.indexOf("hk-figures") < r1.indexOf('class="hk-round-panel"'),
+    "...in the head, so they are visible while the round is collapsed");
+  ok(/hk-round-panel[^>]*hidden/.test(r1) || !/hk-round-panel/.test(r1),
+    "...and the panel that holds the detail is the part that is hidden");
+
+  const chips = [...head.matchAll(
+    /<span class="hk-chip is-figure"><span class="hk-chip-n">(\d+)<\/span><span class="hk-chip-noun">([^<]+)<\/span><\/span>/g,
+  )].map((m) => [m[1], m[2]]);
+  // Fixture round 1: 2 coaches (Solo, Mahmoud), 2 teams, 1 EduHacker, 6 apps.
+  ok(chips.length === 4, `round 1 shows four figures (${chips.length})`, JSON.stringify(chips));
+  ok(chips[0][0] === "2" && /Coach/.test(chips[0][1]), "coaches are computed from is_mentor",
+    JSON.stringify(chips[0]));
+  ok(chips[1][0] === "2" && /Team/.test(chips[1][1]), "teams are the team count",
+    JSON.stringify(chips[1]));
+  ok(chips[2][0] === "1" && chips[2][1] === "EduHacker",
+    "EduHackers are the roster rows without is_mentor, and the noun agrees with the number",
+    JSON.stringify(chips[2]));
+  ok(chips[3][0] === "6" && /AI-App/.test(chips[3][1]), "the app count is the configured one",
+    JSON.stringify(chips[3]));
+
+  // Round 2 has no configured app count. The chip must be ABSENT — not zero,
+  // not a dash, not "TBC". This is the assertion that stops a placeholder
+  // sneaking in the next time the config is edited.
+  const r2 = roundsHtml.slice(roundsHtml.indexOf('id="eduhackai-2"'), roundsHtml.indexOf('id="eduhackai-1"'));
+  const r2head = r2.slice(0, r2.indexOf('class="hk-round-panel"'));
+  const r2chips = [...r2head.matchAll(/<span class="hk-chip-noun">([^<]+)<\/span>/g)].map((m) => m[1]);
+  ok(r2chips.length === 3, `a round with no app count shows three figures (${r2chips.length})`,
+    r2chips.join(", "));
+  ok(!/AI-App/.test(r2head), "...and no Apps chip at all");
+  // Specifically the Apps chip. A computed zero elsewhere is a real answer —
+  // the fixture's round 2 genuinely has no non-mentor roster rows, and "0
+  // EduHackers" is what the data says. An Apps zero could only ever be a
+  // placeholder, because the figure is not computed at all.
+  ok(!/hk-chip-n">0<\/span><span class="hk-chip-noun">AI-App/.test(roundsHtml),
+    "no round renders a zero Apps chip");
+  ok(!/TBC|—|N\/A/.test(r2head.replace(/<[^>]*>/g, "")), "...and no textual placeholder either");
+
+  // The coming round has no data, so it gets no figures row — 0 Coaches and
+  // 0 Teams on a round that has not run would be a claim, not a blank.
+  ok(!/hk-figures/.test(soonHtml), "the coming round shows no figures");
+
+  // The figure numbers are not hard-coded anywhere in the renderer. Comments
+  // are stripped first — the note explaining why the wording was shortened is
+  // not the wording coming back.
+  const jsCode = js.replace(/^\s*\/\/.*$/gm, "");
+  ok(!/No of Coaches|No of teams|No of EduHackers/.test(jsCode),
+    "the figures are computed, not written into the renderer as a sentence");
+  for (const n of ['"5"', '"8"', '"40"']) {
+    ok(!js.includes("hk-chip-n\">" + n), `the round-1 figure ${n} is not a literal in the markup`);
+  }
+}
+
+// -- "builders" is gone; the tile says EduHackers and counts them ----------
+{
+  ok(!/builders/i.test(statsHtml), "the summary tiles no longer say \"builders\"",
+    statsHtml.replace(/<[^>]*>/g, " "));
+  ok(/EduHacker/.test(statsHtml), "...they say EduHackers");
+  ok(!/builders/i.test(storyHtml), "the story section does not say \"builders\" either");
+  // Fixture: 12 roster rows, 7 of them coaches -> 5 EduHackers.
+  ok(/hk-stat-num">5<\/span><span class="hk-stat-label">EduHackers/.test(statsHtml),
+    "the tile counts EduHackers and not the coaches", statsHtml);
+}
+
+// -- the story section's heading and its width -----------------------------
+ok(storyHtml.includes(">The EduHackAI story so far</h2>"),
+  "the story section carries the heading the owner asked for");
+{
+  // The width report, twice over now, so this is checked by resolving the
+  // cascade rather than by grepping for the first max-width in the file.
+  //
+  // Every rule in styles.css AND in the page's own inline <style> whose last
+  // compound could match p.hk-story-p, or any of its ancestors up to <html>,
+  // is enumerated; the ones declaring a width-constraining property are
+  // collected. The only one allowed to survive is .hk-wrap's own column cap.
+  const CHAIN = [
+    { tag: "html", cls: [], id: null },
+    { tag: "body", cls: ["hk-page"], id: null },
+    { tag: "main", cls: [], id: null },
+    { tag: "div", cls: ["hk-wrap"], id: null },
+    { tag: "section", cls: ["hk-story"], id: "hk-story" },
+    { tag: "p", cls: ["hk-story-p"], id: null },
+  ];
+  const NARROWING = /^(max-width|width|max-inline-size|inline-size|flex-basis|column-count|columns)$/;
+
+  function cssRules(src, media) {
+    const out = [];
+    const s = src.replace(/\/\*[\s\S]*?\*\//g, "");
+    let i = 0;
+    while (i < s.length) {
+      const brace = s.indexOf("{", i);
+      if (brace === -1) break;
+      const prelude = s.slice(i, brace).trim();
+      let depth = 1, j = brace + 1;
+      while (j < s.length && depth) { if (s[j] === "{") depth++; else if (s[j] === "}") depth--; j++; }
+      const body = s.slice(brace + 1, j - 1);
+      if (prelude.startsWith("@")) {
+        if (/^@media/.test(prelude)) out.push(...cssRules(body, prelude));
+      } else {
+        out.push({ media: media || "", selector: prelude, body });
+      }
+      i = j;
+    }
+    return out;
+  }
+  function compoundMatches(comp, elx) {
+    const tag = (comp.match(/^[a-zA-Z][\w-]*/) || [])[0];
+    if (tag && tag.toLowerCase() !== elx.tag) return false;
+    if ([...comp.matchAll(/#([\w-]+)/g)].some((m) => m[1] !== elx.id)) return false;
+    if ([...comp.matchAll(/\.([\w-]+)/g)].some((m) => !elx.cls.includes(m[1]))) return false;
+    return true;
+  }
+  function selectorMatches(sel, idx) {
+    const parts = sel.trim().split(/\s*(>)\s*|\s+/).filter(Boolean);
+    let i = parts.length - 1, pos = idx, child = false;
+    while (i >= 0) {
+      const p = parts[i];
+      if (p === ">") { child = true; i--; continue; }
+      if (pos < 0) return false;
+      if (child) {
+        if (!compoundMatches(p, CHAIN[pos])) return false;
+        pos--; child = false; i--; continue;
+      }
+      let found = -1;
+      for (let k = pos; k >= 0; k--) if (compoundMatches(p, CHAIN[k])) { found = k; break; }
+      if (found === -1) return false;
+      pos = found - 1; i--;
+    }
+    return true;
+  }
+
+  const allRules = [
+    ...cssRules(sheetForCascade, "").map((r) => ({ ...r, file: "styles.css" })),
+    ...cssRules(inlineForCascade, "").map((r) => ({ ...r, file: "hackathons.html <style>" })),
+  ];
+  const binding = [];
+  for (let idx = 0; idx < CHAIN.length; idx++) {
+    for (const r of allRules) {
+      for (const sel of r.selector.split(",")) {
+        const parts = sel.trim().split(/\s*>\s*|\s+/).filter(Boolean);
+        if (!parts.length) continue;
+        if (!compoundMatches(parts[parts.length - 1], CHAIN[idx])) continue;
+        if (!selectorMatches(sel, idx)) continue;
+        for (const d of r.body.split(";")) {
+          const c = d.indexOf(":");
+          if (c === -1) continue;
+          const prop = d.slice(0, c).trim();
+          const val = d.slice(c + 1).trim();
+          if (!NARROWING.test(prop)) continue;
+          if (/^(100%|auto|none|inherit)$/.test(val)) continue;
+          binding.push(`${r.file}${r.media ? " " + r.media : ""} {${sel.trim()}} ${prop}: ${val}`);
+        }
+      }
+    }
+  }
+  // Exactly one survivor is expected: the page's own content column. Anything
+  // else is a second cap on the same text, which is the bug being fixed.
+  const extra = binding.filter((b) => !/\{\.hk-wrap\}/.test(b));
+  ok(extra.length === 0,
+    `nothing but .hk-wrap constrains the story text's width (${binding.length} found)`,
+    extra.join(" | "));
+  ok(binding.some((b) => /\{\.hk-wrap\} max-width: min\(1320px/.test(b)),
+    "...and .hk-wrap is still the column that does", binding.join(" | "));
+  ok(!/\.hk-story-p\s*\{[^}]*max-width/s.test(sheetForCascade),
+    "the story paragraphs carry no max-width of their own");
+  // A grid or flex parent can narrow a child without any max-width at all, so
+  // the absence of one is not on its own the answer.
+  ok(!/\.hk-story\s*\{[^}]*display:\s*(grid|flex)/s.test(sheetForCascade),
+    "the story block is not a grid or flex container that could size its children");
+}
 
 // -- the width fix ---------------------------------------------------------
 ok(!/\.hk-round-desc\s*\{[^}]*max-width/s.test(pageHtml),
@@ -558,10 +859,20 @@ ok(T.podiumTeams([]).length === 0 && T.podiumTeams(null).length === 0,
   const teams = { a: [{ rank: 1 }, { rank: null, is_winner: false }], b: [{ rank: 2 }] };
   const roster = { a: [{}, {}, {}], b: [{}] };
   const s = T.summarise(rounds, teams, roster);
-  ok(s.rounds === 2 && s.teams === 3 && s.builders === 4 && s.medals === 2,
-    "summary aggregates rounds/teams/builders/medals", JSON.stringify(s));
+  ok(s.rounds === 2 && s.teams === 3 && s.eduhackers === 4 && s.medals === 2,
+    "summary aggregates rounds/teams/EduHackers/medals", JSON.stringify(s));
   const empty = T.summarise([], {}, {});
   ok(empty.rounds === 0 && empty.teams === 0 && empty.medals === 0, "summary of nothing is zeroes");
+
+  // The tile is labelled "EduHackers", so it must not count the coaches. This
+  // is the assertion that stops the word and the number drifting apart again.
+  const mixed = T.summarise(
+    [{ id: "a" }],
+    { a: [] },
+    { a: [{ is_mentor: true }, { is_mentor: true }, { is_mentor: false }, {}] },
+  );
+  ok(mixed.eduhackers === 2, `coaches are excluded from the EduHacker tile (${mixed.eduhackers})`);
+  ok(mixed.coaches === 2, `...and counted separately (${mixed.coaches})`);
 }
 
 ok(T.isComingSoon({ starts_on: null, ends_on: null, status: "announced" }) === true,
@@ -617,6 +928,91 @@ ok(T.coachPhotoSlug("Mohamed Mohi El-Dien") === "mohamed-mohi-el-dien",
 ok(T.coachPhotoSlug("Solo") === "solo", "a one-word name slugifies");
 ok(T.coachPhotoSlug("  Two   Spaces  ") === "two-spaces", "runs of separators collapse to one");
 ok(T.coachPhotoSlug("") === "" && T.coachPhotoSlug(null) === "", "nothing in, nothing out");
+
+// -- coach identity: the override, the link, and the photo -----------------
+//
+// The property that matters here is that the page is correct on BOTH sides of
+// a migration that has not been applied. Every one of these is asserted twice,
+// once for what the database says today and once for what it will say after
+// the rename, and the two answers have to be the same answer.
+{
+  for (const stored of ["Mahmoud", "Mahmoud ATALLAH", "  mahmoud  "]) {
+    ok(T.coachDisplayName(stored) === "Mahmoud ATALLAH",
+      `"${stored}" displays as Mahmoud ATALLAH`, T.coachDisplayName(stored));
+    ok(T.coachPhotoSrc(stored) === "assets/eduhack/coaches/mahmoud-atallah.jpg",
+      `"${stored}" resolves to the same photo`, T.coachPhotoSrc(stored));
+    ok(T.coachLinkUrl(stored) === "https://www.linkedin.com/in/mahmoudatallah/",
+      `"${stored}" resolves to the same LinkedIn`, T.coachLinkUrl(stored));
+  }
+  // Everybody else: the stored name is the displayed name, unchanged.
+  for (const [stored, slug] of [
+    ["Zoka", "zoka"],
+    ["Esraa Ahmed", "esraa-ahmed"],
+    ["Mohamed Mohi El-Dien", "mohamed-mohi-el-dien"],
+    ["Gangothri Rajaram", "gangothri-rajaram"],
+    ["Ahmed Badawy", "ahmed-badawy"],
+    ["Emad Adel", "emad-adel"],
+    ["Ansari", "ansari"],
+  ]) {
+    ok(T.coachDisplayName(stored) === stored, `${stored} keeps the stored spelling`);
+    ok(T.coachPhotoSrc(stored) === `assets/eduhack/coaches/${slug}.jpg`,
+      `${stored} -> ${slug}.jpg`, T.coachPhotoSrc(stored));
+    ok(/^https:\/\/www\.linkedin\.com\/in\//.test(T.coachLinkUrl(stored)),
+      `${stored} has a LinkedIn`, T.coachLinkUrl(stored));
+  }
+  // Somebody with no entry: no link, no rename, and still a photo path — the
+  // photo simply 404s and the monogram stays.
+  ok(T.coachProfile("Nobody At All") === null, "an unknown coach has no profile entry");
+  ok(T.coachLinkUrl("Nobody At All") === "", "...and no link");
+  ok(T.coachDisplayName("Nobody At All") === "Nobody At All", "...and is not renamed");
+  ok(T.coachLinkUrl("") === "" && T.coachLinkUrl(null) === "", "no name, no link");
+  ok(T.coachDisplayName(null) === "", "no name, no display name");
+  // Every URL in the config is an https LinkedIn profile. Nothing else belongs
+  // in a config that the page turns into a link on somebody's face.
+  const urls = Object.keys(T.coachProfiles).map((k) => T.coachProfiles[k].linkedin);
+  ok(urls.every((u) => /^https:\/\/www\.linkedin\.com\/in\/[A-Za-z0-9-]+\/$/.test(u)),
+    "every configured URL is an https linkedin.com/in/ profile",
+    urls.filter((u) => !/^https:\/\/www\.linkedin\.com\/in\/[A-Za-z0-9-]+\/$/.test(u)).join(", "));
+}
+
+// -- "No of Apps": the one figure that is configured, not computed ---------
+{
+  ok(T.appsForRound(1) === 6, "round 1's app count comes from the config");
+  ok(T.appsForRound("1") === 6, "...whether the round number is a number or a string");
+  ok(T.appsForRound(2) === null && T.appsForRound(3) === null && T.appsForRound(4) === null,
+    "a round nobody has answered for is null, not 0");
+  ok(T.appsForRound(9) === null, "a round that is not in the config at all is null");
+  ok(T.appsForRound(null) === null && T.appsForRound(undefined) === null &&
+     T.appsForRound("") === null, "no round number, no count");
+  // The shape Ahmed's answer has to land in. If somebody replaces a null with
+  // a 0 to make the chip appear, this says so.
+  const cfg = T.appsByRound;
+  ok(Object.keys(cfg).join(",") === "1,2,3,4", "the config covers exactly the four rounds",
+    Object.keys(cfg).join(","));
+  ok(Object.keys(cfg).every((k) => cfg[k] === null || (typeof cfg[k] === "number" && cfg[k] > 0)),
+    "every configured app count is either null or a real positive number");
+}
+
+// -- per-round figures, computed from the rows ----------------------------
+{
+  const roster = [
+    { is_mentor: true }, { is_mentor: true },
+    { is_mentor: false }, { is_mentor: false }, { is_mentor: false },
+    {},                                     // no flag at all is not a coach
+  ];
+  const f = T.roundFigures({ round_number: 1 }, [{}, {}], roster);
+  ok(f.coaches === 2, `coaches are the is_mentor rows (${f.coaches})`);
+  ok(f.eduhackers === 4, `EduHackers are everybody else (${f.eduhackers})`);
+  ok(f.teams === 2, `teams are counted (${f.teams})`);
+  ok(f.coaches + f.eduhackers === roster.length,
+    "every roster row lands in exactly one of the two");
+  ok(f.apps === 6, "round 1's apps come from the config");
+  ok(T.roundFigures({ round_number: 2 }, [], []).apps === null,
+    "a round with no configured app count reports null");
+  const none = T.roundFigures({ round_number: 5 }, null, null);
+  ok(none.coaches === 0 && none.eduhackers === 0 && none.teams === 0 && none.apps === null,
+    "a round with nothing in it computes to nothing");
+}
 
 // -- Demo Day venues out of `location` -------------------------------------
 ok(T.demoVenues("Demo Day: Cairo, Egypt").join("|") === "Cairo, Egypt", "one labelled venue");
@@ -1036,6 +1432,8 @@ if (process.env.HK_DUMP) {
   console.log("\n---- coming soon ----\n" + soonHtml);
   console.log("\n---- first round header + medals ----\n" +
     roundsHtml.slice(0, roundsHtml.indexOf('class="hk-round-panel"')));
+  console.log("\n---- coaches ----\n" + coachesHtml.replace(/></g, ">\n<"));
+  console.log("\n---- summary tiles ----\n" + statsHtml.replace(/></g, ">\n<"));
 }
 console.log(`\n${checks} checks, ${failures} failing.`);
 process.exit(failures ? 1 : 0);

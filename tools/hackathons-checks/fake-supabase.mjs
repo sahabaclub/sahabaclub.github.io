@@ -57,27 +57,41 @@ export const rows = {
   // Deliberately NOT alphabetical: the view supplies the order and the
   // renderer must not re-sort it. Coaches first, lead coach first of those.
   //
-  // The coach rows also carry the three cases the programme-wide "Thanks to
-  // our coaches" section has to survive:
+  // The coach rows also carry the cases the programme-wide "Thanks to our
+  // coaches" section has to survive:
   //
-  //   * one person coaching several rounds — "Ahmed Zoka" is in r4, r3 and r2
-  //     and must fold into ONE card naming all three;
+  //   * one person coaching several rounds — "Zoka" is in r4, r3 and r2 and
+  //     must fold into ONE card naming all three;
   //   * that person spelled differently between rounds — r2 stores him
   //     lower-case, so deduplication cannot be a plain string match;
   //   * a coach recorded under a single name and nothing else — "Solo", which
   //     is the shape two of the real coaches have, and which must render like
-  //     everybody else rather than being special-cased.
+  //     everybody else rather than being special-cased;
+  //   * a coach with a LinkedIn in COACH_PROFILES ("Zoka") against coaches with
+  //     none ("Aaron Second Coach", "Gangothri Example", "Solo"), because the
+  //     rule that a coach without one must NOT become a dead link only means
+  //     something if both kinds are on the page at once;
+  //   * "Mahmoud" — stored exactly as migration 0036 §3d created him, from a
+  //     first name and nothing else. He is the name-override case: the page has
+  //     to show "Mahmoud ATALLAH", link him, and resolve his photo to
+  //     mahmoud-atallah.jpg while the database still says "Mahmoud".
+  //
+  // "Zoka" rather than "Ahmed Zoka": 0036 §3b renamed him in the database at
+  // his own request, so this is what the live view actually returns, and it is
+  // also what makes his COACH_PROFILES entry resolve here the way it does in
+  // production.
   hackathon_roster: [
-    { hackathon_id: "r4", team_id: null, full_name: "Ahmed Zoka", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
+    { hackathon_id: "r4", team_id: null, full_name: "Zoka", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r4", team_id: null, full_name: "Aaron Second Coach", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r4", team_id: "t41", full_name: "Zed Builder", is_mentor: false, is_judge: false, role_in_team: "Developer, Designer", profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r4", team_id: "t41", full_name: "Alice Builder", is_mentor: false, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r4", team_id: null, full_name: "No Team Person", is_mentor: false, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
-    { hackathon_id: "r3", team_id: null, full_name: "Ahmed Zoka", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
+    { hackathon_id: "r3", team_id: null, full_name: "Zoka", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r3", team_id: null, full_name: "Gangothri Example", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r3", team_id: "t31", full_name: "Alice Builder", is_mentor: false, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
-    { hackathon_id: "r2", team_id: null, full_name: "ahmed zoka", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
+    { hackathon_id: "r2", team_id: null, full_name: "zoka", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r1", team_id: null, full_name: "Solo", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
+    { hackathon_id: "r1", team_id: null, full_name: "Mahmoud", is_mentor: true, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
     { hackathon_id: "r1", team_id: "t11", full_name: "Someone Else", is_mentor: false, is_judge: false, role_in_team: null, profile_user_id: null, avatar_url: null, headline: null },
   ],
 };

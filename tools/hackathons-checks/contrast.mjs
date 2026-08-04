@@ -191,6 +191,42 @@ check("light: coach name on card", Lt.text, L_CARD, 4.5);
 check("light: coach round pill on pill", Lt.sub, L_CHIP, 4.5);
 check("light: coach monogram initials on wash", Lt.text, dimmest(L_MONO), 4.5);
 
+// ---- the coach card as a LinkedIn link ----
+// A card with a profile is an <a>. Three surfaces have to be measured that did
+// not exist before: the "LinkedIn" cue at rest, the same cue and the name over
+// the hovered violet tint, and the focus ring — which is the affordance a
+// keyboard user has instead of hover, so it is held to 1.4.11's 3:1 as a
+// non-text indicator, against BOTH what it is drawn on (the card) and what
+// surrounds it (the page), because a 3px outline offset sits across the join.
+const D_COACH_HOVER = stack(D_CARD, [["#8b5cf6", 0.08]]);
+const L_COACH_HOVER = stack(L_CARD, [["#8b5cf6", 0.08]]);
+const D_VIOLET = "#8b5cf6";
+const L_VIOLET = "#6d28d9";
+check("dark: coach LinkedIn cue on card", D.sub, D_CARD, 4.5);
+check("dark: coach LinkedIn cue, hovered", D.text, D_COACH_HOVER, 4.5);
+check("dark: coach name on hovered card", D.text, D_COACH_HOVER, 4.5);
+check("dark: coach focus ring vs card (graphic)", D_VIOLET, D_CARD, 3.0);
+check("dark: coach focus ring vs page (graphic)", D_VIOLET, D.bg, 3.0);
+check("light: coach LinkedIn cue on card", Lt.sub, L_CARD, 4.5);
+check("light: coach LinkedIn cue, hovered", Lt.text, L_COACH_HOVER, 4.5);
+check("light: coach name on hovered card", Lt.text, L_COACH_HOVER, 4.5);
+check("light: coach focus ring vs card (graphic)", L_VIOLET, L_CARD, 3.0);
+check("light: coach focus ring vs page (graphic)", L_VIOLET, Lt.bg, 3.0);
+
+// ---- the round's key figures ----
+// These chips sit on the PAGE, not on a glass card: a round card has no
+// background of its own, only a top border. So the surface is one chip tint
+// over the page background, which is a lower-contrast base than the coach and
+// story chips and therefore has to be measured separately rather than reusing
+// D_CHIP. The number is --text and the noun is --text-secondary; the noun is
+// the one that has to work, at 11.5px.
+const D_ROUND_CHIP = stack(D.bg, [["#ffffff", 0.05]]);
+const L_ROUND_CHIP = stack(Lt.bg, [["#000000", 0.04]]);
+check("dark: round figure number on chip", D.text, D_ROUND_CHIP, 4.5);
+check("dark: round figure noun on chip", D.sub, D_ROUND_CHIP, 4.5);
+check("light: round figure number on chip", Lt.text, L_ROUND_CHIP, 4.5);
+check("light: round figure noun on chip", Lt.sub, L_ROUND_CHIP, 4.5);
+
 // ---- the round disclosure bar ----
 // Collapsed it is --text-secondary on glass; hovered and expanded it is
 // --text, which is lighter in dark and darker in light, so the collapsed
