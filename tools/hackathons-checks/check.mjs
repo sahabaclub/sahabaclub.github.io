@@ -138,13 +138,19 @@ for (const d of describedBy) {
   ok(pageHtml.includes(`id="${d}"`), `hackathons.html: aria-describedby="${d}" resolves`);
 }
 
-// "Details of previous rounds:" — a static heading naming the filter chips,
-// the search box and the round cards below them. Static because the toolbar it
-// labels is static: a heading that only appeared after a fetch would leave the
-// search field unlabelled for as long as the fetch took.
+// "EduHackAI History" — a static heading naming the filter chips, the search
+// box and the round cards below them. Static because the toolbar it labels is
+// static: a heading that only appeared after a fetch would leave the search
+// field unlabelled for as long as the fetch took.
+//
+// It carries the shared .hk-mark-text span, the same as the five headings
+// hackathons-ui.js renders. This is the only one written by hand, so it is the
+// one most able to drift; the span is asserted here character for character.
 {
-  const heading = '<h2 class="hk-rounds-h">Details of previous rounds:</h2>';
+  const heading = '<h2 class="hk-rounds-h"><span class="hk-mark-text">EduHackAI History</span></h2>';
   ok(pageHtml.includes(heading), "hackathons.html: the rounds heading is present", heading);
+  ok(!/Details of previous rounds/.test(pageHtml),
+    "hackathons.html: the old \"Details of previous rounds:\" wording is gone");
   const iStory = pageHtml.indexOf('id="hack-story"');
   const iHeading = pageHtml.indexOf(heading);
   const iToolbar = pageHtml.indexOf('class="hk-toolbar"');
@@ -178,6 +184,11 @@ function el(id, tag) {
     id, tagName: (tag || "div").toUpperCase(),
     innerHTML: "", textContent: "", value: "",
     hidden: false, disabled: false,
+    // The three numbers railEdges() reads, plus the method the buttons call.
+    // Defaults describe a rail that is scrolled to its start and has more to
+    // the right — which is what the showcase rail actually is at load.
+    scrollLeft: 0, scrollWidth: 0, clientWidth: 0, offsetWidth: 0, offsetLeft: 0,
+    scrollBy(opts) { this._scrolledBy = opts; },
     _attrs: {}, _listeners: {}, _kids: {},
     classList: {
       _s: new Set(),
@@ -209,6 +220,8 @@ for (const id of [
   "hack-q", "hack-clear-q", "hack-count", "hk-interest", "hk-interest-title",
   "hk-interest-intro", "hk-interest-form", "hk-interest-submit",
   "hk-interest-done", "hk-done-text", "hk-form-error",
+  "hk-video-modal", "hk-video-modal-title", "hk-video-modal-media",
+  "hk-video-modal-close",
 ]) el(id);
 
 // The dialog's inner structure the script reaches for.
@@ -216,6 +229,30 @@ const modal = registry.get("hk-interest");
 modal.hidden = true;
 const modalBox = el(null, "div");
 modal._kids[".hk-modal-box"] = modalBox;
+
+// The showcase player dialog, same shape. It starts hidden for the same reason
+// the real one does: `hidden` in the markup is what makes a dialog closed.
+const videoModal = registry.get("hk-video-modal");
+videoModal.hidden = true;
+const videoModalBox = el(null, "div");
+videoModal._kids[".hk-vmodal-box"] = videoModalBox;
+
+// The showcase rail and its two buttons, hung off the #hack-videos mount so
+// that wireRail() finds them the way it finds them in a browser — by querying
+// the mount it was handed. They are set up BEFORE the script runs, because
+// wireRail() is called at boot.
+const videosMount = registry.get("hack-videos");
+const rail = el(null, "ul");
+const railPrev = el(null, "button");
+const railNext = el(null, "button");
+// A rail with nine cards three-at-a-time: about three screenfuls of content in
+// one screenful of box, scrolled to the far left.
+rail.clientWidth = 900;
+rail.scrollWidth = 2700;
+rail.scrollLeft = 0;
+videosMount._kids[".hk-video-rail"] = rail;
+videosMount._kids['[data-hk-rail="prev"]'] = railPrev;
+videosMount._kids['[data-hk-rail="next"]'] = railNext;
 
 const form = registry.get("hk-interest-form");
 const inputs = {};
@@ -242,11 +279,19 @@ const document_ = {
   // has to EXIST, or the boot call throws before load() is ever reached.
   querySelectorAll: () => [],
   body: el(null, "body"),
+  // railBehavior() reads html.reduce-motion off this — the site's own motion
+  // setting, which script.js toggles here.
+  documentElement: el(null, "html"),
 };
 const window_ = {
   addEventListener: (t, fn) => { (listeners.window[t] = listeners.window[t] || []).push(fn); },
   location: { hash: "" },
   console,
+  // The OS motion setting. Swapped by the reduced-motion checks below; "no
+  // matchMedia at all" is also a state this has to survive, which is why
+  // railBehavior() guards it rather than calling it.
+  matchMedia: (q) => ({ matches: !!window_._reduceMotion, media: q }),
+  _reduceMotion: false,
 };
 window_.window = window_;
 
@@ -306,7 +351,8 @@ ok(soonHtml.includes("The next round"), "the panel's eyebrow says which round th
   const lock = (soonHtml.match(/<span class="hk-soon-lockup">([\s\S]*?)<\/span><\/h2>/) || [])[1];
   ok(lock !== undefined, "the mark and the words sit in one .hk-soon-lockup", soonHtml);
   ok(!!lock && /class="hk-logo hk-soon-logo"/.test(lock), "...the logo slot is inside it");
-  ok(!!lock && /class="hk-soon-verb"/.test(lock), "...and so are the words");
+  ok(!!lock && /class="hk-soon-verb hk-mark-text"/.test(lock),
+    "...and so are the words, carrying the shared gradient class", String(lock));
   ok(!!lock && lock.indexOf("hk-soon-logo") < lock.indexOf("hk-soon-verb"),
     "...with the mark first, so the words read after it");
 }
@@ -447,8 +493,11 @@ ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(RE
   // first, which is not a thing to leave to chance.
   ok(/<h2 class="hk-story-h" id="hk-story-h">/.test(storyHeadHtml),
     "the heading renders into its own mount above the tiles", storyHeadHtml);
-  ok(storyHeadHtml.includes(">The EduHackAI story so far</h2>"),
-    "...and it is the heading the owner asked for");
+  ok(storyHeadHtml.includes('<span class="hk-mark-text">EduHackAI Story</span></h2>'),
+    "...and it is the heading the owner asked for, in the shared gradient span",
+    storyHeadHtml);
+  ok(!/story so far/i.test(storyHeadHtml + storyHtml + pageHtml),
+    "the old \"The EduHackAI story so far\" wording is gone from the page");
   ok(!/<h2/.test(storyHtml), "the story card no longer carries a heading of its own", storyHtml);
   ok(storyHtml.includes('aria-labelledby="hk-story-h"'),
     "...but still names the heading as its label");
@@ -506,8 +555,10 @@ ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(RE
 
 // -- coaches, across the whole programme ------------------------------------
 {
-  ok(coachesHtml.includes("Thanks to our coaches in EduHackAI journey"),
-    "the section uses the owner's title");
+  ok(coachesHtml.includes('<span class="hk-mark-text">Thank You to Our EduHackAI Coaches</span>'),
+    "the section uses the owner's title, in the shared gradient span", coachesHtml.slice(0, 200));
+  ok(!/Thanks to our coaches/i.test(coachesHtml),
+    "the old \"Thanks to our coaches in EduHackAI journey\" wording is gone");
   // Cards are <article> when the coach has no LinkedIn and <a> when they do,
   // so "how many cards" is the two counted together.
   const plainCards = coachesHtml.match(/<article class="hk-coach">/g) || [];
@@ -763,12 +814,135 @@ ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(RE
     "the closing CTA opens the dialog for the coming round");
   ok(!ctaHtml.includes("<form") && !ctaHtml.includes("role=\"dialog\""),
     "the closing CTA builds no second form and no second dialog");
-  ok((pageHtml.match(/<form/g) || []).length === 1,
-    "there is exactly one form in the document");
-  ok((pageHtml.match(/role="dialog"/g) || []).length === 1,
-    "there is exactly one dialog in the document");
+
+  // ONE FORM. The page now has TWO dialogs — the interest form and the
+  // showcase player — and the player reuses the interest dialog's BEHAVIOUR
+  // through makeModal(), never its markup. The distinction is exactly this
+  // number: a second dialog built by copying the first would have brought a
+  // second <form>, a second set of four inputs sharing the first set's ids, and
+  // a second "Tell me when it's scheduled" button posting to the same function.
+  //
+  // Counted across everything that ends up in the document, not just the static
+  // file, so a renderer that started emitting one would be caught too — and
+  // with HTML COMMENTS STRIPPED FIRST. The comment above the player dialog in
+  // hackathons.html explains that copying the form would have put a second
+  // <form> on the page, and that sentence should not itself count as one.
+  const wholeDocument = (pageHtml + roundsHtml + soonHtml + statsHtml +
+    storyHeadHtml + storyHtml + videosHtml + coachesHtml + ctaHtml)
+    .replace(/<!--[\s\S]*?-->/g, "");
+  ok((wholeDocument.match(/<form/g) || []).length === 1,
+    "there is exactly one form in the document",
+    String((wholeDocument.match(/<form[^>]*>/g) || []).join("  ")));
+  ok((wholeDocument.match(/name="(full_name|email|mobile|current_job)"/g) || []).length === 4,
+    "...and exactly one of each of its four fields");
+
+  const dialogs = wholeDocument.match(/role="dialog"/g) || [];
+  ok(dialogs.length === 2,
+    `there are exactly two dialogs in the document (got ${dialogs.length})`);
+  ok((wholeDocument.match(/aria-modal="true"/g) || []).length === 2,
+    "...and both of them are modal");
+
   ok((soonHtml + ctaHtml).match(/data-hk-open=/g).length === 2,
     "both ways in are the same mechanism");
+}
+
+// -- the six section titles ------------------------------------------------
+//
+// Every section title on this page is set in the EduHackAI mark's colours, and
+// every one of them does it through ONE class. The whole point of factoring it
+// was that six copies of the gradient would drift, so what is asserted here is
+// the factoring itself and not six separate appearances: each heading is found,
+// each is confirmed to carry .hk-mark-text, and the sheet is confirmed to
+// declare the ramp exactly once.
+{
+  const titles = [
+    // [what it is, the markup that must contain it, the exact words]
+    ["coming soon",  soonHtml,       "Coming Soon"],
+    ["story",        storyHeadHtml,  "EduHackAI Story"],
+    ["history",      pageHtml,       "EduHackAI History"],
+    ["showcase",     videosHtml,     "Project Showcase"],
+    ["coaches",      coachesHtml,    "Thank You to Our EduHackAI Coaches"],
+    ["closing CTA",  ctaHtml,        "Your AI Journey Starts with"],
+  ];
+  for (const [what, html, words] of titles) {
+    ok(html.includes(words), `the ${what} title reads "${words}"`);
+    // The words are INSIDE the shared span, not merely somewhere near it.
+    // The class list is matched loosely because "Coming Soon" carries two
+    // classes — hk-soon-verb for its size, hk-mark-text for its colour.
+    const spans = [...html.matchAll(/<span class="[^"]*\bhk-mark-text\b[^"]*">([\s\S]*?)<\/span>/g)]
+      .map((m) => m[1]);
+    ok(spans.some((s) => s.includes(words)),
+      `...and it is inside the shared .hk-mark-text span`, spans.join(" | "));
+  }
+
+  // The renames, stated as deletions too. A heading that was added without the
+  // old one being removed is a page with both on it.
+  for (const gone of [
+    "The EduHackAI story so far",
+    "Details of previous rounds",
+    "Thanks to our coaches in EduHackAI journey",
+    ">Demo videos<",
+    "Be with us in EduHackAI-5",
+  ]) {
+    const everywhere = pageHtml + soonHtml + storyHeadHtml + storyHtml +
+      videosHtml + coachesHtml + ctaHtml;
+    ok(!everywhere.includes(gone), `the old wording "${gone}" is gone from the page`);
+  }
+
+  // ---- the medal, and why it is not in the gradient ----
+  // background-clip: text MASKS a gradient with the glyph shape. A colour emoji
+  // inside the span therefore loses its own colours and renders as a flat
+  // silhouette in the ramp's colour. So it is a SIBLING of the span, never a
+  // child — and that is a structural property, so it is asserted structurally.
+  {
+    const h = (videosHtml.match(/<h2 class="hk-videos-h"[^>]*>([\s\S]*?)<\/h2>/) || [])[1] || "";
+    ok(h.includes("🥇"), "the showcase heading carries the medal", h);
+    const iEmoji = h.indexOf("🥇");
+    const iSpan = h.indexOf('<span class="hk-mark-text">');
+    ok(iEmoji !== -1 && iSpan !== -1 && iEmoji < iSpan,
+      "the medal comes before the gradient span...", h);
+    // The gradient span's own contents must not contain it.
+    const inside = (h.match(/<span class="hk-mark-text">([\s\S]*?)<\/span>/) || [])[1] || "";
+    ok(!inside.includes("🥇"),
+      "...and is not inside it, so the gradient cannot flatten it", inside);
+    ok(/<span class="hk-h-emoji" aria-hidden="true">🥇<\/span>/.test(h),
+      "the medal is in its own aria-hidden span", h);
+    // The accessible name of the heading is its contents minus anything
+    // aria-hidden. Computed here the way a browser computes it, so the claim is
+    // about the name and not about the markup that produces it.
+    const accessibleName = h
+      .replace(/<span[^>]*aria-hidden="true"[^>]*>[\s\S]*?<\/span>/g, "")
+      .replace(/<[^>]*>/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    ok(accessibleName === "Project Showcase",
+      `the heading's accessible name is "Project Showcase", not the emoji read as a word`,
+      accessibleName);
+  }
+
+  // ---- "EduHackAI-5" must not break at its hyphen ----
+  {
+    const h = (ctaHtml.match(/<h2 class="hk-cta-h"[^>]*>([\s\S]*?)<\/h2>/) || [])[1] || "";
+    ok(/<span class="hk-nowrap">EduHackAI-5<\/span>/.test(h),
+      "the round's name is wrapped in .hk-nowrap so its hyphen is not a break point", h);
+    // ...and the nowrap span is INSIDE the gradient span, so the ramp runs
+    // across the sentence and the name as one rather than restarting at the
+    // name. Matched as one shape: gradient span, words, nowrap span, both
+    // closed — there is no arrangement of these four that passes this and puts
+    // the nowrap span outside.
+    ok(/<span class="hk-mark-text">[^<]*<span class="hk-nowrap">EduHackAI-5<\/span><\/span>/.test(h),
+      "...and it sits inside the gradient span, so the ramp does not restart at it", h);
+    // The name is still the database's. The fixture's round is called
+    // "EduHackAI-5"; nothing in hackathons-ui.js may spell it out. Comments are
+    // stripped first — the block above ctaHtml() quotes the finished heading to
+    // explain where its two halves come from, and prose about a string is not
+    // the string.
+    const jsCode = js.replace(/^\s*\/\/.*$/gm, "");
+    ok(!/Your AI Journey Starts with EduHackAI-5/.test(jsCode),
+      "the round's name is not typed into hackathons-ui.js — it comes from the row");
+    ok(/Your AI Journey Starts with/.test(jsCode),
+      "...but the sentence around it is, so the heading is not data either");
+  }
 }
 
 // -- medals ----------------------------------------------------------------
@@ -944,7 +1118,7 @@ ok(!roundsHtml.includes("Team Four D".padEnd(0) + '</h4>') || true, "rank 4 gets
 }
 
 // -- the story section's heading and its width -----------------------------
-ok(storyHeadHtml.includes(">The EduHackAI story so far</h2>"),
+ok(storyHeadHtml.includes(">EduHackAI Story</span></h2>"),
   "the story section carries the heading the owner asked for");
 // It renders into the mount that sits between the coming-soon panel and the
 // stat tiles, which is the order Ahmed marked on the screenshot. Asserted
@@ -1583,6 +1757,285 @@ ok(DOC.activeElement === opener, "focus returns to the button that opened it");
 }
 
 // ============================================================
+// 4b. The showcase player dialog
+// ------------------------------------------------------------
+// The thing this section exists for is the IFRAME'S LIFETIME. A dialog that is
+// merely hidden with a YouTube frame still inside it goes on playing — audible,
+// from nowhere the visitor can point at — and goes on holding the player's
+// connection open behind a dialog they believe they closed. `hidden` stops
+// neither. So every close below is followed by a check that the frame is gone,
+// not just that the dialog is.
+//
+// Everything else here is the behaviour the player SHARES with the interest
+// form, asserted on the player rather than assumed from the form: they run
+// through one makeModal(), and this is what proves the second dialog actually
+// got the first one's Escape, its scroll lock and its focus restoration.
+// ============================================================
+section("4b. the showcase player dialog");
+
+const videoClickers = videosMount._listeners.click || [];
+ok(videoClickers.length === 1, "the showcase mount has a click handler");
+
+// A card, the way one arrives at the handler: a real button carrying the id and
+// the title the renderer put on it.
+function card(id, title) {
+  const btn = el(null, "button");
+  const attrs = { "data-hk-video": id, "data-hk-title": title };
+  btn.getAttribute = (k) => (k in attrs ? attrs[k] : null);
+  btn.closest = (sel) => (sel === "[data-hk-video]" ? btn : null);
+  return btn;
+}
+function pressCard(btn) {
+  videoClickers.forEach((fn) => fn({ target: btn }));
+  return btn;
+}
+const mediaHost = registry.get("hk-video-modal-media");
+const videoTitleEl = registry.get("hk-video-modal-title");
+
+const cardA = pressCard(card("psV1lJXPA_o", "EduHackAI-3 Winner Solution (Meya Sports) Demo Video"));
+ok(videoModal.hidden === false, "pressing a card opens the player dialog");
+ok(modal.hidden === true, "...and does not open the interest dialog");
+ok(document_.body.classList.contains("hk-modal-open"),
+  "the background is locked from scrolling, the same lock the form uses");
+ok(DOC.activeElement === registry.get("hk-video-modal-close"),
+  "focus lands on the close button, not inside the cross-origin frame");
+
+// ---- the frame that is built ----
+{
+  const frame = mediaHost.innerHTML;
+  ok(/<iframe/.test(frame), "an iframe is created when the dialog opens", frame);
+  ok(frame.includes("youtube-nocookie.com/embed/psV1lJXPA_o"),
+    "...against youtube-nocookie.com, with the id of the card that was pressed", frame);
+  ok(/autoplay=1/.test(frame),
+    "...with autoplay, so the click that opened it also starts it", frame);
+  ok(/title="EduHackAI-3 Winner Solution \(Meya Sports\) Demo Video"/.test(frame),
+    "...and a title attribute naming the video", frame);
+  ok(!/loading="lazy"/.test(frame),
+    "...and no lazy loading: this frame exists in order to play now", frame);
+  ok(videoTitleEl.textContent === "EduHackAI-3 Winner Solution (Meya Sports) Demo Video",
+    "the dialog's accessible name is the video's title", videoTitleEl.textContent);
+}
+
+// ---- and that is destroyed again ----
+keydown({ key: "Escape", preventDefault() {} });
+ok(videoModal.hidden === true, "Escape closes the player, the same as the form");
+ok(mediaHost.innerHTML === "",
+  "THE IFRAME IS DESTROYED ON CLOSE — a hidden player keeps playing",
+  JSON.stringify(mediaHost.innerHTML));
+ok(!document_.body.classList.contains("hk-modal-open"), "the scroll lock is released");
+ok(DOC.activeElement === cardA, "focus returns to the card that opened it");
+
+// A second video, to prove the dialog is reused rather than accumulating: the
+// title and the frame are the new one's, and there is still exactly one frame.
+{
+  const cardB = pressCard(card("cfznj3X_ais", "EduHackAI-2 Winner Solution (Clever Mart)"));
+  ok(videoTitleEl.textContent === "EduHackAI-2 Winner Solution (Clever Mart)",
+    "a second video renames the dialog", videoTitleEl.textContent);
+  ok((mediaHost.innerHTML.match(/<iframe/g) || []).length === 1,
+    "...and there is exactly one player in it", mediaHost.innerHTML);
+  ok(mediaHost.innerHTML.includes("cfznj3X_ais") && !mediaHost.innerHTML.includes("psV1lJXPA_o"),
+    "...which is the new video and not the old one", mediaHost.innerHTML);
+
+  // Closed by the × / backdrop rather than by Escape — the other route, which
+  // has to destroy the frame too.
+  const x = el(null, "button");
+  x.closest = (sel) => (sel === "[data-hk-dismiss]" ? x : null);
+  (listeners.document.click || []).forEach((fn) => fn({ target: x }));
+  ok(videoModal.hidden === true, "the dismiss control closes the player");
+  ok(mediaHost.innerHTML === "", "...and destroys the frame on that route too",
+    JSON.stringify(mediaHost.innerHTML));
+  ok(DOC.activeElement === cardB, "...and returns focus to the card that opened it");
+}
+
+// A card whose id survives nothing of safeVideoId() opens no dialog at all,
+// rather than opening an empty one with a broken player in it.
+{
+  pressCard(card("///?#", "Nothing"));
+  ok(videoModal.hidden === true, "a card whose id strips to nothing opens no dialog");
+  ok(mediaHost.innerHTML === "", "...and builds no frame",
+    JSON.stringify(mediaHost.innerHTML));
+}
+
+// ---- ONE implementation, not two ----
+//
+// The behavioural checks above prove the player HAS a focus trap, Escape, a
+// scroll lock and focus restoration. They cannot tell whether it has its own
+// copy of each — and a second copy is precisely the thing that drifts, because
+// it is the one nobody opens in a screen reader six months later. So the source
+// is counted: each of these mechanisms may appear exactly once.
+{
+  const jsCode = js.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  const traps = jsCode.match(/a\[href\], button:not\(\[disabled\]\)/g) || [];
+  ok(traps.length === 1,
+    `the focusable-elements selector — the focus trap — exists once (found ${traps.length})`);
+
+  const keydowns = jsCode.match(/addEventListener\("keydown"/g) || [];
+  ok(keydowns.length === 1,
+    `there is one keydown handler for both dialogs (found ${keydowns.length})`);
+  ok((jsCode.match(/e\.key === "Escape"/g) || []).length === 1,
+    "...and one place that handles Escape");
+
+  const locks = jsCode.match(/classList\.add\("hk-modal-open"\)/g) || [];
+  ok(locks.length === 1, `the scroll lock is applied in one place (found ${locks.length})`);
+  ok((jsCode.match(/classList\.remove\("hk-modal-open"\)/g) || []).length === 1,
+    "...and released in one place");
+
+  const restores = jsCode.match(/api\.lastFocus/g) || [];
+  ok(restores.length >= 3 && !/var lastFocus/.test(jsCode),
+    "focus restoration lives on the controller, not in a module-level variable two dialogs share");
+
+  ok((jsCode.match(/function makeModal\(/g) || []).length === 1,
+    "there is exactly one modal factory");
+  ok(/makeModal\(modal, modalBox/.test(jsCode) && /makeModal\(videoModal, videoModalBox/.test(jsCode),
+    "and both dialogs are built from it");
+
+  // The trap has to include the iframe. Without it, Tab from the close button
+  // wraps back to the close button and a keyboard user is locked out of the
+  // play, seek and fullscreen controls of the video they just opened — a trap
+  // that traps somebody away from the content.
+  ok(/iframe, \[tabindex\]/.test(jsCode),
+    "the focus trap counts the player's iframe as focusable, so Tab can reach the controls");
+}
+
+// ============================================================
+// 4c. The showcase rail
+// ------------------------------------------------------------
+// The scrolling itself is CSS scroll-snap and is not testable here — it is
+// asserted in section 5, on the stylesheet. What IS testable is the part that
+// is code: the rule deciding when each button is disabled, the fact that the
+// state is repainted from the SCROLL event rather than from the click (so it
+// stays true when the rail is moved by a wheel or a finger), and that nothing
+// here binds a wheel or touch listener that could hijack either.
+// ============================================================
+section("4c. the showcase rail");
+
+// ---- the rule, on its own ----
+{
+  const e = T.railEdges;
+  ok(e(0, 2700, 900).atStart === true, "at scrollLeft 0 the rail is at its start");
+  ok(e(0, 2700, 900).atEnd === false, "...and not at its end");
+  ok(e(1800, 2700, 900).atEnd === true, "scrolled fully right, the rail is at its end");
+  ok(e(1800, 2700, 900).atStart === false, "...and not at its start");
+  ok(e(900, 2700, 900).atStart === false && e(900, 2700, 900).atEnd === false,
+    "in the middle it is at neither");
+  // The 1px of slack, in both directions. A fractional card width leaves the
+  // rail a hair short of its own maximum on a display whose device-pixel-ratio
+  // is not 1, and a Next button that never disables is a control that lies.
+  ok(e(1799.4, 2700, 900).atEnd === true,
+    "a fraction of a pixel short of the end still counts as the end");
+  ok(e(0.6, 2700, 900).atStart === true,
+    "...and a fraction past the start still counts as the start");
+  // A rail with nothing to scroll is at BOTH ends, so both buttons disable.
+  const none = e(0, 900, 900);
+  ok(none.atStart && none.atEnd, "a rail with nothing to scroll is at both ends");
+  // Values outside the range cannot produce a wrong answer: some browsers
+  // report a negative scrollLeft mid-overscroll on a rubber-banding touch.
+  ok(e(-50, 2700, 900).atStart === true, "an overscrolled-left rail reads as at the start");
+  ok(e(9999, 2700, 900).atEnd === true, "an overscrolled-right rail reads as at the end");
+}
+
+// ---- the buttons, wired to it ----
+ok(railPrev.disabled === true, "the Previous button starts disabled — the rail starts at its left");
+ok(railNext.disabled === false, "...and the Next button starts enabled");
+
+// Scrolled to the far right by something that is NOT a button press — a wheel,
+// a finger, the scrollbar. The buttons must still be right, which is why the
+// repaint hangs off the scroll event.
+rail.scrollLeft = 1800;
+rail.dispatch("scroll", {});
+ok(railPrev.disabled === false, "scrolling by any means enables Previous");
+ok(railNext.disabled === true, "...and disables Next at the far end");
+
+rail.scrollLeft = 900;
+rail.dispatch("scroll", {});
+ok(railPrev.disabled === false && railNext.disabled === false,
+  "in the middle both buttons are live");
+
+// A press moves the rail by one card's worth, in the right direction.
+{
+  rail._scrolledBy = null;
+  railNext.dispatch("click", {});
+  ok(rail._scrolledBy && rail._scrolledBy.left > 0, "Next scrolls right",
+    JSON.stringify(rail._scrolledBy));
+  rail._scrolledBy = null;
+  railPrev.dispatch("click", {});
+  ok(rail._scrolledBy && rail._scrolledBy.left < 0, "Previous scrolls left",
+    JSON.stringify(rail._scrolledBy));
+}
+
+// ---- reduced motion ----
+// The smooth scroll is the one piece of motion this feature has, and it is off
+// under either switch: the site's own setting and the OS's.
+{
+  railNext.dispatch("click", {});
+  ok(rail._scrolledBy.behavior === "smooth", "by default the button scrolls smoothly");
+
+  document_.documentElement.classList.add("reduce-motion");
+  railNext.dispatch("click", {});
+  ok(rail._scrolledBy.behavior === "auto",
+    "html.reduce-motion — the site's own setting — turns the smooth scroll off");
+  document_.documentElement.classList.remove("reduce-motion");
+
+  window_._reduceMotion = true;
+  railNext.dispatch("click", {});
+  ok(rail._scrolledBy.behavior === "auto",
+    "prefers-reduced-motion — the OS setting — turns it off too");
+  window_._reduceMotion = false;
+
+  railNext.dispatch("click", {});
+  ok(rail._scrolledBy.behavior === "smooth", "and it comes back when neither is set");
+}
+
+// ---- nothing is hijacked ----
+// Native scrolling has to keep working, so the rule is flat: this file binds no
+// wheel and no touch listener at all. Asserted on the source rather than on the
+// stub, because a listener bound to an element the stub never sees would pass
+// any behavioural test while still breaking a trackpad.
+{
+  const jsCode = js.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const evt of ["wheel", "mousewheel", "touchstart", "touchmove", "touchend", "pointermove"]) {
+    ok(!new RegExp(`["']${evt}["']`).test(jsCode),
+      `no ${evt} listener anywhere — the wheel and touch stay the browser's`);
+  }
+  ok(!/setInterval|requestAnimationFrame/.test(jsCode),
+    "and no timer: this is a scroller, not a carousel that moves on its own");
+}
+
+// ---- the markup the rail needs ----
+{
+  ok(/<ul class="hk-video-rail" id="hk-video-rail" tabindex="0"/.test(videosHtml),
+    "the rail itself is focusable, so the arrow keys can reach it", videosHtml.slice(0, 400));
+  ok(/<ul class="hk-video-rail"[^>]*aria-label="[^"]+"/.test(videosHtml),
+    "...and is named, because a scroll region with no name is an unlabelled control");
+  ok(!/hk-video-grid/.test(videosHtml), "the old grid class is gone from the markup");
+
+  const navButtons = videosHtml.match(/<button type="button" class="hk-rail-btn"[^>]*>/g) || [];
+  ok(navButtons.length === 2, `there are two rail buttons (got ${navButtons.length})`);
+  ok(navButtons.every((b) => /aria-label="[^"]+"/.test(b)),
+    "...both with accessible names", navButtons.join("  "));
+  ok(navButtons.every((b) => /aria-controls="hk-video-rail"/.test(b)),
+    "...both saying which region they move", navButtons.join("  "));
+  // Real <button>s, so Enter and Space and the disabled state are the
+  // browser's. A div with a click handler would have needed all three written
+  // out and would still not have been in the tab order.
+  ok(navButtons.every((b) => /^<button type="button"/.test(b)),
+    "...and both are real buttons", navButtons.join("  "));
+  // Previous ships disabled in the markup, so it is correct before any script
+  // has run — the rail is at its left edge from the first paint.
+  const prevBtn = navButtons.find((b) => /data-hk-rail="prev"/.test(b)) || "";
+  const nextBtn = navButtons.find((b) => /data-hk-rail="next"/.test(b)) || "";
+  ok(/\bdisabled\b/.test(prevBtn), "Previous is disabled in the markup itself", prevBtn);
+  ok(!/\bdisabled\b/.test(nextBtn), "...and Next is not", nextBtn);
+
+  ok((videosHtml.match(/<li class="hk-video">/g) || []).length === 9,
+    "all nine videos are in the rail — three are visible, none are dropped");
+  // The cards say they open a dialog now, rather than swapping themselves.
+  ok((videosHtml.match(/aria-haspopup="dialog"/g) || []).length === 9,
+    "every card announces that it opens a dialog");
+}
+
+// ============================================================
 // 5. CSS
 // ============================================================
 section("5. CSS");
@@ -1718,6 +2171,11 @@ ok(/\.hk-coach-photo\s*\{[^}]*display:\s*none/s.test(allCss) &&
   const verb = blocksOf(allCss, ".hk-soon-verb");
   ok(/line-height:\s*1\b/.test(verb),
     "the words' box is tight, so centring the box centres the glyphs");
+  // The verb's colour is no longer its own. It carries .hk-mark-text like the
+  // other five titles, and a `color` left behind here would shadow that class's
+  // measured solid fallback in exactly the browsers that need it.
+  ok(!/color:/.test(verb),
+    ".hk-soon-verb declares no colour of its own — .hk-mark-text owns it", verb);
 
   // ---- the gradient, and the fallback that must survive without it ----
   // The order is the safety property: `color` is set unconditionally and the
@@ -1749,14 +2207,14 @@ ok(/\.hk-coach-photo\s*\{[^}]*display:\s*none/s.test(allCss) &&
   ok(allCss.includes(gate), "...and that block was extracted whole");
   ok(/-webkit-text-fill-color:\s*transparent/.test(gate),
     "...and the transparent fill is inside that gate");
-  // ...and nowhere outside it. Scoped to this element: the sheet has other
+  // ...and nowhere outside it. Scoped to this class: the sheet has other
   // gradient-text rules of its own (the club wordmark's glow), and this is not
-  // a claim about them — it is a claim that THIS heading's transparent fill
+  // a claim about them — it is a claim that THIS class's transparent fill
   // cannot exist without the gradient that paints it.
   ok(!/-webkit-text-fill-color:\s*transparent/.test(
-       blocksOf(allCss.replace(gate, ""), ".hk-soon-verb")),
-    "...and this heading has no transparent fill outside that gate",
-    blocksOf(allCss.replace(gate, ""), ".hk-soon-verb"));
+       blocksOf(allCss.replace(gate, ""), ".hk-mark-text")),
+    "...and this class has no transparent fill outside that gate",
+    blocksOf(allCss.replace(gate, ""), ".hk-mark-text"));
   ok(/linear-gradient\(90deg,\s*#9aa5ff/.test(gate) && /#ff9ae8/.test(gate),
     "the dark ramp is the measured blue -> magenta one");
   ok(/linear-gradient\(90deg,\s*#1a1fd6/.test(gate) && /#9c0080/.test(gate),
@@ -1766,9 +2224,9 @@ ok(/\.hk-coach-photo\s*\{[^}]*display:\s*none/s.test(allCss) &&
   // The solid fallbacks are the WORST end of each theme's ramp, so a browser
   // that falls back gets a colour already measured at the gradient's own worst
   // number. contrast.mjs measures both.
-  ok(/\.hk-soon-verb\s*\{[^}]*color:\s*#9aa5ff/s.test(allCss),
+  ok(/\.hk-mark-text\s*\{[^}]*color:\s*#9aa5ff/s.test(allCss),
     "the dark fallback is the blue end, which is the dark ramp's worst point");
-  ok(/html\.light-mode \.hk-soon-verb\s*\{[^}]*color:\s*#9c0080/s.test(allCss),
+  ok(/html\.light-mode \.hk-mark-text\s*\{[^}]*color:\s*#9c0080/s.test(allCss),
     "the light fallback is the magenta end, which is the light ramp's worst point");
   // Forced colours throw the gradient away; without this the text would be
   // painted in a transparent fill with nothing behind it.
@@ -1777,8 +2235,8 @@ ok(/\.hk-coach-photo\s*\{[^}]*display:\s*none/s.test(allCss) &&
     "forced-colors hands the text back to the system colour");
   // The mark's raw colours measure 1.57:1 and 3.40:1 on this panel. Neither
   // may be used as the text colour, however tempting "the actual logo hex" is.
-  ok(!/\.hk-soon-verb[^{}]*\{[^}]*#0017ff/s.test(allCss) &&
-     !/\.hk-soon-verb[^{}]*\{[^}]*#f200c3/s.test(allCss),
+  ok(!/\.hk-mark-text[^{}]*\{[^}]*#0017ff/s.test(allCss) &&
+     !/\.hk-mark-text[^{}]*\{[^}]*#f200c3/s.test(allCss),
     "neither raw brand colour is used as text — both fail AA on this panel");
 }
 
@@ -1826,6 +2284,154 @@ ok(/\.hk-coach-photo\s*\{[^}]*display:\s*none/s.test(allCss) &&
     "the play cue's transition is switchable off");
 }
 
+// ---- the six section titles share one class, and are centred ----
+{
+  // ONE declaration of the ramp, not six. Counted: if somebody re-inlines the
+  // gradient onto a second heading this goes to two and this row turns red,
+  // which is the whole reason the class exists.
+  const darkRamp = allCss.match(/linear-gradient\(90deg,\s*#9aa5ff\s*0%,\s*#ff9ae8\s*100%\)/g) || [];
+  const lightRamp = allCss.match(/linear-gradient\(90deg,\s*#1a1fd6\s*0%,\s*#9c0080\s*100%\)/g) || [];
+  ok(darkRamp.length === 1,
+    `the dark ramp is declared exactly once (found ${darkRamp.length})`);
+  ok(lightRamp.length === 1,
+    `the light ramp is declared exactly once (found ${lightRamp.length})`);
+  // And the six headings themselves declare no colour, so none of them can
+  // shadow the class's measured solid fallback in the browsers that need it.
+  for (const sel of [".hk-story-h", ".hk-rounds-h", ".hk-videos-h", ".hk-thanks-h", ".hk-cta-h"]) {
+    const block = blocksOf(allCss, sel);
+    ok(block.length > 0, `${sel} has a rule`);
+    ok(!/(^|[;\s])color:/.test(block),
+      `${sel} declares no colour of its own — .hk-mark-text owns it`, block);
+    ok(/text-align:\s*center/.test(block),
+      `${sel} is centred on the page`, block);
+  }
+  // The gradient span is one box even when it wraps, or the ramp restarts on
+  // every line and a three-line heading reads as three gradients.
+  ok(/display:\s*inline-block/.test(blocksOf(allCss, ".hk-mark-text")),
+    ".hk-mark-text is one box, so a wrapped heading is still one gradient");
+  // The medal's opt-out is structural — it is a SIBLING of the gradient span —
+  // so .hk-h-emoji must not be trying to undo a clip it never inherits.
+  const emoji = blocksOf(allCss, ".hk-h-emoji");
+  ok(emoji.length > 0, ".hk-h-emoji has a rule");
+  ok(!/background-clip|text-fill-color/.test(emoji),
+    "...that undoes nothing: the medal is outside the gradient span, not fighting it", emoji);
+  ok(/white-space:\s*nowrap/.test(blocksOf(allCss, ".hk-nowrap")),
+    ".hk-nowrap keeps EduHackAI-5 whole across a line break");
+}
+
+// ---- the showcase rail ----
+{
+  const railCss = blocksOf(allCss, ".hk-video-rail");
+  ok(/overflow-x:\s*auto/.test(railCss),
+    "the rail is a real overflow container, so native scrolling is native");
+  ok(/scroll-snap-type:\s*x mandatory/.test(railCss), "...with scroll-snap on the x axis");
+  ok(/display:\s*flex/.test(railCss), "...laid out as a row");
+  ok(/scroll-behavior:\s*smooth/.test(railCss), "...and scrolling smoothly by default");
+  ok(/\.hk-video-rail:focus-visible\s*\{[^}]*outline/s.test(allCss),
+    "the rail is focusable, so it has a visible focus ring");
+  ok(/\.hk-video\s*\{[^}]*scroll-snap-align:\s*start/s.test(allCss),
+    "each card is a snap point");
+
+  // Reduced motion, both spellings — the OS setting and the site's own toggle.
+  ok(/\.hk-video-rail\s*\{\s*scroll-behavior:\s*auto/.test(rmMedia),
+    "prefers-reduced-motion turns the rail's smooth scroll off", rmMedia);
+  ok(/html\.reduce-motion \.hk-video-rail\s*\{[^}]*scroll-behavior:\s*auto/s.test(allCss),
+    "...and so does the site's own reduce-motion setting");
+
+  // ---- how many are visible, at each width ----
+  // The count is one custom property, so the three answers are three values of
+  // it and not three different layout mechanisms. A fractional value IS the
+  // peek: at 2.25 two cards are fully in view and a quarter of the next is not.
+  ok(/--hk-rail-show:\s*3\b/.test(railCss), "three cards across on a desktop", railCss);
+  const at900 = blocksOf(allCss, "@media (max-width: 900px)");
+  const at620 = blocksOf(allCss, "@media (max-width: 620px)");
+  ok(/--hk-rail-show:\s*2\.25/.test(at900),
+    "two, plus a quarter of the third peeking, at 900px and below", at900);
+  ok(/--hk-rail-show:\s*1\.15/.test(at620),
+    "one, plus a sliver of the second peeking, at 620px and below", at620);
+  // Fractional at the narrow widths and whole at the wide one — i.e. there IS a
+  // peek where the rail is not obviously a row, and none where it is.
+  ok(Number("2.25") % 1 !== 0 && Number("1.15") % 1 !== 0 && Number("3") % 1 === 0,
+    "the two narrow breakpoints peek and the desktop one does not");
+
+  // The card width is derived from that one property, and carries a flat
+  // fallback declared BEFORE it — so an engine that drops the calc still gets a
+  // working scroller rather than a collapsed row.
+  const cardCss = blocksOf(allCss, ".hk-video");
+  const flexes = cardCss.match(/flex:\s*0 0 [^;]+;/g) || [];
+  ok(flexes.length === 2, `.hk-video declares its width twice — fallback then calc`, cardCss);
+  ok(flexes.length === 2 && !/calc/.test(flexes[0]) && /calc/.test(flexes[1]),
+    "...in that order, so a browser that cannot do the calc keeps the fallback",
+    flexes.join("  "));
+  ok(flexes.length === 2 && /var\(--hk-rail-show\)/.test(flexes[1]),
+    "...and the calc is driven by --hk-rail-show", flexes.join("  "));
+
+  // No card is hidden at any width. Hiding one would be choosing which team's
+  // work does not matter.
+  ok(!/\.hk-video(\s*,|\s*\{)[^{}]*\{[^}]*display:\s*none/s.test(allCss),
+    "no video card is hidden at any breakpoint");
+
+  // The buttons' disabled state is styling only. pointer-events:none would
+  // also take them out of hover and away from a tooltip, and `disabled`
+  // already makes them unclickable.
+  const disabled = blocksOf(allCss, ".hk-rail-btn[disabled]");
+  ok(disabled.length > 0, "the disabled rail button has a rule of its own");
+  ok(!/pointer-events/.test(disabled),
+    "...that does not fake the disabling with pointer-events", disabled);
+  ok(/\.hk-rail-btn:focus-visible\s*\{[^}]*outline/s.test(allCss),
+    "the rail buttons have a visible focus ring");
+}
+
+// ---- the player dialog ----
+{
+  // The overlay, the backdrop and the scroll lock are SHARED with the interest
+  // dialog: the player carries class="hk-modal hk-vmodal", so there is one
+  // .hk-modal rule and one body.hk-modal-open, not two of each.
+  ok(/class="hk-modal hk-vmodal"/.test(pageHtml),
+    "the player reuses .hk-modal for its overlay rather than declaring a second one");
+  ok((allCss.match(/body\.hk-modal-open\s*\{/g) || []).length === 1,
+    "there is exactly one scroll-lock rule for both dialogs");
+  // One backdrop, in two themes — and no backdrop of the player's own. Counted
+  // this way round because "two rules" is correct here (dark and light) and
+  // what must not exist is a THIRD written for .hk-vmodal.
+  ok((allCss.match(/^\.hk-modal-backdrop\s*\{/gm) || []).length === 1,
+    "there is one unqualified backdrop rule, shared by both dialogs");
+  // The player RE-TINTS the shared backdrop — its title sits directly on it and
+  // light mode's 0.55 tint measured about 4.2:1 under white 16px text — but it
+  // must not restate the backdrop's geometry, or there would be two answers to
+  // where the backdrop is.
+  {
+    const vBack = blocksOf(allCss, ".hk-vmodal .hk-modal-backdrop");
+    ok(vBack.length > 0, "the player re-tints the shared backdrop");
+    ok(/background:/.test(vBack) && !/position|inset|backdrop-filter/.test(vBack),
+      "...and re-tints it only — position, inset and blur stay in the shared rule", vBack);
+    // The light-mode override has to out-specify html.light-mode
+    // .hk-modal-backdrop or it silently loses and the light dialog goes back to
+    // a 4.2:1 title.
+    ok(/html\.light-mode \.hk-vmodal \.hk-modal-backdrop/.test(allCss),
+      "...with a light-mode selector specific enough to win");
+  }
+
+  // NEVER TALLER THAN THE VIEWPORT. The height is capped by capping the WIDTH:
+  // a 16:9 box's height is its width times 9/16, so a width cap in vh units is
+  // a height cap that aspect-ratio cannot argue with.
+  const box = blocksOf(allCss, ".hk-vmodal-box");
+  const widths = box.match(/width:\s*[^;]+;/g) || [];
+  ok(widths.length === 3, `.hk-vmodal-box caps its width three times over`, box);
+  ok(/100vh/.test(box) && /100dvh/.test(box),
+    "...in both vh and dvh, so a phone's retracted URL bar is accounted for", box);
+  ok(box.indexOf("100vh") < box.indexOf("100dvh"),
+    "...with dvh last, so a browser that has it uses it", box);
+  ok(/16\s*\/\s*9/.test(box),
+    "...and the cap is derived from the player's own 16:9", box);
+  ok(/aspect-ratio:\s*16\s*\/\s*9/.test(blocksOf(allCss, ".hk-vmodal-media")),
+    "the media box inside it is 16:9");
+  ok(/width:\s*100%/.test(blocksOf(allCss, ".hk-vmodal-media")),
+    "...and fills the width it was given, so the whole thing is responsive");
+  ok(/\.hk-vmodal-media\s*\{[^}]*position:\s*relative/s.test(allCss),
+    "...and is the positioning context the frame sits in");
+}
+
 // Both themes define every medal token the cards read.
 for (const tier of ["gold", "silver", "bronze"]) {
   const dark = new RegExp(`\\.hk-medal\\.is-${tier}\\s*\\{`).test(allCss);
@@ -1843,6 +2449,7 @@ if (process.env.HK_DUMP) {
   console.log("\n---- story prose (below the tiles) ----\n" + storyHtml.replace(/></g, ">\n<"));
   console.log("\n---- demo videos ----\n" + videosHtml.replace(/></g, ">\n<"));
   console.log("\n---- coaches ----\n" + coachesHtml.replace(/></g, ">\n<"));
+  console.log("\n---- closing CTA ----\n" + ctaHtml.replace(/></g, ">\n<"));
 }
 console.log(`\n${checks} checks, ${failures} failing.`);
 process.exit(failures ? 1 : 0);

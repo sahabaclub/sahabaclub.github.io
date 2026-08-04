@@ -241,6 +241,16 @@
   var doneText = document.getElementById("hk-done-text");
   var formError = document.getElementById("hk-form-error");
 
+  // The showcase player dialog (static markup in hackathons.html, same as the
+  // interest dialog). Separate MARKUP — a player and a four-field form have
+  // nothing structural in common, and there is still exactly one <form> on this
+  // page — but the two share every behaviour, through makeModal() below.
+  var videoModal = document.getElementById("hk-video-modal");
+  var videoModalBox = videoModal ? videoModal.querySelector(".hk-vmodal-box") : null;
+  var videoModalTitle = document.getElementById("hk-video-modal-title");
+  var videoModalMedia = document.getElementById("hk-video-modal-media");
+  var videoModalClose = document.getElementById("hk-video-modal-close");
+
   var ROUNDS = [];          // every round, newest first
   var PAST = [];            // rounds with at least one date
   var SOON = [];            // rounds with no dates at all
@@ -253,7 +263,10 @@
   var openSlug = null;
 
   var interestRound = null; // the round the dialog is currently about
-  var lastFocus = null;     // the button that opened the dialog
+  // The element that opened a dialog is no longer tracked here. It lives on the
+  // controller makeModal() returns, one per dialog, because a single
+  // module-level `lastFocus` shared by two dialogs is a bug waiting for the day
+  // somebody opens the second one.
   var STATE = { name: "idle", already: false, message: "", fields: {} };
 
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -278,10 +291,41 @@
   // The play triangle drawn over a demo video's poster. Decoration: the button
   // it sits in already says "Play the demo video: <title>".
   var playIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8.5 5.6v12.8a1 1 0 0 0 1.53.85l10.1-6.4a1 1 0 0 0 0-1.7L10.03 4.75a1 1 0 0 0-1.53.85z"/></svg>';
+  // The showcase scroller's two buttons. Decoration again — each button carries
+  // its own aria-label, so a screen reader hears "Previous demo videos" and
+  // never "left chevron".
+  var chevronLeft = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m15 5-7 7 7 7"/></svg>';
+  var chevronRight = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m9 5 7 7-7 7"/></svg>';
 
   // ------------------------------------------------------------
   // Small helpers
   // ------------------------------------------------------------
+
+  // Every section title on this page is set in the EduHackAI mark's colours,
+  // and every one of them does it the same way: the WORDS go in a
+  // <span class="hk-mark-text">, and styles.css paints that one class.
+  //
+  // Why a span rather than the heading itself. background-clip: text clips a
+  // gradient to the glyphs of the box it is set on — including the glyphs of
+  // any child. Anything inside the heading that must NOT be painted (the
+  // showcase medal, which renders as a flat magenta silhouette when it is
+  // clipped — see markHeadingHtml's caller) simply stays outside this span.
+  // A heading-level rule would have had no way to opt anything out.
+  //
+  // Six headings use this. Six copies of the ramp, the solid fallback, the
+  // @supports gate and the forced-colors reset would have been six chances for
+  // one of them to drift; this is the one place any of it is written.
+  function markText(text) {
+    return '<span class="hk-mark-text">' + escapeHtml(text) + "</span>";
+  }
+
+  // "EduHackAI-5" must not break across lines at its hyphen. A hyphen is a
+  // line-break opportunity in CSS, so a narrow column is free to leave
+  // "EduHackAI-" on one line and "5" on the next; this keeps the token whole.
+  // It sits INSIDE .hk-mark-text so the gradient still runs through it.
+  function noWrap(text) {
+    return '<span class="hk-nowrap">' + escapeHtml(text) + "</span>";
+  }
 
   function escapeHtml(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -1240,7 +1284,10 @@
       '<section class="hk-soon" id="' + escapeHtml(round.slug) + '">' +
         '<p class="hk-soon-flag">The next round</p>' +
         '<h2 class="hk-soon-h"><span class="hk-soon-lockup">' + logo +
-          '<span class="hk-soon-verb">Coming Soon</span></span></h2>' +
+          // hk-mark-text is the shared class the other five section titles
+          // carry; hk-soon-verb keeps only this one's size, weight and tight
+          // line box. Two classes, two jobs, no colour written twice.
+          '<span class="hk-soon-verb hk-mark-text">Coming Soon</span></span></h2>' +
         (round.tagline ? '<p class="hk-soon-tagline">' + escapeHtml(round.tagline) + "</p>" : "") +
         desc +
         '<p class="hk-soon-note">The dates aren’t set yet. If you are interested to be with us, ' +
@@ -1270,7 +1317,7 @@
   // no rounds does not render a heading over nothing.
   function storyHeadingHtml(facts) {
     if (!facts || !facts.rounds) return "";
-    return '<h2 class="hk-story-h" id="hk-story-h">The EduHackAI story so far</h2>';
+    return '<h2 class="hk-story-h" id="hk-story-h">' + markText("EduHackAI Story") + "</h2>";
   }
 
   // Every number in this section comes out of storyFacts(), which computes it
@@ -1404,7 +1451,8 @@
   function coachesHtml(entries) {
     if (!entries || !entries.length) return "";
     return '<section class="hk-thanks" aria-labelledby="hk-thanks-h">' +
-      '<h2 class="hk-thanks-h" id="hk-thanks-h">Thanks to our coaches in EduHackAI journey</h2>' +
+      '<h2 class="hk-thanks-h" id="hk-thanks-h">' +
+        markText("Thank You to Our EduHackAI Coaches") + "</h2>" +
       '<div class="hk-coach-grid">' + entries.map(coachCardHtml).join("") + "</div>" +
     "</section>";
   }
@@ -1426,7 +1474,7 @@
   }
 
   // ------------------------------------------------------------
-  // Demo videos
+  // 🥇 Project Showcase — the demo videos
   // ------------------------------------------------------------
   //
   // WHY THERE ARE NO IFRAMES IN THIS MARKUP.
@@ -1436,8 +1484,9 @@
   // pressed anything, on a page that already loads a starfield canvas, the
   // Supabase client, twelve logo files and nine coach photographs. So each
   // video renders as a FAÇADE: the poster image, a play button, and nothing
-  // else. The <iframe> is created by playVideo() at the moment somebody presses
-  // the button, and never before.
+  // else. The <iframe> is created when somebody presses one, and never before —
+  // and, since the player moved into a dialog, it is DESTROYED again the moment
+  // that dialog closes. See videoDialog below.
   //
   // Two consequences worth being explicit about:
   //
@@ -1452,8 +1501,12 @@
   // The poster is hqdefault.jpg, which YouTube serves at a real 480x360. Those
   // are the width/height on the <img>, so the box is the right shape before the
   // file arrives and nothing on the page moves when it does. CSS crops it to
-  // 16:9 inside a fixed-ratio frame, so the swap to the iframe — which is 16:9
-  // — costs no reflow either.
+  // 16:9 inside a fixed-ratio frame.
+  //
+  // The cards are laid out as a horizontal scroll-snap RAIL rather than a grid:
+  // three visible at a time on a desktop, two on a tablet and one on a phone,
+  // with the next card peeking at the narrower two so it is visible that there
+  // is more. See wireRail() and .hk-video-rail in styles.css.
 
   // Ids go into a URL and into an id-ish attribute, so anything that is not a
   // YouTube id character is dropped rather than escaped. A surprising id can
@@ -1475,9 +1528,15 @@
         // nine buttons reading "Play" would be nine identical announcements.
         // The <img> carries the title as its alt as well, so the thumbnail is
         // named in its own right wherever it is read outside the button.
+        //
+        // aria-haspopup="dialog" is the honest description of what happens now:
+        // the card no longer swaps itself for a player, it opens the dialog at
+        // the bottom of hackathons.html. Somebody who cannot see the overlay
+        // appear is told before they press it.
         '<button type="button" class="hk-video-play"' +
           ' data-hk-video="' + id + '"' +
           ' data-hk-title="' + t + '"' +
+          ' aria-haspopup="dialog"' +
           ' aria-label="' + escapeHtml("Play the demo video: " + title) + '">' +
           '<img class="hk-video-thumb" src="https://i.ytimg.com/vi/' + id + '/hqdefault.jpg"' +
             ' alt="' + t + '" loading="lazy" width="480" height="360">' +
@@ -1489,14 +1548,64 @@
     "</li>";
   }
 
+  // THE HEADING'S MEDAL IS OUTSIDE THE GRADIENT, DELIBERATELY.
+  //
+  // 🥇 is a colour glyph: the font supplies its own gold, red and white. A
+  // background-clip: text fill does not tint text, it MASKS a gradient with the
+  // glyph coverage — so an emoji inside .hk-mark-text stops being a medal and
+  // becomes a flat magenta silhouette of one, in every engine that supports the
+  // property. (This is stated from how the property is specified to composite,
+  // not from having watched it here; see the report — it wants one look in a
+  // browser to confirm the shape of the failure, not whether to avoid it.)
+  //
+  // So the medal is its own sibling span and never enters the clipped box. It
+  // keeps its own colours, and the gradient runs across "Project Showcase".
+  //
+  // It is also aria-hidden. A heading whose accessible name is "1st place medal
+  // Project Showcase" reads the ornament out as a word; the name is left as
+  // "Project Showcase", which is what the section is called. The medal is still
+  // in the visible heading text, exactly as asked — it is hidden from the
+  // accessibility tree, not from the page.
+  function showcaseHeadingHtml() {
+    return '<h2 class="hk-videos-h" id="hk-videos-h">' +
+      '<span class="hk-h-emoji" aria-hidden="true">🥇</span>' +
+      markText("Project Showcase") +
+    "</h2>";
+  }
+
   function videosHtml(list) {
-    var items = (list || []).map(videoHtml).join("");
+    var videos = list || [];
+    var items = videos.map(videoHtml).join("");
     if (!items) return "";
+    // The label says what the region is and how to move through it, because a
+    // horizontal scroller is the one control on this page whose affordance is
+    // invisible to somebody who cannot see the card peeking off the right edge.
+    var railLabel = videos.length + " demo videos — scroll sideways, " +
+      "or use the previous and next buttons";
     return '<section class="hk-videos" aria-labelledby="hk-videos-h">' +
-      '<h2 class="hk-videos-h" id="hk-videos-h">Demo videos</h2>' +
+      showcaseHeadingHtml() +
       '<p class="hk-videos-intro">What the teams built, shown by the people who built it. ' +
-        "Pressing a thumbnail loads that video&rsquo;s player and nothing else.</p>" +
-      '<ul class="hk-video-grid">' + items + "</ul>" +
+        "Pressing a thumbnail opens that video in a player; nothing loads until you do.</p>" +
+      // Real buttons, not divs with click handlers: they are in the tab order,
+      // they take Enter and Space for free, and `disabled` is a state a screen
+      // reader already knows how to announce. wireRail() keeps that state
+      // truthful as the rail is scrolled by ANY means — button, wheel, touch,
+      // arrow key or scrollbar.
+      '<div class="hk-rail-nav">' +
+        '<button type="button" class="hk-rail-btn" data-hk-rail="prev"' +
+          ' aria-controls="hk-video-rail" aria-label="Previous demo videos" disabled>' +
+          chevronLeft + "</button>" +
+        '<button type="button" class="hk-rail-btn" data-hk-rail="next"' +
+          ' aria-controls="hk-video-rail" aria-label="Next demo videos">' +
+          chevronRight + "</button>" +
+      "</div>" +
+      // tabindex="0" makes the scroller itself reachable, and a focused scroll
+      // container is scrolled by the arrow keys by the browser — no key handler
+      // of ours, and therefore nothing of ours that can swallow a key somebody
+      // meant for the page. It stays a <ul>: the list semantics are worth more
+      // than a role="region" would be, and a <ul> takes aria-label as it is.
+      '<ul class="hk-video-rail" id="hk-video-rail" tabindex="0"' +
+        ' aria-label="' + escapeHtml(railLabel) + '">' + items + "</ul>" +
       '<p class="hk-videos-more">' +
         '<a class="hk-videos-link" href="' + escapeHtml(PLAYLIST_URL) + '"' +
           ' target="_blank" rel="noopener noreferrer">' +
@@ -1505,39 +1614,119 @@
     "</section>";
   }
 
-  // The click-to-play swap. The button is replaced by the frame INSIDE its
-  // .hk-video-media wrapper, so the card's geometry is the wrapper's and does
-  // not depend on which of the two is currently in it.
+  // ------------------------------------------------------------
+  // The showcase scroller
+  // ------------------------------------------------------------
   //
-  // Focus moves to the frame afterwards, because the element that had focus has
-  // just been removed from the document and focus would otherwise fall back to
-  // <body> — a keyboard user would press play and lose their place on a page
-  // this long.
-  function playVideo(btn) {
-    if (!btn || !btn.parentNode) return;
-    var id = safeVideoId(btn.getAttribute("data-hk-video"));
-    if (!id) return;
-    var title = btn.getAttribute("data-hk-title") || "";
-    var media = btn.parentNode;
-    // autoplay is honest here: this runs from the reader's own click, so the
-    // thing that starts playing is the thing they just pressed.
-    media.innerHTML =
-      '<iframe class="hk-video-frame"' +
-        ' src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&amp;rel=0"' +
-        ' title="' + escapeHtml(title) + '"' +
-        ' width="480" height="270" loading="lazy"' +
-        ' allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"' +
-        " allowfullscreen></iframe>";
-    var frame = media.querySelector ? media.querySelector("iframe") : null;
-    if (frame && frame.focus) frame.focus();
+  // CSS scroll-snap does the scrolling. There is no timer, no transform, no
+  // wheel listener and no touch listener anywhere in here — the rail is an
+  // ordinary overflow-x container, so the wheel, a trackpad swipe, a touch
+  // drag, the scrollbar and the arrow keys all keep working exactly as the
+  // browser implements them. This code only does the two things CSS cannot:
+  // move the rail by one card when a button is pressed, and keep the two
+  // buttons' disabled state honest.
+
+  // Which edge the rail is against. A pure function of three numbers, so the
+  // button state is decided by something the harness can test without a
+  // browser — and so the 1px of slack below is one number in one place.
+  //
+  // The slack is not cosmetic. Card widths are fractional (a third of the rail,
+  // less two gaps), scrollWidth and clientWidth are rounded integers, and on a
+  // display whose device-pixel-ratio is not 1 a rail scrolled fully right can
+  // sit a fraction of a pixel short of its own maximum. Without the slack the
+  // Next button never disables — which is worse than no button, because it is a
+  // control that says there is more when there is not.
+  function railEdges(scrollLeft, scrollWidth, clientWidth) {
+    var max = Math.max(0, scrollWidth - clientWidth);
+    var x = Math.min(Math.max(scrollLeft, 0), max);
+    return { atStart: x <= 1, atEnd: x >= max - 1 };
   }
 
-  if (videosEl && videosEl.addEventListener) {
-    videosEl.addEventListener("click", function (e) {
-      if (!e.target || !e.target.closest) return;
-      var btn = e.target.closest("[data-hk-video]");
-      if (btn) playVideo(btn);
+  // Reduced motion, from both places this site records it: the checkbox in the
+  // site's own settings (html.reduce-motion) and the OS setting. Either one is
+  // enough. CSS handles the scrollbar-dragged and keyboard cases via
+  // scroll-behavior; this is the button case, where the behaviour is an
+  // argument to scrollBy() and CSS does not get a say.
+  function railBehavior() {
+    var root = document.documentElement;
+    if (root && root.classList && root.classList.contains("reduce-motion")) return "auto";
+    if (window.matchMedia) {
+      var mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      if (mq && mq.matches) return "auto";
+    }
+    return "smooth";
+  }
+
+  // One card plus one gap, MEASURED off the laid-out rail rather than restated
+  // from the stylesheet. The gap and the cards-per-view both change at
+  // breakpoints, and a number copied out of styles.css into here would be a
+  // number that silently stops matching.
+  function railStep(rail) {
+    var cards = rail.querySelectorAll ? rail.querySelectorAll(".hk-video") : [];
+    if (cards.length > 1) return cards[1].offsetLeft - cards[0].offsetLeft;
+    if (cards.length === 1) return cards[0].offsetWidth;
+    return Math.round((rail.clientWidth || 0) * 0.9);
+  }
+
+  function railParts(root) {
+    var scope = root || document;
+    if (!scope.querySelector) return null;
+    var rail = scope.querySelector(".hk-video-rail");
+    if (!rail) return null;
+    return {
+      rail: rail,
+      prev: scope.querySelector('[data-hk-rail="prev"]'),
+      next: scope.querySelector('[data-hk-rail="next"]')
+    };
+  }
+
+  function paintRail(parts) {
+    if (!parts || !parts.rail) return;
+    var e = railEdges(parts.rail.scrollLeft || 0, parts.rail.scrollWidth || 0, parts.rail.clientWidth || 0);
+    if (parts.prev) parts.prev.disabled = e.atStart;
+    if (parts.next) parts.next.disabled = e.atEnd;
+  }
+
+  function wireRail(root) {
+    var parts = railParts(root);
+    if (!parts || !parts.rail.addEventListener) return;
+    paintRail(parts);
+    // Repainted from the SCROLL event rather than from the click, so the state
+    // is right however the rail moved — a touch drag and a wheel flick change
+    // the same two buttons a press does.
+    parts.rail.addEventListener("scroll", function () { paintRail(parts); });
+    if (window.addEventListener) {
+      window.addEventListener("resize", function () { paintRail(parts); });
+    }
+    [["prev", -1], ["next", 1]].forEach(function (pair) {
+      var btn = parts[pair[0]];
+      if (!btn || !btn.addEventListener) return;
+      btn.addEventListener("click", function () {
+        if (btn.disabled) return;
+        if (!parts.rail.scrollBy) return;
+        parts.rail.scrollBy({ left: pair[1] * railStep(parts.rail), behavior: railBehavior() });
+      });
     });
+  }
+
+  // The player's markup, built at the moment the dialog opens.
+  //
+  // autoplay=1 is honest here for the same reason it always was: this is only
+  // ever reached from the reader's own click, so the thing that starts playing
+  // is the thing they just pressed. youtube-nocookie.com for the same reason it
+  // always was too — the player that loads is the one that does not write a
+  // tracking cookie for a visitor who has not signed in to Google.
+  //
+  // No loading="lazy": this frame is created in order to be watched immediately,
+  // and a lazy frame inside a dialog that has just been revealed is a frame that
+  // may not have started fetching when the visitor expects sound.
+  function videoFrameHtml(id, title) {
+    return '<iframe class="hk-video-frame"' +
+      ' src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&amp;rel=0"' +
+      ' title="' + escapeHtml(title) + '"' +
+      ' width="960" height="540"' +
+      ' allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"' +
+      " allowfullscreen></iframe>";
   }
 
   // ------------------------------------------------------------
@@ -1548,10 +1737,20 @@
   // one thing that opens it, so there is no second form and no second dialog —
   // and openInterest() records whichever button was pressed, so Escape or
   // Close returns focus to this one when this one is what opened it.
+  // The round's NAME is still the database's, not a string typed in here — the
+  // heading reads "Your AI Journey Starts with EduHackAI-5" because the row
+  // that has no dates is called EduHackAI-5, and it will read whatever that row
+  // is called next time. Only the sentence around it is written here.
+  //
+  // The name is wrapped in .hk-nowrap so "EduHackAI-5" cannot be split at its
+  // hyphen; the whole line is inside .hk-mark-text so the gradient runs across
+  // the sentence and the name together rather than restarting at the name.
   function ctaHtml(round) {
     if (!round) return "";
     return '<section class="hk-cta" aria-labelledby="hk-cta-h">' +
-      '<h2 class="hk-cta-h" id="hk-cta-h">Be with us in ' + escapeHtml(round.name) + "</h2>" +
+      '<h2 class="hk-cta-h" id="hk-cta-h">' +
+        '<span class="hk-mark-text">Your AI Journey Starts with ' +
+          noWrap(round.name) + "</span></h2>" +
       '<p class="hk-cta-text">The dates aren’t set yet. Leave your details and we’ll let you know ' +
         "the moment it’s scheduled — and you’ll get the early bird discount when registration opens.</p>" +
       '<div class="hk-cta-actions">' +
@@ -1808,45 +2007,179 @@
     }
   }
 
-  function focusableInBox() {
-    if (!modalBox) return [];
-    var nodes = modalBox.querySelectorAll(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  // ============================================================
+  // Modal behaviour, once, for both dialogs
+  // ------------------------------------------------------------
+  // There are two dialogs on this page — the interest form and the showcase
+  // player — and they share every behaviour that is easy to get subtly wrong:
+  // the focus trap, Escape, the background scroll lock, and returning focus to
+  // whatever opened it. All of that is HERE, once. The two dialogs differ only
+  // in their markup and in what they put inside themselves when they open,
+  // which is what makeModal()'s three hooks are for.
+  //
+  // Writing the player a second focus trap of its own was the obvious cheap
+  // option and is the reason this comment exists: two implementations of the
+  // same rule drift, and the half that drifts is usually the one nobody opens
+  // in a screen reader.
+  //
+  // The open dialogs are a STACK rather than a flag. Nothing on this page opens
+  // one dialog from inside another today, but "which dialog does Escape close"
+  // and "when is the scroll lock released" both need an answer that survives
+  // it: Escape closes the topmost, and the lock lifts when the last one closes.
+  // ============================================================
+
+  var openModals = [];
+
+  function topModal() {
+    return openModals.length ? openModals[openModals.length - 1] : null;
+  }
+
+  // `iframe` is in this list and was not in the one this replaced, because the
+  // player is the first thing in either dialog that HAS an iframe. An iframe is
+  // in the browser's own tab order — Tab moves into it and then through the
+  // YouTube player's controls — so leaving it out of the trap would have wrapped
+  // focus from the close button straight back to the close button and locked a
+  // keyboard user out of the play, seek and fullscreen controls of the video
+  // they just opened. A focus trap that traps somebody away from the content is
+  // worse than none.
+  function focusableIn(box) {
+    if (!box || !box.querySelectorAll) return [];
+    var nodes = box.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])'
     );
     return Array.prototype.filter.call(nodes, function (el) {
       return el.getClientRects().length > 0;
     });
   }
 
-  function openInterest(round, opener) {
-    if (!modal) return;
-    interestRound = round;
-    lastFocus = opener || document.activeElement;
+  // opts.onOpen   — fill the dialog in. Runs BEFORE it is revealed, so nothing
+  //                 half-built is ever on screen.
+  // opts.onClose  — tear it down. Runs AFTER it is hidden and BEFORE focus is
+  //                 restored, which is what lets the player destroy its iframe
+  //                 without the focus move landing inside a dying frame.
+  // opts.focusOn  — what to focus once it is open.
+  function makeModal(root, box, opts) {
+    if (!root) return null;
+    opts = opts || {};
+    var api = {
+      root: root,
+      box: box,
+      lastFocus: null,
+      isOpen: function () { return root.hidden === false; },
+      open: function (opener) {
+        // Opening one that is ALREADY open refills it rather than doing
+        // nothing: the interest dialog can be asked for a different round and
+        // the player for a different video, and "refuse, and leave the old
+        // contents up" would be the wrong answer to both. Only the stack entry
+        // is guarded, because pushing twice would need closing twice.
+        var already = api.isOpen();
+        // Recorded BEFORE anything is focused, so it is the element the visitor
+        // actually pressed and not something this function moved focus to.
+        api.lastFocus = opener || document.activeElement;
+        if (opts.onOpen) opts.onOpen();
+        root.hidden = false;
+        if (!already) openModals.push(api);
+        document.body.classList.add("hk-modal-open");
+        var target = opts.focusOn ? opts.focusOn() : null;
+        if (target && target.focus) target.focus();
+      },
+      close: function () {
+        if (!api.isOpen()) return;
+        root.hidden = true;
+        openModals = openModals.filter(function (m) { return m !== api; });
+        // Only when the LAST one closes: releasing it per-dialog would unlock
+        // the page behind a dialog that is still open.
+        if (!openModals.length) document.body.classList.remove("hk-modal-open");
+        if (opts.onClose) opts.onClose();
+        var back = api.lastFocus;
+        api.lastFocus = null;
+        if (back && back.focus) back.focus();
+      }
+    };
+    return api;
+  }
 
-    if (modalIntro) {
-      modalIntro.textContent = round.name + " does not have its dates yet. Leave your details and we " +
-        "will let you know the moment it is scheduled — and you will get the early bird discount " +
-        "when registration opens.";
+  var interestDialog = makeModal(modal, modalBox, {
+    onOpen: function () {
+      if (modalIntro && interestRound) {
+        modalIntro.textContent = interestRound.name + " does not have its dates yet. Leave your " +
+          "details and we will let you know the moment it is scheduled — and you will get the " +
+          "early bird discount when registration opens.";
+      }
+      // A reopen after a success starts clean; a reopen after a failure keeps
+      // whatever the visitor had already typed.
+      resetDialog(STATE.name === "done");
+    },
+    onClose: function () {
+      if (STATE.name === "done") resetDialog(true);
+    },
+    focusOn: function () {
+      return fieldInput("full_name") || modalTitle;
     }
-    // A reopen after a success starts clean; a reopen after a failure keeps
-    // whatever the visitor had already typed.
-    resetDialog(STATE.name === "done");
+  });
 
-    modal.hidden = false;
-    document.body.classList.add("hk-modal-open");
-
-    var first = fieldInput("full_name");
-    if (first && first.focus) first.focus();
-    else if (modalTitle && modalTitle.focus) modalTitle.focus();
+  function openInterest(round, opener) {
+    if (!interestDialog) return;
+    interestRound = round;
+    interestDialog.open(opener);
   }
 
   function closeInterest() {
-    if (!modal || modal.hidden) return;
-    modal.hidden = true;
-    document.body.classList.remove("hk-modal-open");
-    if (STATE.name === "done") resetDialog(true);
-    if (lastFocus && lastFocus.focus) lastFocus.focus();
-    lastFocus = null;
+    if (interestDialog) interestDialog.close();
+  }
+
+  // ---- the showcase player ----
+  //
+  // WHAT THE DIALOG HOLDS BETWEEN OPENINGS: nothing. The <iframe> is built by
+  // onOpen and the host is EMPTIED by onClose, so a closed dialog contains no
+  // player at all.
+  //
+  // That is the whole point rather than tidiness. Hiding a dialog that still
+  // contains a YouTube frame leaves the video playing — audible, from nowhere
+  // the visitor can see — and leaves the player's connection open behind a
+  // dialog they believe they closed. `hidden` stops neither. Removing the
+  // element does both, and it is what tools/hackathons-checks/check.mjs
+  // asserts after every close.
+  var pendingVideo = null;
+
+  var videoDialog = makeModal(videoModal, videoModalBox, {
+    onOpen: function () {
+      // The dialog's accessible name IS the video's title: aria-labelledby
+      // points at this heading and this heading is rewritten per video, so the
+      // dialog announces "EduHackAI-2 Winner Solution (Clever Mart), dialog"
+      // rather than "Video player, dialog" nine times.
+      if (videoModalTitle) videoModalTitle.textContent = pendingVideo ? pendingVideo.title : "";
+      if (videoModalMedia) {
+        videoModalMedia.innerHTML = pendingVideo
+          ? videoFrameHtml(pendingVideo.id, pendingVideo.title)
+          : "";
+      }
+    },
+    onClose: function () {
+      if (videoModalMedia) videoModalMedia.innerHTML = "";
+      pendingVideo = null;
+    },
+    // The close button rather than the frame. Focus inside a cross-origin
+    // iframe is focus this page can no longer see or move, and a visitor who
+    // opened a dialog needs the way out to be the first thing under their
+    // hands. The trap keeps them in the dialog; the frame is one Tab away.
+    focusOn: function () { return videoModalClose; }
+  });
+
+  function openVideo(btn) {
+    if (!btn || !videoDialog) return;
+    var id = safeVideoId(btn.getAttribute("data-hk-video"));
+    if (!id) return;
+    pendingVideo = { id: id, title: btn.getAttribute("data-hk-title") || "" };
+    videoDialog.open(btn);
+  }
+
+  if (videosEl && videosEl.addEventListener) {
+    videosEl.addEventListener("click", function (e) {
+      if (!e.target || !e.target.closest) return;
+      var btn = e.target.closest("[data-hk-video]");
+      if (btn) openVideo(btn);
+    });
   }
 
   // supabase-js turns any non-2xx into a FunctionsHttpError and keeps the
@@ -1942,27 +2275,33 @@
       return;
     }
 
-    if (modal && !modal.hidden && e.target.closest("[data-hk-dismiss]")) closeInterest();
+    // One rule for both dialogs: the backdrop, the round × and the Cancel and
+    // Close buttons all carry data-hk-dismiss, and it closes whichever dialog
+    // is on top.
+    var open = topModal();
+    if (open && e.target.closest("[data-hk-dismiss]")) open.close();
   });
 
-  // Escape and the focus trap are bound at the document, not the dialog, so
-  // they still work if focus ever ends up outside the box.
+  // Escape and the focus trap are bound at the document, not at either dialog,
+  // so they still work if focus ever ends up outside the box — and so there is
+  // one implementation of them rather than one per dialog.
   document.addEventListener("keydown", function (e) {
-    if (!modal || modal.hidden) return;
+    var top = topModal();
+    if (!top) return;
 
     if (e.key === "Escape") {
       e.preventDefault();
-      closeInterest();
+      top.close();
       return;
     }
     if (e.key !== "Tab") return;
 
-    var list = focusableInBox();
+    var list = focusableIn(top.box);
     if (!list.length) { e.preventDefault(); return; }
     var first = list[0];
     var last = list[list.length - 1];
     var active = document.activeElement;
-    var inside = modalBox && modalBox.contains(active);
+    var inside = top.box && top.box.contains(active);
 
     if (e.shiftKey && (active === first || !inside)) {
       e.preventDefault();
@@ -2038,7 +2377,15 @@
     countriesForRounds: countriesForRounds,
     demoVideos: DEMO_VIDEOS,
     playlistUrl: PLAYLIST_URL,
-    safeVideoId: safeVideoId
+    safeVideoId: safeVideoId,
+    // The scroller's one rule, and the player's one string. Both are exposed
+    // for the same reason: they are the parts of a browser feature that can be
+    // decided without a browser, so they are the parts the harness can hold.
+    railEdges: railEdges,
+    railBehavior: railBehavior,
+    videoFrameHtml: videoFrameHtml,
+    markText: markText,
+    noWrap: noWrap
   };
 
   // The hero's brand mark is static markup, so it is wired straight away
@@ -2052,7 +2399,13 @@
   // nothing to do with the archive disappear whenever the archive failed to
   // load — and the posters are lazy, so rendering them early costs nothing
   // until they scroll into view.
-  if (videosEl) videosEl.innerHTML = videosHtml(DEMO_VIDEOS);
+  if (videosEl) {
+    videosEl.innerHTML = videosHtml(DEMO_VIDEOS);
+    // Wired straight after the markup exists, for the same reason: the rail
+    // does not wait on the archive either. paintRail() runs inside this, so the
+    // Previous button is already correctly disabled before the first frame.
+    wireRail(videosEl);
+  }
 
   setStatus("Loading the EduHackAI archive…", false);
 

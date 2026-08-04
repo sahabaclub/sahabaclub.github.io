@@ -67,18 +67,24 @@
     color: var(--text-muted);
   }
 
-  /* ---- "Details of previous rounds:" ----
+  /* ---- "EduHackAI History" ----
      Names the filter chips, the search box and the round cards under them.
      Sized between the story heading above it (25px) and the round names inside
      the cards (30px), so the page's heading sizes still descend in the order
-     the sections nest. */
+     the sections nest.
+
+     No `color`: the words are in a .hk-mark-text span, and that class — in
+     styles.css, shared by all six section titles — decides their colour. A
+     `color` here would be dead in every browser that paints the gradient and
+     WRONG in the ones that do not, because the fallback it would shadow is a
+     measured brand colour rather than --text. */
   .hk-rounds-h {
     margin: 26px 0 12px;
     font-size: 21px;
     font-weight: 800;
     line-height: 1.25;
     letter-spacing: -0.015em;
-    color: var(--text);
+    text-align: center;
   }
 
   /* ---- Round jump links + search ---- */
@@ -826,8 +832,16 @@
          every round card. Static rather than rendered, because the toolbar it
          labels is static too — the jump links and the search field are in this
          file, and a heading that appeared only after a fetch would leave them
-         unlabelled for as long as the fetch took. -->
-    <h2 class="hk-rounds-h">Details of previous rounds:</h2>
+         unlabelled for as long as the fetch took.
+
+         The .hk-mark-text span is the shared gradient class every section title
+         on this page uses. It is written by hand here for the same reason the
+         heading is: this heading is static markup, so it cannot come out of
+         markText() in hackathons-ui.js. The class is the contract; the six
+         headings agree on it, and styles.css is the only place the colours,
+         the solid fallback, the @supports gate and the forced-colors reset are
+         written. tools/hackathons-checks/check.mjs asserts all six carry it. -->
+    <h2 class="hk-rounds-h"><span class="hk-mark-text">EduHackAI History</span></h2>
 
     <div class="hk-toolbar">
       <nav class="hk-jump" id="hack-jump" aria-label="Jump to a round"></nav>
@@ -860,7 +874,11 @@
          image plus a play button, and hackathons-ui.js builds a
          youtube-nocookie.com frame only when one is pressed — nine embedded
          players on a page that already loads this much would be nine player
-         bundles and nine tracking cookies nobody asked for. -->
+         bundles and nine tracking cookies nobody asked for.
+
+         The nine cards render as a horizontal scroll-snap rail, not a grid:
+         three visible at once on a desktop, two on a tablet and one on a phone.
+         Pressing one opens the player dialog at the bottom of this file. -->
     <div id="hack-videos"></div>
 
     <!-- Coaches across the whole programme, deduplicated: one card per
@@ -988,6 +1006,48 @@
         <button type="button" class="btn btn-glow" data-hk-dismiss>Close</button>
       </div>
     </div>
+
+  </div>
+</div>
+
+<!-- ============================================================
+     Showcase player dialog
+     ------------------------------------------------------------
+     The second dialog on this page, and the LAST — pressing a card in the
+     Project Showcase opens this one, and it is the only thing that plays a
+     video now. The cards no longer swap themselves for a player.
+
+     SEPARATE MARKUP, SHARED BEHAVIOUR. It reuses .hk-modal for the overlay,
+     the backdrop and the scroll lock, and it reuses the interest dialog's
+     focus trap, its Escape handling and its focus restoration — through
+     makeModal() in hackathons-ui.js, which both dialogs are built from. What
+     it does NOT reuse is the interest dialog's insides: a player and a
+     four-field form have nothing structural in common, and copying the form
+     here would have put a SECOND <form> on this page. There is exactly one,
+     and check.mjs counts them.
+
+     THE PLAYER IS NOT IN THIS FILE. #hk-video-modal-media is empty and stays
+     empty. hackathons-ui.js builds a youtube-nocookie.com <iframe> into it
+     when the dialog opens and empties it again when the dialog closes — a
+     hidden frame keeps playing and keeps its connection open, so the frame has
+     to actually leave the document, not just be covered up.
+
+     The heading is the dialog's accessible name (aria-labelledby), and its
+     text is rewritten to the title of whichever video was pressed. It carries
+     tabindex="-1" so it can be focused; the close button is what actually
+     takes focus on open, because focus inside a cross-origin frame is focus
+     this page can no longer move.
+     ============================================================ -->
+<div class="hk-modal hk-vmodal" id="hk-video-modal" hidden>
+  <div class="hk-modal-backdrop" data-hk-dismiss></div>
+  <div class="hk-vmodal-box" role="dialog" aria-modal="true"
+       aria-labelledby="hk-video-modal-title">
+
+    <button type="button" class="hk-modal-close hk-vmodal-close" id="hk-video-modal-close"
+            data-hk-dismiss aria-label="Close the video">&times;</button>
+
+    <h2 class="hk-vmodal-title" id="hk-video-modal-title" tabindex="-1"></h2>
+    <div class="hk-vmodal-media" id="hk-video-modal-media"></div>
 
   </div>
 </div>
