@@ -1159,6 +1159,34 @@ a.card-arena:hover {
 }
 a.card-arena:hover .card-icon { box-shadow: 0 10px 26px var(--arena-glow); }
 
+/* The ecosystem's "Coming soon" pill. Five of the eight cards carry it, so it
+   is deliberately quiet: it marks what is NOT ready, and a badge that shouts
+   would give the unreleased half more weight on the page than the half people
+   can actually use. Same neutral ink as the card's own body text, on the
+   card's own surface — no accent, no second colour system.
+
+   PromptArena used to have an ember-coloured version of its own. Singling it
+   out said "this one is special" when what it actually is, is "this one is not
+   ready" — which is exactly what Coaching, ZuZu-AI, Low-Code and Vibe-Code
+   are too. One badge, one meaning. */
+.card-soon {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+html.light-mode .card-soon {
+  background: rgba(15, 22, 41, 0.05);
+  color: var(--text-secondary);
+}
+
 /* "Free to play" is the whole pitch: every signed-in member gets in, there is
    no tier gate, and saying so is what turns a link into an invitation. */
 .card-arena-badge {
