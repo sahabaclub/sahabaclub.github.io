@@ -246,6 +246,49 @@
     background: rgba(34, 197, 94, 0.13);
   }
 
+  /* ---- The round's key figures ----
+     Their own row under the mode / venue chips rather than four more chips in
+     that row. Seven chips in one wrapping flex row at 375px read as one
+     undifferentiated block four lines deep, in which "Online" and
+     "40 EduHackers" were the same object at the same weight. Two short rows
+     answer two different questions and each of them fits.
+
+     Inside the chip the number carries the weight and the noun sits beside it
+     muted, so a row of four reads as a set of counts. The figures are set in
+     tabular numerals, which is what keeps 5 / 8 / 40 / 6 from looking like
+     ransom-note spacing next to each other. */
+  .hk-figures { margin-top: 6px; gap: 5px; }
+  .hk-chip.is-figure {
+    gap: 5px;
+    padding: 3px 11px 3px 9px;
+  }
+  .hk-chip-n {
+    font-size: 13.5px;
+    font-weight: 800;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+  }
+  .hk-chip-noun {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  /* At phone widths the two rows are what stops this becoming a wall, so the
+     figure chips are tightened rather than dropped — every one of them is a
+     number Ahmed asked to be readable at a glance, and hiding one on a small
+     screen would be choosing which of his figures does not matter. At these
+     sizes the four of them wrap to two short lines inside a 375px viewport
+     rather than to four, which is what they did at full chip size. */
+  @media (max-width: 420px) {
+    .hk-figures { gap: 4px; }
+    .hk-chip.is-figure { padding: 2px 9px 2px 8px; gap: 4px; }
+    .hk-chip-n { font-size: 12.5px; }
+    .hk-chip-noun { font-size: 11px; }
+  }
+
   /* ---- Placings ----
      The flat .hk-podium strip that used to live here is gone: winners now
      render as the gold / silver / bronze medal cards in styles.css. What

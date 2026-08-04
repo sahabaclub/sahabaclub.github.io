@@ -81,13 +81,73 @@ for (const rel of files) {
     if (m) late.push({ line: i + 1, name: m[1] });
   }
 
+  // ---- inside a top-level IIFE ----
+  //
+  // A file whose entire body is `(function () { ... })()` passed the check
+  // above VACUOUSLY: its only column-0 statement is the IIFE opener, and every
+  // declaration it contains is indented, so the loop above can never find one.
+  // That is the silent pass this file exists to stop, one level down —
+  // `hackathons-ui.js` is exactly that shape, and its config objects, its
+  // module bindings and everything that reads them all live inside the IIFE
+  // where nothing was looking.
+  //
+  // The same flat rule is applied to the IIFE's own body: every `const`/`let`
+  // at the body's indentation must be declared before the first statement at
+  // that indentation that RUNS. `var` is not flagged and that is not laziness —
+  // `var` is hoisted AND initialised to undefined, so it has no temporal dead
+  // zone. `const` and `let` are the two that throw.
+  //
+  // A declaration whose initialiser contains a call counts as running, because
+  // it does: `var mount = document.getElementById(...)` is the line after which
+  // a `const` is unsafe, not the first bare statement below it.
+  if (/^[(!+~]\s*(async\s+)?(function\b|\()/.test(lines[firstRun])) {
+    let indent = null;
+    for (let i = firstRun + 1; i < lines.length && indent === null; i++) {
+      const L = lines[i];
+      if (/^\s*$/.test(L)) continue;
+      if (/^\s*(\/\/|\/\*|\*)/.test(L)) continue;
+      const m = L.match(/^(\s+)\S/);
+      if (m) indent = m[1];
+    }
+    if (indent !== null) {
+      const at = (L) => L.startsWith(indent) && !/^\s/.test(L.slice(indent.length));
+      let bodyRun = -1;
+      for (let i = firstRun + 1; i < lines.length; i++) {
+        const L = lines[i];
+        if (!at(L)) continue;
+        const body = L.slice(indent.length);
+        if (/^(\/\/|\/\*|\*|\})/.test(body)) continue;
+        if (/^["']use strict["'];?$/.test(body)) continue;          // a directive, not a statement
+        const decl = body.match(/^(?:var|const|let)\s+[A-Za-z_$][\w$]*\s*=\s*(.*)$/);
+        if (decl) {
+          // A literal initialiser runs nothing; a call in it does.
+          if (/[A-Za-z_$\])]\s*\(/.test(decl[1])) { bodyRun = i; break; }
+          continue;
+        }
+        if (/^(var|const|let|function|async function|class)\b/.test(body)) continue;
+        bodyRun = i;
+        break;
+      }
+      if (bodyRun !== -1) {
+        for (let i = bodyRun + 1; i < lines.length; i++) {
+          const L = lines[i];
+          if (!at(L)) continue;
+          const m = L.slice(indent.length).match(/^(?:const|let)\s+([A-Za-z_$][\w$]*)\s*=/);
+          if (m) late.push({ line: i + 1, name: m[1], scope: "IIFE body" });
+        }
+        console.log(`    ${rel} — IIFE body runs at line ${bodyRun + 1}, ` +
+          `${late.filter((c) => c.scope).length} const/let after it`);
+      }
+    }
+  }
+
   if (late.length) {
     failures += late.length;
     console.error(`\n✗ ${rel}`);
     console.error(`  executes at line ${firstRun + 1}: ${lines[firstRun].trim().slice(0, 70)}`);
-    console.error(`  ${late.length} module binding(s) declared after that point:`);
-    for (const c of late) console.error(`    line ${c.line}: ${c.name}`);
-    console.error(`  Move them above line ${firstRun + 1}.`);
+    console.error(`  ${late.length} binding(s) declared after that point:`);
+    for (const c of late) console.error(`    line ${c.line}: ${c.name}${c.scope ? ` (${c.scope})` : ""}`);
+    console.error(`  Move them above the first statement that runs.`);
   } else {
     console.log(`ok  ${rel} — executes at line ${firstRun + 1}, all bindings declared before it`);
   }
