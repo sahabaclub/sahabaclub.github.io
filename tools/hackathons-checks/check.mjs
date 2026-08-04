@@ -2181,9 +2181,32 @@ ok(/html\.light-mode \.hk-logo-light\.is-ready\s*\{[^}]*display:\s*block/s.test(
   "the logo pair swaps on html.light-mode, the same way .logo-img-dark does");
 ok(/\.hk-logo-img\s*\{[^}]*display:\s*none/s.test(allCss),
   "logo images start hidden, so a missing file never paints a broken icon");
-ok(/\.hk-coach-photo\s*\{[^}]*display:\s*none/s.test(allCss) &&
-   /\.hk-coach-photo\.is-ready\s*\{[^}]*display:\s*block/s.test(allCss),
-  "coach photos start hidden and are revealed only once they decode");
+// ⚠ THIS CHECK USED TO REQUIRE display:none, AND THAT IS WHAT BROKE IT.
+// The coach photos carry loading="lazy". A display:none image never
+// intersects the viewport, so the browser never fetches it: `complete` stays
+// false, `load` never fires, `is-ready` is never added, and it stays hidden
+// for ever. Every coach rendered as a monogram while all eight files sat on
+// the server returning 200 — it could not load until it was shown, and could
+// not be shown until it loaded. opacity keeps the element laid out, so it
+// loads normally.
+ok(/\.hk-coach-photo\s*\{[^}]*opacity:\s*0/s.test(allCss) &&
+   /\.hk-coach-photo\.is-ready\s*\{[^}]*opacity:\s*1/s.test(allCss),
+  "coach photos are transparent until they decode, not display:none");
+ok(!/\.hk-coach-photo\s*\{[^}]*display:\s*none/s.test(allCss),
+  "⚠ ...and specifically NOT display:none, which deadlocks with loading=lazy");
+
+// The general rule, so it cannot be reintroduced on some other element:
+// anything the markup marks lazy must not be hidden with display:none.
+{
+  const lazyClasses = [...js.matchAll(/class="([^"]*)"[^>]*loading="lazy"/g)]
+    .flatMap((m) => m[1].split(/\s+/))
+    .filter((c) => c.startsWith("hk-"));
+  const deadlocked = [...new Set(lazyClasses)].filter((c) =>
+    new RegExp(`\\.${c}\\s*\\{[^}]*display:\\s*none`, "s").test(allCss));
+  ok(deadlocked.length === 0,
+    "no lazily-loaded image is hidden with display:none anywhere",
+    deadlocked.join(", "));
+}
 
 // ---- the coming-soon lockup and its gradient text ----
 // The centring Ahmed asked for is a property of the flex row, not of the two
