@@ -3882,29 +3882,66 @@ html.light-mode .hk-soon-flag { color: #0b5c73; }
 .hk-soon-logo { --hk-logo-h: 56px; }
 .hk-soon-name { font: inherit; }
 
-/* "Coming Soon", in the EduHackAI mark's own colour.
+/* "Coming Soon" keeps its own size and weight; its COLOUR comes from
+   .hk-mark-text, which every section title on this page shares. See the block
+   headed "The EduHackAI mark's colours, as text" below. */
+.hk-soon-verb {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* ============================================================
+   The EduHackAI mark's colours, as text — .hk-mark-text
    ------------------------------------------------------------
+   ONE CLASS. SIX HEADINGS. This is the only place in the repository where the
+   ramp, the solid fallback, the @supports gate and the forced-colors reset are
+   written, and every section title on the hackathons page carries it:
+
+       "Coming Soon"                             (.hk-soon-verb)
+       "EduHackAI Story"                         (.hk-story-h)
+       "EduHackAI History"                       (.hk-rounds-h)
+       "Project Showcase"                        (.hk-videos-h)
+       "Thank You to Our EduHackAI Coaches"      (.hk-thanks-h)
+       "Your AI Journey Starts with EduHackAI-5" (.hk-cta-h)
+
+   It went from one heading to six, and six copies of thirty lines of gradient
+   plumbing would have been six chances for one of them to lose its fallback,
+   or its forced-colors reset, or to drift a hex digit. The size, the weight and
+   the margins still belong to each heading; only the colour is shared.
+
+   ---- what the colours are ----
    The mark is a horizontal blue-to-magenta ramp. Sampled out of
    assets/eduhack/eduhackai-dark.png rather than eyeballed — the artwork's own
    run is #0017ff at the left end through to #f200c3 at the right, with a cyan
    #00acff accent — so what follows is that ramp, not a guess at it.
 
    NEITHER RAW BRAND COLOUR CAN BE USED AS TEXT. Measured against the
-   coming-soon panel this text sits on:
+   coming-soon panel, which is the darkest surface any of these headings sits
+   on in dark mode and among the darkest in light:
 
        #0017ff  1.57:1 on the dark panel      6.09:1 on the light panel
        #f200c3  3.40:1 on the dark panel      2.81:1 on the light panel
 
    — so the mark's blue is invisible on the dark panel and its magenta fails AA
    on both. The ramp is therefore re-voiced per theme: the same blue-to-magenta
-   journey, lifted for the dark surface and deepened for the light one. Both
-   ends and every point between them clear 4.5:1, which is stricter than this
-   text's size requires (32px is WCAG "large" at 3:1) and is the bar the rest of
-   this page is held to. tools/hackathons-checks/contrast.mjs samples the ramp
-   at 21 points in each theme and reports the worst:
+   journey, lifted for the dark surface and deepened for the light one.
 
-       dark   #9aa5ff -> #ff9ae8    worst 5.62:1, at the blue end
-       light  #1a1fd6 -> #9c0080    worst 5.73:1, at the magenta end
+   ---- and on which surfaces ----
+   The six headings do NOT all sit on the same thing. Three sit straight on the
+   page, one on the coming-soon panel, one on the closing CTA panel, and the
+   story heading sits on the page with the story CARD beneath it. A ramp that
+   passes on one surface is not thereby passing on another, so
+   tools/hackathons-checks/contrast.mjs samples the ramp at 21 points against
+   EVERY surface, in both themes, and reports the worst per surface. The worst
+   number anywhere is the coming-soon panel:
+
+       dark   #9aa5ff -> #ff9ae8    worst 5.62:1 (on the coming-soon panel)
+       light  #1a1fd6 -> #9c0080    worst 5.73:1 (on the coming-soon panel)
+
+   Every other surface is better, because every other surface is further from
+   the middle grey than that panel's wash. 4.5:1 is the bar even though these
+   are all large text at 3:1 — it is the bar the rest of this page is held to.
 
    ---- the fallback ----
    `color` is set FIRST and unconditionally, to the worst end of that theme's
@@ -3914,38 +3951,72 @@ html.light-mode .hk-soon-flag { color: #0b5c73; }
    @supports gate, so a browser without background-clip:text never reaches
    -webkit-text-fill-color:transparent and can never render this invisible.
    That ordering is the whole safety property: the transparent fill only ever
-   exists where the thing that paints over it also exists. */
-.hk-soon-verb {
-  font-size: 26px;
-  font-weight: 800;
-  line-height: 1;
+   exists where the thing that paints over it also exists.
+
+   ---- why inline-block ----
+   background-clip: text clips the background of ONE box. An inline span that
+   wraps onto three lines is three fragments, and in the engines that paint the
+   background per fragment the ramp restarts on every line — the heading reads
+   as three separate gradients rather than one. inline-block makes it a single
+   box that happens to contain three lines, so the ramp runs once, across all of
+   them. It still wraps: the box's width is the line box it is centred in.
+
+   ---- what must stay OUT of this span ----
+   Anything whose own colour matters. background-clip: text is a MASK, not a
+   tint: a colour glyph inside this span (the 🥇 in the showcase heading) loses
+   its gold and its ribbon and comes out as a flat magenta silhouette. Such
+   things go in a SIBLING span — see .hk-h-emoji — rather than being fought with
+   an override, because an override has to beat an inherited
+   -webkit-text-fill-color in every engine and a sibling has nothing to beat.
+   ============================================================ */
+.hk-mark-text {
+  display: inline-block;
   color: #9aa5ff;
 }
-html.light-mode .hk-soon-verb { color: #9c0080; }
+html.light-mode .hk-mark-text { color: #9c0080; }
 
 @supports ((-webkit-background-clip: text) or (background-clip: text)) {
-  .hk-soon-verb {
+  .hk-mark-text {
     background-image: linear-gradient(90deg, #9aa5ff 0%, #ff9ae8 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
   }
-  html.light-mode .hk-soon-verb {
+  html.light-mode .hk-mark-text {
     background-image: linear-gradient(90deg, #1a1fd6 0%, #9c0080 100%);
   }
   /* Windows high contrast throws the gradient away and would leave the text
      painted in a transparent fill. Hand it back to the system colour. */
   @media (forced-colors: active) {
     /* Both selectors, so the light-mode `color` rule above — which is more
-       specific than a bare .hk-soon-verb — cannot win here. */
-    .hk-soon-verb,
-    html.light-mode .hk-soon-verb {
+       specific than a bare .hk-mark-text — cannot win here. */
+    .hk-mark-text,
+    html.light-mode .hk-mark-text {
       background-image: none;
       -webkit-text-fill-color: currentColor;
       color: CanvasText;
     }
   }
 }
+
+/* An emoji in a heading, kept out of the gradient. It is a sibling of
+   .hk-mark-text and never a child, so nothing here has to undo a clip — see
+   the block above. aria-hidden in the markup, so the heading's accessible name
+   is the words and not "1st place medal" read out as a phrase. */
+.hk-h-emoji {
+  /* The colour-emoji fonts first, so a system that also has a monochrome
+     fallback does not draw a black outline of a medal. */
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  margin-right: 0.3em;
+  /* line-height:1 keeps the taller emoji box from stretching the heading's
+     line and shifting the words it sits beside. */
+  line-height: 1;
+}
+
+/* Keeps a token whole across a line break. Used on "EduHackAI-5" in the
+   closing CTA's heading, whose hyphen is otherwise a break opportunity and
+   would leave "EduHackAI-" alone at the end of a narrow line. */
+.hk-nowrap { white-space: nowrap; }
 .hk-soon-tagline { margin: 10px 0 0; font-size: 15.5px; color: var(--text-secondary); }
 .hk-soon-desc {
   margin: 12px 0 0;
@@ -4248,7 +4319,6 @@ html.light-mode .hk-medal::before {
   font-weight: 800;
   line-height: 1.2;
   letter-spacing: -0.015em;
-  color: var(--text);
   text-align: center;
 }
 /* No max-width. This rule carried `max-width: 78ch`, and that — not the
@@ -4335,12 +4405,15 @@ html.light-mode .hk-country { background: rgba(0, 0, 0, 0.04); }
    about the layout.
    ============================================================ */
 .hk-thanks { margin: 34px 0 0; padding-top: 26px; border-top: 1px solid var(--glass-border); }
+/* Centred with the other five section titles, and coloured by .hk-mark-text on
+   the span inside it — `color` here would be overridden by that class anyway,
+   so it is gone rather than left to look like it still decides something. */
 .hk-thanks-h {
   margin: 0 0 4px;
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.015em;
-  color: var(--text);
+  text-align: center;
 }
 .hk-coach-grid {
   display: grid;
@@ -4492,23 +4565,141 @@ html.light-mode .hk-coach-round { background: rgba(0, 0, 0, 0.04); }
   font-size: 22px;
   font-weight: 800;
   letter-spacing: -0.015em;
-  color: var(--text);
+  text-align: center;
 }
+/* Centred with the heading it belongs to. The two are a header pair; a centred
+   title over a left-aligned sentence reads as two unrelated blocks. */
 .hk-videos-intro {
-  margin: 0;
+  margin: 0 auto;
+  max-width: 74ch;
   font-size: 14px;
   line-height: 1.6;
   color: var(--text-secondary);
+  text-align: center;
 }
-.hk-video-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
-  gap: 16px;
-  margin: 18px 0 0;
+
+/* ============================================================
+   The showcase rail — three cards visible, the rest a scroll away
+   ------------------------------------------------------------
+   CSS scroll-snap, not a carousel. There is no timer, no transform and no
+   transition; the rail is an ordinary overflow-x container. Every native way
+   of moving it therefore still works and works correctly: the wheel, a
+   trackpad swipe, a touch drag, the scrollbar, and the arrow keys once the
+   rail has focus. hackathons-ui.js adds exactly two things — a button that
+   scrolls by one card, and the buttons' disabled state — and binds no wheel or
+   touch listener at all, so there is nothing here that can swallow a gesture.
+
+   ---- how many are visible ----
+   --hk-rail-show is the number of cards that fit across the rail, and the card
+   width is derived from it. A FRACTIONAL value is the peek: at 2.25, two cards
+   sit fully in view and a quarter of the third is visible past the right edge,
+   which is how a visitor who cannot see a scrollbar (every touch device, and
+   every Mac with overlay scrollbars) finds out there is more.
+
+       desktop            3      three, exactly, no peek
+       tablet  <= 900px   2.25   two, plus a quarter of the next
+       phone   <= 620px   1.15   one, plus a sliver of the next
+
+   Desktop gets no peek because it gets the two buttons and a visible track
+   instead, and three cards that each end mid-card would read as a broken grid
+   at the width where the section is most obviously a grid.
+
+   ---- the fallback declaration ----
+   .hk-video carries a flat `flex: 0 0 272px` BEFORE the calc. calc() dividing
+   by a var() is well supported, but if any engine drops that declaration as
+   invalid the fallback stands and the result is still a working scroller with
+   272px cards — a slightly wrong count, never a collapsed row. Declaration
+   order is the mechanism: a browser that understands the second discards the
+   first, and one that does not keeps it.
+   ============================================================ */
+.hk-rail-nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 14px 0 8px;
+}
+.hk-rail-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
   padding: 0;
-  list-style: none;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text-secondary);
+  cursor: pointer;
 }
-.hk-video { display: flex; flex-direction: column; min-width: 0; }
+.hk-rail-btn svg { width: 19px; height: 19px; }
+.hk-rail-btn:hover:not([disabled]) { color: var(--text); border-color: var(--violet); }
+.hk-rail-btn:focus-visible { outline: 3px solid var(--violet); outline-offset: 3px; }
+/* Disabled is a real `disabled` attribute, so it is out of the tab order and
+   announced as unavailable. The styling only has to make that visible.
+   `pointer-events` is deliberately NOT used to fake it — a disabled button is
+   already unclickable, and pointer-events:none would also hide it from a
+   hover-to-read tooltip. */
+.hk-rail-btn[disabled] { opacity: 0.38; cursor: default; }
+
+.hk-video-rail {
+  --hk-rail-gap: 16px;
+  --hk-rail-show: 3;
+  display: flex;
+  gap: var(--hk-rail-gap);
+  margin: 0;
+  /* Bottom padding leaves the scrollbar its own room instead of letting it sit
+     over the card titles. */
+  padding: 0 0 12px;
+  list-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  /* Keeps a horizontal flick inside the rail from turning into a browser
+     back-gesture or a scroll of the page behind it. */
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+/* The rail is focusable (tabindex="0" in the markup) so that a keyboard user
+   can reach it and scroll it with the arrow keys, which the browser does for a
+   focused scroll container. A focusable thing needs a visible focus ring. */
+.hk-video-rail:focus-visible {
+  outline: 3px solid var(--violet);
+  outline-offset: 4px;
+  border-radius: 16px;
+}
+/* Smooth scrolling, off. Both switches: the site's own reduce-motion setting
+   and the OS one. This governs the scrollbar, the arrow keys and anything else
+   the browser scrolls; the button case is an argument to scrollBy() and is
+   handled by railBehavior() in hackathons-ui.js against these same two
+   switches. */
+@media (prefers-reduced-motion: reduce) {
+  .hk-video-rail { scroll-behavior: auto; }
+}
+html.reduce-motion .hk-video-rail { scroll-behavior: auto; }
+
+.hk-video {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 0 0 272px;
+  flex: 0 0 calc((100% - (var(--hk-rail-show) - 1) * var(--hk-rail-gap)) / var(--hk-rail-show));
+  scroll-snap-align: start;
+}
+
+/* Two, plus a quarter of the third showing past the right edge. 900px rather
+   than the page's usual 720px: at 780-900px three cards are ~245px each and the
+   titles under them start wrapping to four lines, which is the width the third
+   card stops earning its place. */
+@media (max-width: 900px) {
+  .hk-video-rail { --hk-rail-show: 2.25; }
+}
+/* One, plus a sliver. 1.15 rather than 1.25 because a phone card is already
+   nearly the full width and a quarter-card peek would leave the card itself
+   too narrow to read the title under it. */
+@media (max-width: 620px) {
+  .hk-video-rail { --hk-rail-show: 1.15; --hk-rail-gap: 12px; }
+}
 
 /* The box both the poster button and the frame live in. Its size is the
    wrapper's, not the child's, which is what makes the swap free. */
@@ -4585,7 +4776,7 @@ html.reduce-motion .hk-video-play:hover .hk-video-cue { transform: translate(-50
   line-height: 1.6;
   color: var(--text-secondary);
 }
-.hk-videos-more { margin: 18px 0 0; }
+.hk-videos-more { margin: 18px 0 0; text-align: center; }
 .hk-videos-link {
   font-size: 13.5px;
   font-weight: 600;
@@ -4616,12 +4807,16 @@ html.light-mode .hk-cta {
     radial-gradient(700px 280px at 50% -30%, rgba(109, 40, 217, 0.10), transparent 62%),
     rgba(255, 255, 255, 0.7);
 }
+/* text-align is spelled out rather than inherited from .hk-cta's own
+   `text-align: center`. All six section titles are centred by a declaration on
+   the heading itself, so "is this one centred?" is answered by one rule per
+   heading and not by whichever ancestor happens to be centred today. */
 .hk-cta-h {
   margin: 0 0 8px;
   font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.015em;
-  color: var(--text);
+  text-align: center;
 }
 .hk-cta-text {
   margin: 0 auto;
@@ -4788,6 +4983,103 @@ html.light-mode .hk-done-mark {
 .hk-done-mark svg { width: 27px; height: 27px; }
 .hk-done-text { margin: 0 0 18px; font-size: 14.5px; line-height: 1.6; color: var(--text-secondary); }
 
+/* ============================================================
+   Showcase player dialog
+   ------------------------------------------------------------
+   Shares .hk-modal with the interest dialog — the fixed overlay, the
+   backdrop, the blur and body.hk-modal-open's scroll lock are all the same
+   thing and there is no reason for a second copy of any of them. What differs
+   is the BOX: a 16:9 player is a shape, not a column of fields.
+
+   ---- never taller than the viewport ----
+   The box's width is capped three ways at once and takes the smallest:
+
+       1100px                        a sensible maximum on a big screen
+       100%                          the overlay's own padded width
+       calc((100dvh - 150px)*16/9)   the width at which a 16:9 media box, plus
+                                     the ~150px of title and padding above and
+                                     below it, exactly fills the viewport height
+
+   The third is the one that matters, and it is why the height is controlled by
+   setting a WIDTH: the media box's height is its width times 9/16, so capping
+   the width caps the height, and it does so without max-height fighting
+   aspect-ratio over which of them gets to be right.
+
+   100dvh is declared after 100vh so a browser that has it uses it. On a phone
+   100vh is the viewport with the URL bar retracted — i.e. taller than what the
+   visitor can actually see — and a dialog sized to it is a dialog whose bottom
+   edge is under the browser chrome.
+   ============================================================ */
+/* A DARKER BACKDROP FOR THE PLAYER, IN BOTH THEMES.
+   ------------------------------------------------------------
+   This is the only thing the player re-tints, and it is not taste. The dialog
+   has no panel: its title sits directly on the backdrop, so the backdrop IS
+   the text's background. Light mode's shared backdrop is rgba(16,22,39,0.55),
+   which composites to about #777b87 over this page — white 16px text on that
+   measures roughly 4.2:1 and misses AA. At 0.88 of near-black it is 14.85:1,
+   which is what tools/hackathons-checks/contrast.mjs measures.
+
+   One value for both themes rather than two, because a video is watched dark
+   either way; the light-mode selector is repeated only so it can out-specify
+   `html.light-mode .hk-modal-backdrop`, which would otherwise win.
+
+   Nothing else about the backdrop is restated — not its position, not its
+   inset, not the blur. Those come from the shared rule. */
+.hk-vmodal .hk-modal-backdrop,
+html.light-mode .hk-vmodal .hk-modal-backdrop {
+  background: rgba(3, 6, 14, 0.88);
+}
+
+.hk-vmodal-box {
+  position: relative;
+  width: min(1100px, 100%);
+  width: min(1100px, 100%, calc((100vh - 150px) * 16 / 9));
+  width: min(1100px, 100%, calc((100dvh - 150px) * 16 / 9));
+}
+/* The dialog's accessible name, and a real visible title: a player with no
+   caption gives a visitor no way to check they opened the one they meant. */
+.hk-vmodal-title {
+  margin: 0 46px 10px 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  overflow-wrap: anywhere;
+}
+.hk-vmodal-title:focus-visible { outline: 2px solid var(--violet); outline-offset: 4px; border-radius: 8px; }
+/* The close button sits over the backdrop rather than over a panel — this
+   dialog has no panel — so it carries its own solid disc instead of the
+   interest dialog's glass, which would be invisible against a blur. */
+/* The rim is 0.38, not the 0.32 it was first written at. Measured: the disc
+   composites to about #111520 over this dialog's backdrop, and a 0.32 rim on
+   that is 2.89:1 — under 1.4.11's 3:1 for the boundary of a control. 0.38 is
+   3.57:1. The × inside it was never the problem at 18:1; the edge was. */
+.hk-vmodal-close {
+  top: -2px;
+  right: 0;
+  color: #ffffff;
+  background: rgba(18, 22, 34, 0.92);
+  border-color: rgba(255, 255, 255, 0.38);
+}
+.hk-vmodal-close:hover { color: #ffffff; background: rgba(139, 92, 246, 0.92); }
+html.light-mode .hk-vmodal-title { color: #ffffff; }
+/* The media box. Fixed at 16:9 so the frame that lands inside it does not
+   change the dialog's size when it loads, and black underneath because a
+   player that has not painted its first frame yet should look like a player. */
+.hk-vmodal-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000000;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+/* IT IS EMPTY MOST OF THE TIME, AND THAT IS THE DESIGN. hackathons-ui.js
+   builds the <iframe> when the dialog opens and removes it when it closes; a
+   hidden frame goes on playing and goes on holding its connection open. */
+
 /* ---- Reduced motion ------------------------------------------------
    Both spellings, matching the six blocks the repo already ships: the
    media query for the OS setting, and html.reduce-motion for the site's
@@ -4825,10 +5117,9 @@ html.reduce-motion .hk-spin { animation: none; border-top-color: transparent; }
   .hk-story { padding: 18px 16px 16px; }
   .hk-story-h { font-size: 21px; }
   .hk-cta { padding: 24px 18px 22px; }
-  /* One video per row below 720px, and a smaller cue so it does not fill the
-     poster. The grid's own 272px minimum would already do this on most phones;
-     stating it means a 320px viewport gets it too. */
-  .hk-video-grid { grid-template-columns: 1fr; gap: 18px; }
+  /* How many cards show is set by --hk-rail-show at 900px and 620px, next to
+     the rail itself, so the whole answer is in one place. What is left here is
+     the cue, which shrinks so it does not fill a phone-width poster. */
   .hk-video-cue { width: 48px; height: 48px; }
   .hk-video-cue svg { width: 19px; height: 19px; }
   .hk-coach-grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); }

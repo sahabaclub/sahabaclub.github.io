@@ -251,6 +251,50 @@ check("light: 'Coming Soon' magenta end on panel", L_VERB[1], L_SOON, 4.5);
 check("dark: 'Coming Soon' solid fallback on panel", "#9aa5ff", D_SOON, 4.5);
 check("light: 'Coming Soon' solid fallback on panel", "#9c0080", L_SOON, 4.5);
 
+// ============================================================
+// THE SAME RAMP, ON EVERY SURFACE IT ACTUALLY LANDS ON
+// ------------------------------------------------------------
+// .hk-mark-text is one class carrying six section titles, and those six titles
+// do NOT all sit on the same background. A ramp measured once, on the panel it
+// was designed for, is a ramp measured on one sixth of its job — a gradient
+// that clears 5.6:1 on the coming-soon panel says nothing about the same
+// gradient on the flat page or on the closing CTA's violet wash.
+//
+// So every surface is enumerated and the ramp is sampled at 21 points against
+// each, in both themes. The worst of the 21 is what is reported per surface.
+//
+// WHAT WAS FOUND WHILE ENUMERATING THEM, and it is worth writing down because
+// the brief assumed otherwise: the coaches section and the story heading are
+// NOT on cards. `.hk-thanks` has a border-top and no background, and
+// `.hk-story-h` renders into #hack-story-head, which is a bare div in .hk-wrap
+// above the stat tiles. Both are therefore on the PAGE. The story CARD is a
+// real and different surface, but it sits below the heading rather than behind
+// it; it is measured anyway, because it is the surface that heading would land
+// on the day anybody moves it back inside, and because the number should be
+// known before that happens rather than after.
+const SURFACES = [
+  // [what it is, which titles land on it, dark surface, light surface]
+  ["the page", "EduHackAI Story / EduHackAI History / Project Showcase / Thank You to Our EduHackAI Coaches", D.bg, Lt.bg],
+  ["the coming-soon panel", "Coming Soon", D_SOON, L_SOON],
+  ["the closing CTA panel", "Your AI Journey Starts with EduHackAI-5", D_CTA, L_CTA],
+  ["the story card", "(the surface under the story heading, not behind it)", D_CARD, L_CARD],
+];
+for (const [where, who, dbg, lbg] of SURFACES) {
+  ramp(`dark: section-title gradient on ${where}`, D_VERB[0], D_VERB[1], dbg, 4.5);
+  ramp(`light: section-title gradient on ${where}`, L_VERB[0], L_VERB[1], lbg, 4.5);
+  // Each end on its own, because the solid fallback IS one of these ends and a
+  // browser without background-clip:text gets exactly this number.
+  check(`dark: section-title solid fallback (#9aa5ff) on ${where}`, D_VERB[0], dbg, 4.5);
+  check(`light: section-title solid fallback (#9c0080) on ${where}`, L_VERB[1], lbg, 4.5);
+  void who;
+}
+// And the inverse assertion, on the page as well as the panel: the mark's own
+// blue-to-magenta still must not be usable as text anywhere these titles sit.
+// If it ever becomes usable, the re-voiced ramp stops being necessary and this
+// row says so instead of the reason being remembered.
+rampMustFail("dark: the mark's raw blue->magenta as text, on the page", BRAND[0], BRAND[1], D.bg, 4.5);
+rampMustFail("light: the mark's raw blue->magenta as text, on the page", BRAND[0], BRAND[1], Lt.bg, 4.5);
+
 // ---- the history ----
 check("dark: story heading on card", D.text, D_CARD, 4.5);
 check("dark: story prose on card", D.sub, D_CARD, 4.5);
@@ -363,6 +407,61 @@ const CUE_HOVER_ON_WHITE = over("#ffffff", "#8b5cf6", 0.92);
 check("play cue: triangle on the resting disc over a white poster", "#ffffff", CUE_REST_ON_WHITE, 3.0);
 check("play cue: triangle on the resting disc over a black poster", "#ffffff", CUE_REST_ON_BLACK, 3.0);
 check("play cue: triangle on the hovered violet disc", "#ffffff", CUE_HOVER_ON_WHITE, 3.0);
+
+// ---- the showcase rail's two buttons ----
+// The chevrons are non-text graphics, so 3:1 under WCAG 1.4.11, measured on the
+// glass disc they sit on — which is the same card surface the coach pills use.
+// The DISABLED state is not measured and is not required to be: WCAG 1.4.3 and
+// 1.4.11 both exempt inactive user-interface components, and the whole point of
+// the 0.38 opacity is to look unavailable.
+check("dark: rail button chevron at rest (graphic)", D.sub, D_CARD, 3.0);
+check("dark: rail button chevron, hovered (graphic)", D.text, D_CARD, 3.0);
+check("light: rail button chevron at rest (graphic)", Lt.sub, L_CARD, 3.0);
+check("light: rail button chevron, hovered (graphic)", Lt.text, L_CARD, 3.0);
+
+// ---- the player dialog ----
+//
+// This dialog has NO PANEL. Its title and its close button sit directly on the
+// backdrop, so the backdrop is the background those two are measured against —
+// which is the whole reason .hk-vmodal re-tints it.
+//
+// The shared backdrop in LIGHT mode is rgba(16,22,39,0.55). Over this page that
+// composites to about #777b87, and white 16px text on it measures 4.21:1 — a
+// miss, and 16px bold is not WCAG "large" (that starts at 18.66px bold), so 4.5
+// is the bar it has to clear rather than 3. Measured below as the row that must
+// FAIL, so the reason for the override is kept true rather than remembered.
+const SHARED_BACKDROP_LIGHT = over(Lt.bg, "#101627", 0.55);
+{
+  const r = ratio("#ffffff", SHARED_BACKDROP_LIGHT);
+  rows.push({
+    label: "light: player title on the SHARED backdrop — must NOT reach 4.5, which is why it is re-tinted",
+    fg: "#ffffff", bg: toHex(SHARED_BACKDROP_LIGHT),
+    r: r.toFixed(2), need: "<4.5", pass: r < 4.5,
+  });
+}
+
+// The player's own backdrop: one value for both themes, because a video is
+// watched dark either way.
+const PLAYER_BACKDROP_DARK = over(D.bg, "#03060e", 0.88);
+const PLAYER_BACKDROP_LIGHT = over(Lt.bg, "#03060e", 0.88);
+check("dark: player dialog title on its backdrop", "#ffffff", PLAYER_BACKDROP_DARK, 4.5);
+check("light: player dialog title on its backdrop", "#ffffff", PLAYER_BACKDROP_LIGHT, 4.5);
+// The close button carries its own disc, so it is measured on the disc and the
+// disc on the backdrop behind it — the × is text, the disc's edge is a graphic.
+const CLOSE_DISC_DARK = over(PLAYER_BACKDROP_DARK, "#121622", 0.92);
+const CLOSE_DISC_LIGHT = over(PLAYER_BACKDROP_LIGHT, "#121622", 0.92);
+const CLOSE_HOVER_DARK = over(PLAYER_BACKDROP_DARK, "#8b5cf6", 0.92);
+const CLOSE_HOVER_LIGHT = over(PLAYER_BACKDROP_LIGHT, "#8b5cf6", 0.92);
+check("dark: player close × on its disc", "#ffffff", CLOSE_DISC_DARK, 4.5);
+check("light: player close × on its disc", "#ffffff", CLOSE_DISC_LIGHT, 4.5);
+check("dark: player close × on the hovered violet disc", "#ffffff", CLOSE_HOVER_DARK, 4.5);
+check("light: player close × on the hovered violet disc", "#ffffff", CLOSE_HOVER_LIGHT, 4.5);
+// The close button's rim is what separates it from the backdrop — the only
+// boundary a low-vision reader has for finding the way out.
+check("dark: player close rim vs backdrop (graphic)",
+  over(CLOSE_DISC_DARK, "#ffffff", 0.38), CLOSE_DISC_DARK, 3.0);
+check("light: player close rim vs backdrop (graphic)",
+  over(CLOSE_DISC_LIGHT, "#ffffff", 0.38), CLOSE_DISC_LIGHT, 3.0);
 
 let bad = 0;   // measured, not eyeballed
 for (const r of rows) {
