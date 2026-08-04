@@ -10,3 +10,7 @@
 # They must never be tracked here.
 supabase/seed/*.sql
 supabase/seed/hackathons/*.sql
+
+# Supabase CLI scratch. unctions deploy writes the linked project ref here;
+# it is machine state, not project state.
+supabase/.temp/
