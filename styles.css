@@ -5273,3 +5273,164 @@ a.cx-record-text:hover { color: var(--violet); }
 /* The empty first tile on your own profile: the label is the way to fill it. */
 .cx-stat-label a { color: var(--violet); text-decoration: none; }
 .cx-stat-label a:hover { text-decoration: underline; }
+
+/* ============================================================
+   ANALYTICS CONSENT  (.ga-*)
+   Drawn by analytics.js, which only draws it when there is a
+   measurement id to consent to. See that file for why the
+   signed-in pages under app/ never load it.
+   ============================================================ */
+
+/* WHY THESE ARE FLAT COLOURS AND NOT THE GLASS TOKENS.
+   Every other panel on this site is translucent over whatever happens to be
+   behind it — a starfield, a card, a video poster. That is fine for decoration
+   and impossible for a contrast measurement: a ratio needs two colours, and
+   "whatever is behind it" is not one. This bar asks a question that has to be
+   readable for the answer to mean anything, so it carries its own opaque
+   surface in each theme and every number in tools/analytics-checks/contrast.mjs
+   is measured against that surface rather than against a hope. */
+.ga-consent {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Read off the other z-indexes in this file rather than guessed. Above the
+     header (2), the mobile menu (9), the sticky filter bar (5) and the filter
+     dropdowns (119/120). Below the podcast modal (200), the hackathon video
+     player (240) and the photo lightbox (999) — a consent bar painted over an
+     open dialog is a consent bar in the way. */
+  z-index: 180;
+  background: #0d1018;
+  border-top: 1px solid #6b7591;
+  box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.5);
+  padding: 15px 20px;
+  padding-bottom: calc(15px + env(safe-area-inset-bottom, 0px));
+}
+
+/* The element is inserted empty and filled one frame later, so that a screen
+   reader sees a live region change and announces it. Without this rule that
+   empty frame paints as a bare stripe across the bottom of the page. */
+.ga-consent:empty { display: none; }
+
+.ga-consent-inner {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.ga-consent-copy { flex: 1 1 380px; min-width: 0; }
+
+.ga-consent-title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #f3f4f8;
+  line-height: 1.4;
+}
+
+.ga-consent-text {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #a6acc2;
+}
+
+.ga-consent-link {
+  color: #22d3ee;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.ga-consent-actions {
+  display: flex;
+  gap: 10px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+/* ACCEPT AND DECLINE ARE THE SAME BUTTON.
+   Same class, same face, same border, same weight, same min-width, same
+   padding, same order of magnitude of words. The only difference between them
+   is the word on the button. There is no pre-ticked box, no "manage
+   preferences" detour on the way to no, and no third dismiss control that
+   would leave the question unanswered while looking like an answer. */
+.ga-consent-btn,
+.ga-withdraw {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  min-width: 152px;
+  padding: 11px 18px;
+  border-radius: 10px;
+  border: 1px solid #6b7591;
+  background: #1c2434;
+  color: #f3f4f8;
+  cursor: pointer;
+  text-align: center;
+  transition: background-color 0.16s ease, border-color 0.16s ease;
+}
+
+.ga-consent-btn:hover,
+.ga-withdraw:hover {
+  background: #27324a;
+  border-color: #8a94ad;
+}
+
+/* The page-level control on privacy.html: the way back out of a yes. */
+.ga-withdraw { min-width: 0; }
+
+.ga-status {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 14px;
+}
+
+@media (max-width: 620px) {
+  .ga-consent-inner { gap: 14px; }
+  /* Both buttons grow together — one full-width primary next to a small
+     secondary is exactly the asymmetry this bar is not allowed to have. */
+  .ga-consent-actions { width: 100%; }
+  .ga-consent-btn { flex: 1 1 140px; min-width: 0; }
+}
+
+/* Reduced motion. The bar still appears — it has to, it is the question — it
+   simply stops sliding. Both switches, the site's own class and the OS
+   setting, the same pairing every other animation on this site honours. */
+@keyframes ga-consent-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ga-consent-inner { animation: ga-consent-in 0.22s ease-out both; }
+html.reduce-motion .ga-consent-inner { animation: none; }
+html.reduce-motion .ga-consent-btn,
+html.reduce-motion .ga-withdraw { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ga-consent-inner { animation: none; }
+  .ga-consent-btn, .ga-withdraw { transition: none; }
+}
+
+/* ---- light theme ---- */
+html.light-mode .ga-consent {
+  background: #ffffff;
+  border-top-color: #7a8296;
+  box-shadow: 0 -12px 34px rgba(16, 22, 39, 0.14);
+}
+html.light-mode .ga-consent-title { color: #101627; }
+html.light-mode .ga-consent-text { color: #4a5570; }
+html.light-mode .ga-consent-link { color: #0e7490; }
+html.light-mode .ga-consent-btn,
+html.light-mode .ga-withdraw {
+  background: #f2f5fa;
+  border-color: #7a8296;
+  color: #101627;
+}
+html.light-mode .ga-consent-btn:hover,
+html.light-mode .ga-withdraw:hover {
+  background: #e3e9f4;
+  border-color: #5d6780;
+}

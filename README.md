@@ -10,6 +10,11 @@ now backed by Supabase for anything that needs a real database.
 - `index.html`, `events.html`, `podcast.html` — public pages
 - `styles.css` — all styling
 - `script.js` — shared nav/theme behavior + the "Sign in" → "Dashboard" swap
+- `analytics.js` — Google Analytics, page views only, behind a consent bar
+  that has to be answered before anything is fetched. Included by the seven
+  public pages and **never** by anything under `app/` — those are behind a
+  login and their URLs describe named members. The file explains why, and
+  [SETUP.md](SETUP.md#6-google-analytics) covers the property settings.
 - `login.html` — sign up / sign in (Google, Microsoft, phone)
 - `membership.html` — public Standard vs Premium comparison
 - `lib/` — Supabase client, auth helpers, tier-gating (shared by every page)
