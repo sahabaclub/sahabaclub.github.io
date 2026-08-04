@@ -58,6 +58,19 @@
   .prof-field .optin-chip { width: 100%; justify-content: flex-start; }
   .prof-field textarea { min-height: 70px; resize: vertical; }
   .prof-hint { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+  /* The bio counter. Silent until 750 characters, amber at 850, and a
+     different sentence entirely once the field is over 900 — which is a state
+     an EXISTING profile can be in on load, not only one a member can type
+     into. The over-limit colours are deliberately the status-error pair rather
+     than something softer: it is the one state that stops the save.
+     Both inks are the light-mode values where the dark ones fall below AA on
+     this card, matching .prof-status above. */
+  .prof-count { font-size: 12px; line-height: 1.5; color: var(--text-muted); align-self: flex-end; }
+  .prof-count.is-near { color: #fbbf24; }
+  .prof-count.is-over { color: #fca5a5; font-weight: 600; }
+  html.light-mode .prof-count.is-near { color: #92620a; }
+  html.light-mode .prof-count.is-over { color: #b91c1c; }
   .prof-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 560px) { .prof-row { grid-template-columns: 1fr; } }
 
@@ -164,7 +177,15 @@
         </div>
         <div class="prof-field">
           <label for="f-bio">Short bio</label>
-          <textarea id="f-bio" placeholder="A couple of sentences about your background."></textarea>
+          <!-- maxlength is the typing guard and nothing more. It does not
+               apply to the value this page sets on load, which is deliberate:
+               a bio written before the 900-character limit existed is loaded
+               WHOLE, and the counter below asks its owner to shorten it. The
+               enforcement that cannot be walked around is the CHECK constraint
+               in migration 0037; the save handler below is what turns it into
+               a sentence instead of a SQLSTATE. -->
+          <textarea id="f-bio" maxlength="900" placeholder="A couple of sentences about your background."></textarea>
+          <span class="prof-count" id="f-bio-count" role="status" aria-live="polite" hidden></span>
         </div>
       </div>
 
@@ -334,7 +355,9 @@
   import {
     loadCountries, loadTagSuggestions, suggestionsFor, fillCountrySelect,
     createTagPicker, connectHint, onConnectHintJump, createAvatarControl,
-    OPEN_TO, nullIfBlank, intOrNull, escapeHtml, isMissingSchema,
+    OPEN_TO, nullIfBlank, intOrNull, escapeHtml,
+    FIELD_LIMITS, BIO_COUNTER_FROM, BIO_COUNTER_AMBER,
+    bioLength, limitProblems, limitBlockMessage, saveErrorMessage,
   } from "../lib/profile-form.js";
 
   var session;
@@ -404,9 +427,45 @@
     }
   }
 
+  // ---- The bio counter --------------------------------------------------
+  // Three things it has to get right, and only the first is the obvious one:
+  //
+  //   * it counts the way the database counts (code points, see bioLength) so
+  //     the form and the CHECK constraint in 0037 never disagree;
+  //   * it is silent early. A counter that is always on turns a two-sentence
+  //     bio into a test;
+  //   * it handles the case a `maxlength` cannot: a bio ALREADY over 900,
+  //     loaded whole from a profile written before the limit existed. That is
+  //     the state the spec is emphatic about — the owner sees all of their own
+  //     words and is asked to shorten them, rather than finding a truncated
+  //     copy where their bio used to be.
+  function refreshBioCount() {
+    var n = bioLength(el("f-bio").value);
+    var box = el("f-bio-count");
+    box.classList.remove("is-near", "is-over");
+
+    if (n > FIELD_LIMITS.bio) {
+      var over = n - FIELD_LIMITS.bio;
+      box.classList.add("is-over");
+      box.textContent = n + " characters — " + over + " over the " + FIELD_LIMITS.bio +
+        " allowed. Nothing has been cut; shorten it here to save.";
+      box.hidden = false;
+      return;
+    }
+    if (n < BIO_COUNTER_FROM) {
+      box.textContent = "";
+      box.hidden = true;
+      return;
+    }
+    if (n >= BIO_COUNTER_AMBER) box.classList.add("is-near");
+    box.textContent = n + " of " + FIELD_LIMITS.bio;
+    box.hidden = false;
+  }
+
   ["f-name", "f-headline", "f-bio"].forEach(function (id) {
     el(id).addEventListener("input", refreshConnectState);
   });
+  el("f-bio").addEventListener("input", refreshBioCount);
   el("f-discoverable").addEventListener("change", refreshConnectState);
 
   // "…once you add a photo." — the word is the way to the control.
@@ -469,17 +528,25 @@
       root: el("f-skills"), inputId: "f-skills-input",
       suggestions: suggestionsFor(tags, "skill"),
       placeholder: "Search skills, or type your own",
+      label: "skills", limitNoun: "skill", max: FIELD_LIMITS.skills,
     });
     pickers.interests = createTagPicker({
       root: el("f-interests"), inputId: "f-interests-input",
       suggestions: suggestionsFor(tags, "interest"),
       placeholder: "Search interests, or type your own",
+      label: "interests", limitNoun: "interest", max: FIELD_LIMITS.interests,
       onChange: refreshConnectState,
     });
+    // ⚠ NO `max`. "What you're hoping to get out of Sahaba Club" has no limit
+    // in the brief, and §5 of the spec flags that rather than assuming one.
+    // Picking a number here would be inventing a rule and then enforcing it in
+    // the database, which is a much harder thing to take back than to add.
+    // Open question for Zoka — see §10 decision 5.
     pickers.goals = createTagPicker({
       root: el("f-goals"), inputId: "f-goals-input",
       suggestions: [],
       placeholder: "e.g. Break into AI, find a coach",
+      label: "goals",
     });
 
     pickers.skills.set(data.skills || []);
@@ -517,6 +584,7 @@
         ? true : Boolean(data.show_in_attendees);
 
     refreshConnectState();
+    refreshBioCount();
   })();
 
   // ---- Save -------------------------------------------------------------
@@ -528,6 +596,37 @@
 
     // A tag still sitting in a picker's box was meant to be added.
     Object.keys(pickers).forEach(function (k) { pickers[k].flush(); });
+
+    // ---- The limits, checked before anything is sent --------------------
+    //
+    // The second of the three places §5 requires. It runs AFTER flush(), so a
+    // tag still sitting in a box counts, and BEFORE the payload is built, so a
+    // refusal costs no round trip.
+    //
+    // Only two things can be over by the time we get here, and neither is a
+    // member misbehaving: a bio or a tag list written before these limits
+    // existed. The pickers refuse the 51st skill as it is typed, and the
+    // textarea's maxlength stops a bio growing past 900 — but neither touches
+    // what was already there, on purpose.
+    //
+    // ⚠ NOTHING IS TRUNCATED HERE AND NOTHING MAY BE. Refusing the save leaves
+    // every word the member wrote exactly where it is, in the form and in the
+    // database. Trimming to fit would "succeed" and quietly destroy the part of
+    // their profile they spent the longest on.
+    var problems = limitProblems({
+      bio: el("f-bio").value,
+      skills: pickers.skills.get(),
+      interests: pickers.interests.get(),
+    });
+    if (problems.length) {
+      showStatus(escapeHtml(limitBlockMessage(problems)), "err");
+      refreshBioCount();
+      saveBtn.disabled = false;
+      var first = problems[0].field;
+      if (first === "bio") el("f-bio").focus();
+      else if (pickers[first]) pickers[first].focus();
+      return;
+    }
 
     var links = {};
     [["linkedin", "f-linkedin"], ["github", "f-github"], ["site", "f-site"]]
@@ -572,12 +671,18 @@
 
     saveBtn.disabled = false;
     if (res.error) {
-      showStatus(
-        isMissingSchema(res.error)
-          ? "Some of these fields aren't switched on yet, so they couldn't be saved. Nothing else was changed."
-          : "Couldn't save: " + escapeHtml(res.error.message),
-        "err"
-      );
+      // saveErrorMessage rather than the raw `message`, because since 0037 the
+      // most likely error on this path is a check violation, and
+      // `new row for relation "profiles" violates check constraint
+      // "profiles_bio_length"` is a sentence written for whoever wrote the
+      // query. It already knows the missing-column and missing-grant cases the
+      // hand-rolled branch here covered, and it knows the three field limits.
+      //
+      // Reaching this at all means something got past the check above — a
+      // second tab, a stale page, or a write that never went through this
+      // form. The database is the layer that cannot be walked around; this is
+      // only how it gets to say so in English.
+      showStatus(escapeHtml(saveErrorMessage(res.error)), "err");
       return;
     }
 

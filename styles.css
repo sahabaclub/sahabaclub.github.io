@@ -37,6 +37,45 @@ textarea:focus-visible,
   outline-offset: 2px;
 }
 
+/* Baseline dropdown contrast — the open list, not the closed control.
+   ------------------------------------------------------------------
+   A styled `select` sets its own `color`, and `<option>` INHERITS that colour
+   while being painted on a surface the page does not own: the browser's popup.
+   Author ink on a UA surface is half a colour pair, and half a pair has no
+   contrast ratio — it has whichever one the platform happens to hand you.
+
+   Measured, both themes, with the profile form's own values
+   (.prof-field select, color var(--text)):
+
+     dark  #f3f4f8 on a white popup ............  1.10:1   FAIL, unreadable
+     dark  #f3f4f8 on Chromium's dark popup ..... 10.19:1   pass, by luck
+     light #101627 on a black popup ............  1.17:1   FAIL, unreadable
+     light #101627 on a white popup ............ 18.01:1   pass, by luck
+
+     after this rule, dark  ..................... 18.32:1   PASS
+     after this rule, light ..................... 16.77:1   PASS
+
+   So both colours are set together, which is the only way to have a ratio at
+   all. `.signup-form select option` has carried exactly this pair since the
+   same problem was measured there; this generalises it to every select on the
+   site — the profile form's country and experience pickers, the dashboard's,
+   the admin filters — rather than leaving it as one page's local fix.
+
+   ⚠ WHAT THIS CANNOT DO. `<option>` rendering is substantially the operating
+   system's. Safari on macOS draws the popup with native menu chrome and
+   ignores `background-color` on an option outright, so on that platform this
+   rule changes nothing and readability rests on `color-scheme` (declared at
+   the top of this file) steering the system menu. The highlighted row is also
+   the platform's — every browser paints the selected option with its own
+   accent, over the top of this. Neither is a ratio this file can promise.
+   Chromium and Firefox, on Windows and Android, are where the numbers above
+   apply, and they are what the report that raised this was looking at. */
+select option,
+select optgroup {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -5136,3 +5175,73 @@ html.reduce-motion .hk-spin { animation: none; border-top-color: transparent; }
   /* The cue is the bar's only visible label now that the control lives at
      the bottom of the card, so it stays at every width. */
 }
+
+/* ============================================================
+   Member profile — the stats row (app/member.html)
+   ============================================================
+   `.cx-stats`, `.cx-stat` and the medal pills live in app/connect.css. What is
+   here is only what the rebuilt row added, and the selectors are doubled
+   (`.cx-stats.cx-stats-4`) on purpose: connect.css is linked AFTER this file,
+   so a single class would lose the tie to the `.cx-stats` rules already there
+   rather than override them. */
+
+/* Three numbers across, at every width, with the record spanning the row
+   underneath. Four equal tiles would have put a sentence in a column sized for
+   a two-digit number. */
+.cx-stats.cx-stats-4 { grid-template-columns: repeat(3, 1fr); }
+
+/* A prospect has no numbers at all — only the record — so there is nothing for
+   it to line up with. */
+.cx-stats.cx-stats-record { grid-template-columns: 1fr; }
+
+/* `.cx-stats .cx-stat-record`, not `.cx-stat-record`: every property below
+   also has an answer on `.cx-stat` in connect.css, and that file is linked
+   after this one — a single class would tie on specificity and lose on order,
+   leaving the record centred in a column-width box. */
+.cx-stats .cx-stat-record {
+  grid-column: 1 / -1;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+}
+.cx-record-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+.cx-record-text {
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+a.cx-record-text { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+a.cx-record-text:hover { color: var(--violet); }
+
+/* "+2 more" — the placings that did not fit. Quiet, because the medal beside
+   it is the thing being said. */
+.cx-record-more {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+}
+
+/* A round whose placings were never written down. This is the sentence the
+   page exists to get right, so it is on the page and not only in a tooltip —
+   a title attribute does not open on a phone. */
+.cx-record-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* The empty first tile on your own profile: the label is the way to fill it. */
+.cx-stat-label a { color: var(--violet); text-decoration: none; }
+.cx-stat-label a:hover { text-decoration: underline; }
