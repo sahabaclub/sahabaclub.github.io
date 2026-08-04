@@ -154,7 +154,8 @@
 <script type="module">
   import {
     currentUser, getMember, getProspect, getActivity, myFollowing, follow, unfollow,
-    roundsWithPlacings, summarise, escapeHtml, initialOf, linkList, placeOf,
+    roundsWithPlacings, hackathonRecord, engagementBreakdown, RECORD,
+    summarise, escapeHtml, initialOf, linkList, placeOf,
     experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
   } from "../lib/connect.js";
 
@@ -336,106 +337,42 @@
     'stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="15" r="6"/>' +
     '<path d="M8.2 9.5 5.5 3h5l2 4M15.8 9.5 18.5 3h-5"/></svg>';
 
-  var ORDINAL = { 1: "1st", 2: "2nd", 3: "3rd" };
+  // The record tile. `hackathonRecord()` in lib/connect.js has already decided
+  // which of the four states this is and worded it; everything here is
+  // presentation. The two files meet at the descriptor and nowhere else, which
+  // is what lets the wording — the part that must never say a coach competed,
+  // or that a missing placing was a missed one — be tested without a browser.
+  //
+  // `isMe` only changes the empty state: their own "No rounds yet" is a way in
+  // to the hackathons page, somebody else's is a fact and nothing more.
+  function recordHtml(entries, placings, isMe) {
+    var rec = hackathonRecord(entries, placings);
 
-  // A podium finish, or a win recorded without one. `is_winner` outside the
-  // top three still counts as an award, it just has no placing to state.
-  function awardOf(entry) {
-    var rank = Number(entry.rank);
-    var podium = rank === 1 || rank === 2 || rank === 3;
-    if (podium) return { key: String(rank), label: ORDINAL[rank] + " place" };
-    if (entry.is_winner === true) {
-      return { key: "win", label: rank > 3 ? rank + "th place" : "Winner" };
-    }
-    return null;
-  }
-
-  // `role` is the participant's own multi-choice answer at registration,
-  // stored verbatim in its comma-joined form. Splitting it is presentation and
-  // nothing more: as hackathons-ui.js puts it, "AI Coach" turning up in here
-  // does not make somebody a coach — is_mentor is the only thing that does.
-  function roleChipsHtml(role) {
-    var chips = text(role).split(",").map(function (r) { return r.trim(); }).filter(Boolean);
-    if (!chips.length) return "";
-    return '<div class="cx-roles">' + chips.map(function (r) {
-      return '<span class="cx-role">' + escapeHtml(r) + "</span>";
-    }).join("") + "</div>";
-  }
-
-  function hackathonHtml(entry, placings) {
-    var award = awardOf(entry);
-    var isMentor = entry.is_mentor === true;
-    var isJudge = entry.is_judge === true;
-    var team = text(entry.team);
-    var round = text(entry.round);
-    var name = text(entry.name) || "EduHackAI";
-    var when = asMonth(entry.starts_on);
-
-    var flags = "";
-    if (award) {
-      flags += '<span class="cx-award cx-award-' + award.key + '">' + MEDAL_ICON +
-        "<span>" + escapeHtml(award.label) + "</span></span>";
-    }
-    if (isMentor) flags += '<span class="cx-badge is-coach">Coach</span>';
-    if (isJudge) flags += '<span class="cx-badge is-judge">Judge</span>';
-
-    // What they did. A coach or a judge is never described as competing, even
-    // where a team is recorded against them: round 2 links two coaches to team
-    // "Reham", which the seed README flags as a probable data-entry artefact,
-    // and hackathons-ui.js keeps them out of that team's roster for exactly
-    // this reason.
-    var what;
-    if (isMentor && isJudge) what = "Coached and judged this round.";
-    else if (isMentor) what = "Coached this round.";
-    else if (isJudge) what = "Judged this round.";
-    else if (team) what = "Competed with <strong>" + escapeHtml(team) + "</strong>";
-    else what = "Took part — no team was recorded.";
-
-    var did = '<p class="cx-hack-what">' + what + "</p>" +
-      (isMentor || isJudge ? "" : roleChipsHtml(entry.role));
-
-    // A missing rank is ambiguous on a profile: the team may not have made the
-    // podium, or the round's placings may never have been written down at all.
-    // Rounds 3 and 4 are the second case, and calling that "no placing" would
-    // be a claim the source does not support. So the wording follows
-    // hackathons.html: unknown, not "nobody placed".
-    var note = "";
-    if (!award && !isMentor && !isJudge) {
-      var recorded = placings ? placings.get(text(entry.slug)) : undefined;
-      if (recorded === false) {
-        note = '<p class="cx-no-placing">Placings for this round were never recorded in ' +
-          "the source, so none are shown here. That means <em>unknown</em>, not that no " +
-          "team placed.</p>";
-      } else if (recorded !== true) {
-        // We couldn't establish it either way — say only that much.
-        note = '<p class="cx-no-placing">No placing is recorded for this round. That ' +
-          "means <em>unknown</em>, not that they didn't place.</p>";
-      }
-      // recorded === true: this round's placings are on record and this team
-      // is not among them. There is nothing to add, and a line about it would
-      // be precisely the implication this page is careful not to make.
+    var body;
+    if (rec.state === RECORD.WINNER) {
+      body = '<span class="cx-award cx-award-' + escapeHtml(rec.award.key) + '">' +
+        MEDAL_ICON + "<span>" + escapeHtml(rec.text) + "</span></span>" +
+        (rec.more ? '<span class="cx-record-more">+' + rec.more + " more</span>" : "");
+    } else if (rec.state === RECORD.NONE && isMe) {
+      body = '<a class="cx-record-text" href="../hackathons.html">' +
+        escapeHtml(rec.text) + "</a>";
+    } else {
+      body = '<span class="cx-record-text">' + escapeHtml(rec.text) + "</span>";
     }
 
-    return '<article class="cx-hack' + (award ? " is-award" : "") + '">' +
-        '<div class="cx-hack-head">' +
-          (round ? '<span class="cx-hack-round">Round ' + escapeHtml(round) + "</span>" : "") +
-          '<h3 class="cx-hack-name">' + escapeHtml(name) + "</h3>" +
-        "</div>" +
-        (flags ? '<div class="cx-hack-flags">' + flags + "</div>" : "") +
-        did +
-        (when ? '<p class="cx-hack-when">' + escapeHtml(when) + "</p>" : "") +
-        note +
-      "</article>";
-  }
+    // The note is rendered below, so a tooltip repeating it word for word
+    // would just be the same sentence twice.
+    var title = rec.title && rec.title !== rec.note ? rec.title : "";
 
-  // Newest round first, which is the order 0023 aggregates them in.
-  function hackathonsHtml(list, placings) {
-    var rounds = jsonList(list);
-    if (!rounds.length) return "";
-    return '<div class="cx-section"><p class="cx-section-title">EduHackAI involvement</p>' +
-      '<div class="cx-hacks">' +
-      rounds.map(function (r) { return hackathonHtml(r, placings); }).join("") +
-      "</div></div>";
+    return '<div class="cx-stat cx-stat-record"' +
+        (title ? ' title="' + escapeHtml(title) + '"' : "") + ">" +
+        '<span class="cx-stat-label">EduHackAI</span>' +
+        '<span class="cx-record-line">' + body + "</span>" +
+        // The nuance stays on the page rather than shrinking into the tooltip.
+        // A round whose placings were never written down is the case this
+        // whole line exists for, and a tooltip is not readable on a phone.
+        (rec.note ? '<p class="cx-record-note">' + escapeHtml(rec.note) + "</p>" : "") +
+      "</div>";
   }
 
   // The panel that keeps a prospect honest. It replaces the follow and message
@@ -486,7 +423,10 @@
     if (place) meta.push("<span>" + escapeHtml(place) + "</span>");
     if (experience) meta.push("<span>" + escapeHtml(experience) + "</span>");
     if (member.industry) meta.push("<span>" + escapeHtml(member.industry) + "</span>");
-    if (member.member_since) meta.push("<span>Member since " + escapeHtml(asMonth(member.member_since)) + "</span>");
+    // No "Member since" chip. The summary line directly below it now says
+    // "Member of Sahaba Club since Mar 2025" in full, and the chip was the
+    // same date twice — the second time with no sentence around it to say
+    // which date it was.
 
     var html =
       '<div class="cx-card">' +
@@ -534,42 +474,96 @@
           '<p class="cx-note">This member has messages switched off. You can still follow them.</p>');
     }
 
-    // 0023 made `member_since` the date the club created their Microsoft 365
-    // account rather than the date they first signed in here, so for anyone
-    // who has been in the tenant a while the two are years apart. That is the
-    // intended answer, not a bug — saying both out loud stops the older date
-    // looking like one.
-    var clubSince = asMonth(member.member_since);
-    var siteSince = asMonth(member.joined_site_at);
-    if (clubSince && siteSince && clubSince !== siteSince) {
-      html += '<p class="cx-note">&ldquo;Member since&rdquo; is when the club set up their ' +
-        "account. They started using this site in " + escapeHtml(siteSince) + ".</p>";
-    }
     html += "</div>";
 
-    // The numbers. Follower counts come from the directory view; event counts
-    // from member_activity, which only counts published events the member
-    // chose to appear in.
+    // ---- The stats row ----------------------------------------------------
     //
-    // None of the four exists for a prospect, and four zeroes would not read
-    // as "no account" — they would read as nobody follows them and they go to
-    // nothing. Better to show no numbers than four wrong ones.
-    if (!isProspect) html +=
-      '<div class="cx-stats">' +
-        '<div class="cx-stat"><span class="cx-stat-num">' + attended +
-          '</span><span class="cx-stat-label">events attended</span></div>' +
-        '<div class="cx-stat"><span class="cx-stat-num">' + upcoming +
-          '</span><span class="cx-stat-label">coming up</span></div>' +
-        '<div class="cx-stat"><span class="cx-stat-num">' + Number(member.followers || 0) +
-          '</span><span class="cx-stat-label">followers</span></div>' +
-        '<div class="cx-stat"><span class="cx-stat-num">' + Number(member.following || 0) +
-          '</span><span class="cx-stat-label">following</span></div>' +
-      "</div>";
+    // Three numbers and one record. `following` used to be the fourth number
+    // and is gone from the row — the column and the data stay, it just never
+    // told the reader anything about the person they were looking at.
+    //
+    // ⚠ A prospect still gets NO stats row, for the reason the old comment
+    // gave: none of these exists for somebody with no account, and zeroes
+    // would not read as "no account" — they would read as nobody follows them
+    // and they go to nothing. Better no numbers than wrong ones.
+    if (!isProspect) {
+      var years = member.years_experience;
+      // A member may honestly have entered 0, and the column is nullable with
+      // no default, so only null/undefined/"" is "not filled in". Rendering a
+      // stated 0 as "—" would throw away an answer they gave.
+      var hasYears = years !== null && years !== undefined && years !== "" &&
+                     isFinite(Number(years));
+      var engagement = engagementBreakdown(member.hackathons, activity);
 
-    // The live half. This is the part that stays true after someone stops
-    // editing their profile, so it goes above the typed-in fields. A prospect
-    // has no account, so they cannot have attended anything and the empty
-    // version of this section — "once they attend an event" — would be a
+      html +=
+        '<div class="cx-stats cx-stats-4">' +
+          '<div class="cx-stat">' +
+            '<span class="cx-stat-num">' + (hasYears ? Number(years) : "&mdash;") + "</span>" +
+            (hasYears || !isMe
+              ? '<span class="cx-stat-label">' +
+                  (hasYears && Number(years) === 1 ? "year experience" : "years experience") +
+                "</span>"
+              // Their own profile, with the field empty: the tile keeps its
+              // shape so the row stays aligned, and the label becomes the way
+              // to fill it in.
+              : '<span class="cx-stat-label"><a href="profile.html">Add your experience</a></span>') +
+          "</div>" +
+          // Coaching and judging rounds are counted, and upcoming events are
+          // counted, so the breakdown has to be readable: it is what stops
+          // "9" being read as nine things competed, and what explains the
+          // number going down when an event is cancelled.
+          '<div class="cx-stat" title="' + escapeHtml(engagement.title) + '">' +
+            '<span class="cx-stat-num">' + engagement.total + "</span>" +
+            '<span class="cx-stat-label">engagements</span>' +
+          "</div>" +
+          '<div class="cx-stat">' +
+            '<span class="cx-stat-num">' + Number(member.followers || 0) + "</span>" +
+            '<span class="cx-stat-label">followers</span>' +
+          "</div>" +
+          recordHtml(member.hackathons, placings, isMe) +
+        "</div>";
+    } else {
+      // ⚠ Not a stats row, and deliberately not inside the guard above.
+      //
+      // Deleting the "EduHackAI involvement" section moved every word a
+      // prospect's page had about their rounds into a tile that prospects do
+      // not get. Their rounds are most of why the profile exists at all —
+      // the panel above literally promises "the history the club already has
+      // on record, from the EduHackAI rounds they took part in" — so the
+      // record survives on its own. It is a sentence, not a number, so none
+      // of the reasoning that keeps the numbers off this page applies to it.
+      html += '<div class="cx-stats cx-stats-record">' +
+        recordHtml(member.hackathons, placings, false) + "</div>";
+    }
+
+    // Their own paragraph, first of the sections. For a prospect
+    // this is not their own paragraph at all — 0027 is explicit that these are
+    // written by a model from harvested material and then shown to the person
+    // they describe — so it says whose words they are. Presenting an AI's
+    // summary of somebody as if it were their own bio is exactly the false
+    // claim that migration spends its header refusing to make.
+    var bio = text(member.bio);
+    if (bio) {
+      html += '<div class="cx-section"><p class="cx-section-title">About</p>' +
+        '<div class="cx-card"><p class="cx-bio" dir="auto">' + escapeHtml(bio) + "</p>" +
+        (isProspect
+          ? '<p class="cx-note">Written by the club from EduHackAI records and what they had ' +
+            "made public, not by them. If it gets anything wrong, claiming the profile " +
+            "replaces it with their own words.</p>"
+          : "") +
+        "</div></div>";
+    }
+
+    html += workHistoryHtml(member.work_history);
+
+    // The live half, now below the two sections a reader opens this page for.
+    // It used to sit above them, back when the tiles above it were four event
+    // and follower counts; with the record tile up there the top of the page
+    // already answers "who is this and what have they done", and this is the
+    // pattern underneath it.
+    //
+    // A prospect has no account, so they cannot have attended anything and the
+    // empty version of this section — "once they attend an event" — would be a
     // promise about somebody who has no way to keep it.
     if (isProspect) {
       // Nothing.
@@ -594,33 +588,6 @@
         '<div class="cx-card"><p class="cx-topic-line">Nothing yet. Once they attend an event, ' +
         "what they keep coming back for shows up here on its own.</p></div></div>";
     }
-
-    // What they did in EduHackAI, then where they've worked. Both are records
-    // of things that happened rather than things they typed today, so they sit
-    // above the skills and interests they chose for themselves — and the
-    // awards, which are the reason anyone screenshots one of these pages, come
-    // first.
-    html += hackathonsHtml(member.hackathons, placings);
-
-    // Their own paragraph, between the awards and the timeline. For a prospect
-    // this is not their own paragraph at all — 0027 is explicit that these are
-    // written by a model from harvested material and then shown to the person
-    // they describe — so it says whose words they are. Presenting an AI's
-    // summary of somebody as if it were their own bio is exactly the false
-    // claim that migration spends its header refusing to make.
-    var bio = text(member.bio);
-    if (bio) {
-      html += '<div class="cx-section"><p class="cx-section-title">About</p>' +
-        '<div class="cx-card"><p class="cx-bio" dir="auto">' + escapeHtml(bio) + "</p>" +
-        (isProspect
-          ? '<p class="cx-note">Written by the club from EduHackAI records and what they had ' +
-            "made public, not by them. If it gets anything wrong, claiming the profile " +
-            "replaces it with their own words.</p>"
-          : "") +
-        "</div></div>";
-    }
-
-    html += workHistoryHtml(member.work_history);
 
     if ((member.skills || []).length) {
       html += '<div class="cx-section"><p class="cx-section-title">Skills</p>' +
