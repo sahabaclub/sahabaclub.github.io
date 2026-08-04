@@ -36,10 +36,10 @@
   "use strict";
 
   // ============================================================
-  // CONFIG — the two things on this page that the database cannot answer
+  // CONFIG — the things on this page that the database cannot answer
   // ------------------------------------------------------------
   // Everything else rendered here is computed from the rows that come back.
-  // These two objects are the exceptions, and they are at the top of the file
+  // These four objects are the exceptions, and they are at the top of the file
   // rather than buried next to the code that reads them precisely so that
   // "what on this page is not derived from data" is one place a person can
   // look at, in full, without reading any logic.
@@ -56,11 +56,106 @@
   // not 0, not "—", not "TBC". A zero here would be a claim that a round
   // shipped nothing, which is false for every round that has run.
   //
-  // Round 1 = 6 is Ahmed's figure. Rounds 2–4 are outstanding with him; fill
-  // each in as its answer arrives and the chip appears on its own.
-  var APPS_BY_ROUND = { 1: 6, 2: null, 3: null, 4: null };
+  // All four figures are now Ahmed's own. A round that is not in this object —
+  // a round 6 nobody has been asked about — is still null and still renders no
+  // chip; the mechanism has not changed, only the answers have arrived.
+  var APPS_BY_ROUND = { 1: 6, 2: 12, 3: 6, 4: 6 };
 
-  // ---- 2. Coach display names and LinkedIn profiles ----
+  // ---- 2. Where the EduHackers came from, per round ----
+  //
+  // ⚠ EMPTY ON PURPOSE. THIS IS NOT AN OVERSIGHT AND MUST NOT BE FILLED IN BY
+  // ⚠ ANYONE WHO IS NOT READING IT OFF A RECORD.
+  //
+  // Ahmed asked for a row of country tags — "Egypt · UAE · India · KSA" — in
+  // place of the Demo Day venue tags. THAT DATA DOES NOT EXIST. The only table
+  // that holds a person is `hackathon_participants`, whose columns are email,
+  // full_name and university_or_company; there is no country, no nationality
+  // and no address, and `hackathon_roster` — the view this page is allowed to
+  // read — exposes none of the three anyway.
+  //
+  // So the row is built from THIS object and nothing else, and it renders
+  // nothing at all while this object is empty. It is deliberately NOT inferred:
+  //
+  //   * a name does not carry a nationality. Guessing one from "Mahmoud" or
+  //     "Gangothri" would be both wrong and offensive, and it would be
+  //     published, under the club's name, about real people.
+  //   * `university_or_company` does not either — people study and work abroad,
+  //     and the roster view does not expose that column to this page in any case.
+  //   * the Demo Day venue is where the presentation was held, not where the
+  //     people who presented are from.
+  //
+  // Shape is APPS_BY_ROUND's: one entry per round that has run, keyed by
+  // round_number. The value is an array of country names exactly as they should
+  // be printed. Fill a round in when somebody has the actual list for it; the
+  // row appears on its own, showing the union across rounds in first-seen
+  // order, the moment any entry is non-empty. See countriesForRounds().
+  var EDUHACKER_COUNTRIES = { 1: [], 2: [], 3: [], 4: [] };
+
+  // ---- 3. The teams' demo videos ----
+  //
+  // Ahmed's YouTube playlist, "EduHackAI — Participant App Demos". Nothing in
+  // the database records a video against a team, so the list is here — ids and
+  // titles exactly as the playlist carries them, in playlist order.
+  //
+  // `blurb` is written FROM THE TITLE and from nothing else. No team name,
+  // placing, technology or date appears in a blurb unless the title above it
+  // says so, because the only thing this file knows about these videos is what
+  // is written on them. Twenty words is the cap.
+  //
+  // These are NOT nine embedded players. Each one renders as a poster image and
+  // a play button, and the iframe is created only when somebody presses it —
+  // see videoHtml() and the click handler at the bottom of this file.
+  var PLAYLIST_URL =
+    "https://www.youtube.com/playlist?list=PLHKe9OmckbU1C43jfevO26JLkmFcOW4JX";
+  var DEMO_VIDEOS = [
+    {
+      id: "psV1lJXPA_o",
+      title: "EduHackAI-3 Winner Solution (Meya Sports) Demo Video",
+      blurb: "The winning solution from EduHackAI-3, Meya Sports, walked through in its own demo video."
+    },
+    {
+      id: "qTiGdyTIeZU",
+      title: "AI App That Detects Cheating During Online Exams 😱 | Built in 10 Days!",
+      blurb: "An AI app that detects cheating during online exams, built in ten days."
+    },
+    {
+      id: "Unm3CjFqmrY",
+      title: "Built in 10 Days: AI App That Simplifies Smartphone Choices 💡",
+      blurb: "An AI app that simplifies choosing a smartphone, built in ten days."
+    },
+    {
+      id: "Osr5mmMdHaw",
+      title: "A 19-Year-Old Built AI Glasses in Just 10 Days! 🤖👓",
+      blurb: "AI glasses built in just ten days by a nineteen-year-old."
+    },
+    {
+      id: "U4Cq-w3LIUk",
+      title: "SkillSync AI – The 10-Day Hackathon App That Matches Skills to Projects 💡",
+      blurb: "SkillSync AI, a ten-day hackathon app that matches skills to projects."
+    },
+    {
+      id: "jX90VIemkiM",
+      title: "Our 10-Day Hackathon Project That Solves a Problem Using Microsoft Power Platform (Low-Code AI App)",
+      blurb: "A ten-day hackathon project solving a problem with a low-code AI app on Microsoft Power Platform."
+    },
+    {
+      id: "HDUVb9o_v8s",
+      title: "EduHackAI-2 (Suzy)",
+      blurb: "Suzy — a participant app demo from EduHackAI-2."
+    },
+    {
+      id: "cfznj3X_ais",
+      title: "EduHackAI-2 Winner Solution (Clever Mart)",
+      blurb: "The winning solution from EduHackAI-2, Clever Mart."
+    },
+    {
+      id: "zmPVq2zzJrQ",
+      title: "EduHackAI-1 Winner Solution (EduPulse AI)",
+      blurb: "The winning solution from EduHackAI-1, EduPulse AI."
+    }
+  ];
+
+  // ---- 4. Coach display names and LinkedIn profiles ----
   //
   // Keyed by the coach photo slug — i.e. by coachPhotoSlug(full_name) — so one
   // entry supplies both the LinkedIn URL and, where present, a display name.
@@ -124,7 +219,14 @@
   var searchInput = document.getElementById("hack-q");
   var clearBtn = document.getElementById("hack-clear-q");
   var countEl = document.getElementById("hack-count");
+  // The story's heading and the story's card are two mounts, not one, because
+  // Ahmed asked for the heading to sit ABOVE the four stat tiles while the
+  // prose stays below them. They are still one section to a screen reader: the
+  // card carries aria-labelledby pointing at the heading's id, which resolves
+  // across the document rather than only inside an ancestor.
+  var storyHeadEl = document.getElementById("hack-story-head");
   var storyEl = document.getElementById("hack-story");
+  var videosEl = document.getElementById("hack-videos");
   var coachesEl = document.getElementById("hack-coaches");
   var ctaEl = document.getElementById("hack-cta");
 
@@ -173,6 +275,9 @@
   // 13px it renders at. aria-hidden: the link's accessible name already says
   // whose profile it is and where it goes, so the glyph is decoration.
   var linkedinIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9h4v12H3zM9 9h3.8v1.7h.05c.53-1 1.83-2.05 3.77-2.05 4.03 0 4.78 2.65 4.78 6.1V21h-4v-5.4c0-1.29-.02-2.95-1.8-2.95-1.8 0-2.07 1.4-2.07 2.85V21H9z"/></svg>';
+  // The play triangle drawn over a demo video's poster. Decoration: the button
+  // it sits in already says "Play the demo video: <title>".
+  var playIcon = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M8.5 5.6v12.8a1 1 0 0 0 1.53.85l10.1-6.4a1 1 0 0 0 0-1.7L10.03 4.75a1 1 0 0 0-1.53.85z"/></svg>';
 
   // ------------------------------------------------------------
   // Small helpers
@@ -517,42 +622,54 @@
     return out;
   }
 
-  // Demo Day venues out of `location`.
+  // The country tags, read out of EDUHACKER_COUNTRIES and out of NOTHING else.
   //
-  // Migration 0036 records the Demo Day venue in `location` and prefixes every
-  // value with the words "Demo Day" precisely so it cannot be misread as where
-  // the ten days ran — the rounds themselves were online. Round 2 held two, in
-  // one field, separated by " · ".
+  // The union across the rounds that are actually on the page, in first-seen
+  // order, deduplicated. It returns [] while the config is empty — which is
+  // today, and which is why the tag row does not render at all. There is no
+  // fallback branch that fills the gap from names, universities or venues: see
+  // the ⚠ block on EDUHACKER_COUNTRIES for why inventing one would be worse
+  // than showing nothing.
   //
-  // Only entries that carry that label are counted. A `location` that says
-  // something else is a location, and calling it a Demo Day would be this file
-  // asserting something the database did not.
-  function demoVenues(location) {
-    if (!location) return [];
-    return String(location).split("·").map(function (s) {
-      return s.trim();
-    }).filter(function (s) {
-      return /^demo day/i.test(s);
-    }).map(function (s) {
-      var i = s.indexOf(":");
-      return i === -1 ? "" : s.slice(i + 1).trim();
-    }).filter(Boolean);
+  // A round the config says nothing about contributes nothing, exactly as a
+  // round with no app count contributes no Apps chip.
+  function countriesForRounds(rounds) {
+    var out = [];
+    (rounds || []).forEach(function (r) {
+      var key = String(r && r.round_number);
+      if (!Object.prototype.hasOwnProperty.call(EDUHACKER_COUNTRIES, key)) return;
+      var list = EDUHACKER_COUNTRIES[key];
+      if (!list || typeof list.length !== "number") return;
+      Array.prototype.forEach.call(list, function (name) {
+        var c = String(name == null ? "" : name).trim();
+        if (!c) return;
+        if (out.indexOf(c) === -1) out.push(c);
+      });
+    });
+    return out;
   }
 
-  // Everything the history section says, computed from the rows the page has
-  // already loaded. Nothing in here is a constant that a human typed, which is
-  // the point: when the database changes, the prose changes with it, and there
-  // is no sentence sitting in the markup quietly going out of date.
+  // Everything the history section says. Every figure here is computed from the
+  // rows the page has already loaded, which is the point: when the database
+  // changes, the prose changes with it, and there is no sentence sitting in the
+  // markup quietly going out of date.
   //
-  // What is deliberately NOT here: a country count. `hackathons` has no country
-  // column, and the venue strings mix a city with no country ("Mercure Hotel,
-  // Dubai") against a city with one ("Cairo, Egypt"), so a count of countries
-  // could only come from a city-to-country table written from memory. The
-  // venues are reported verbatim instead and the reader can see them.
+  // `countries` is the ONE field that is not derived from the rows — it is
+  // EDUHACKER_COUNTRIES, narrowed to the rounds on the page. It is in here
+  // rather than reached for inside storyHtml() so that the whole of what the
+  // history section says still arrives through one value that can be inspected
+  // in a test. It is [] today.
+  //
+  // What is deliberately NOT here any more: the Demo Day venues and the count
+  // of them, and which round ran in Arabic. Ahmed asked for all three to come
+  // out of the prose. Nothing computes them now, rather than something
+  // computing them and the renderer quietly dropping them on the floor — the
+  // per-round `location` chip still shows each round's own Demo Day venue,
+  // which is where that fact now lives.
   function storyFacts(rounds, teamsBy, rosterBy) {
     var list = rounds || [];
-    var starts = [], ends = [], venues = [], arabic = [];
-    var teams = 0, people = 0, demoDays = 0;
+    var starts = [], ends = [];
+    var teams = 0, people = 0;
     var seenPerson = {};
 
     list.forEach(function (r) {
@@ -567,21 +684,10 @@
         seenPerson[key] = true;
         people++;
       });
-
-      demoVenues(r.location).forEach(function (v) {
-        demoDays++;
-        if (venues.indexOf(v) === -1) venues.push(v);
-      });
-
-      // The database is what says a round ran in Arabic — 0036 appends the
-      // clause to round 4's own description. This reads it back rather than
-      // hard-coding which round it was.
-      if (/arabic/i.test(String(r.description || ""))) arabic.push(r.round_number);
     });
 
     starts.sort();
     ends.sort();
-    arabic.sort(function (a, b) { return a - b; });
 
     return {
       rounds: list.length,
@@ -589,9 +695,7 @@
       lastEnd: ends.length ? ends[ends.length - 1] : null,
       teams: teams,
       people: people,
-      demoDays: demoDays,
-      venues: venues,
-      arabicRounds: arabic
+      countries: countriesForRounds(list)
     };
   }
 
@@ -892,25 +996,14 @@
     return chips.length ? '<div class="hk-chips">' + chips.join("") + "</div>" : "";
   }
 
-  // The round's key figures, as chips, on their OWN row directly under the
-  // mode / venue chips.
+  // The round's key figures, as chips.
   //
-  // Two decisions here that were made against the phone and not the desktop:
-  //
-  //  * A second row rather than four more chips in the existing one. Seven
-  //    chips in one wrapping flex row at 375px produced a four-line block in
-  //    which "Online", "Demo Day: Cairo, Egypt" and "40 EduHackers" were the
-  //    same object at the same weight, and the figures — which are the thing
-  //    Ahmed wants read at a glance — were whatever happened to land last.
-  //    Split in two, the eye gets "what kind of round was this" and then "how
-  //    big was it", and each row is short enough to scan.
-  //
-  //  * The wording is "5 Coaches", not "No of Coaches: 5 Coaches". The noun
-  //    appears once instead of twice: the figures are the same figures, and at
-  //    375px the doubled noun was what pushed each chip onto its own line. The
-  //    number is set in the page's tabular figures at full text colour with the
-  //    noun beside it muted, so a column of them still reads as a set of counts
-  //    rather than as prose.
+  // The wording is "5 Coaches", not "No of Coaches: 5 Coaches". The noun
+  // appears once instead of twice: the figures are the same figures, and at
+  // 375px the doubled noun was what pushed each chip onto its own line. The
+  // number is set in the page's tabular figures at full text colour with the
+  // noun beside it muted, so a run of them still reads as a set of counts
+  // rather than as prose.
   function figureChipHtml(value, noun) {
     return '<span class="hk-chip is-figure">' +
       '<span class="hk-chip-n">' + escapeHtml(value) + "</span>" +
@@ -932,6 +1025,34 @@
       chips.push(figureChipHtml(f.apps, plural(f.apps, "AI-App", "AI-Apps")));
     }
     return '<div class="hk-chips hk-figures">' + chips.join("") + "</div>";
+  }
+
+  // The round's whole chip line: what kind of round it was, then how big it
+  // was, in ONE row on a wide screen.
+  //
+  // They used to be two rows by design — a phone-first decision, because seven
+  // chips wrapping freely at 375px produced a four-line block in which "Online"
+  // and "40 EduHackers" were the same object at the same weight. Ahmed has
+  // looked at the live page on a wide screen and asked for one row, so this is
+  // the compromise that gives him one without giving the phone the wall back:
+  //
+  //   * the two groups stay as two elements, so they can still separate from
+  //     each other cleanly rather than interleaving;
+  //   * .hk-meta is a wrapping flex row holding both, so on a desktop width
+  //     they sit side by side and the six chips read as one line;
+  //   * when they do not fit — a narrow viewport, or a round whose Demo Day
+  //     venue string is long — the groups wrap as units first and the chips
+  //     inside them wrap second, so the fallback is two tidy rows rather than
+  //     a ragged one. The column gap between the groups is wider than the gap
+  //     inside them, which is what keeps them legible as two things while they
+  //     are on one line.
+  //
+  // No chip is dropped at any width. Every one of these is a figure Ahmed asked
+  // to be readable at a glance, and hiding one on a small screen would be
+  // choosing which of his figures does not matter.
+  function metaHtml(round, figures) {
+    var inner = chipsHtml(round) + figureChipsHtml(figures);
+    return inner ? '<div class="hk-meta">' + inner + "</div>" : "";
   }
 
   // Splits a round's roster into coaches (is_mentor) and everyone else,
@@ -1051,11 +1172,10 @@
           "</h3>" +
           (round.tagline ? '<p class="hk-round-tagline">' + escapeHtml(round.tagline) + "</p>" : "") +
           (when ? '<p class="hk-round-when">' + escapeHtml(when) + whenNote + "</p>" : "") +
-          chipsHtml(round) +
           // Inside .hk-round-head, so the figures are visible while the round
           // is collapsed — which is how at least three of the four always are,
           // and the whole point of asking for them.
-          figureChipsHtml(roundFigures(round, teams, roster)) +
+          metaHtml(round, roundFigures(round, teams, roster)) +
         "</div>" +
         medalsHtml(teams) +
         // The control sits at the bottom of the card and spans its full width,
@@ -1096,11 +1216,16 @@
   // pill; at that size the pair read as a loading spinner and the top of the
   // page looked stuck. Both glyphs are gone and neither is replaced.
   //
-  // What is left is one statement — <round name> is coming — the benefit in
+  // What is left is one statement — <round mark> Coming Soon — the benefit in
   // plain words, the honest line that the dates are not set, and the button.
   // Everything shown is whatever the row actually carries; the only thing this
   // markup asserts on its own is that the dates are not set, which is exactly
   // why the round is in this list.
+  //
+  // The mark and the words are ONE lockup, not a mark with text hanging off it:
+  // .hk-soon-lockup is the flex row and it centres its two children on each
+  // other, so "Coming Soon" sits on the vertical centre line of the logo's
+  // height whatever height that logo ends up being. See styles.css.
   function soonHtml(round) {
     var desc = round.description
       ? '<p class="hk-soon-desc">' + escapeHtml(round.description) + "</p>"
@@ -1114,8 +1239,8 @@
     return '' +
       '<section class="hk-soon" id="' + escapeHtml(round.slug) + '">' +
         '<p class="hk-soon-flag">The next round</p>' +
-        '<h2 class="hk-soon-h">' + logo +
-          '<span class="hk-soon-verb">is coming</span></h2>' +
+        '<h2 class="hk-soon-h"><span class="hk-soon-lockup">' + logo +
+          '<span class="hk-soon-verb">Coming Soon</span></span></h2>' +
         (round.tagline ? '<p class="hk-soon-tagline">' + escapeHtml(round.tagline) + "</p>" : "") +
         desc +
         '<p class="hk-soon-note">The dates aren’t set yet. If you are interested to be with us, ' +
@@ -1134,17 +1259,36 @@
   // The history of EduHackAI
   // ------------------------------------------------------------
 
+  // The heading, on its own, because it renders into its own mount ABOVE the
+  // four stat tiles — Ahmed marked the gap between the coming-soon panel and
+  // the tiles as where it belongs, so the page now reads: coming soon →
+  // heading → tiles → prose. It keeps its id, and the story card below the
+  // tiles keeps aria-labelledby pointing at it, so moving it apart on screen
+  // did not split the section apart in the accessibility tree.
+  //
+  // It is guarded by the same `facts.rounds` test as the prose, so a page with
+  // no rounds does not render a heading over nothing.
+  function storyHeadingHtml(facts) {
+    if (!facts || !facts.rounds) return "";
+    return '<h2 class="hk-story-h" id="hk-story-h">The EduHackAI story so far</h2>';
+  }
+
   // Every number in this section comes out of storyFacts(), which computes it
   // from the rows already on the page. The prose is written AROUND those
   // values rather than alongside them, so there is no sentence here that can
   // quietly stop being true when the data moves. Anything storyFacts() cannot
-  // derive is left unsaid rather than estimated — see the note there about why
-  // there is no count of countries.
+  // derive is left unsaid rather than estimated.
+  //
+  // The country tags are the live example of that rule: the row below is driven
+  // by facts.countries, facts.countries is EDUHACKER_COUNTRIES, and
+  // EDUHACKER_COUNTRIES is empty — so the label, the count and every tag are
+  // absent from the DOM entirely rather than rendering an empty strip or a
+  // guessed list.
   function storyHtml(facts) {
     if (!facts || !facts.rounds) return "";
 
-    // Blocks rather than a flat list of sentences, because the venue list is
-    // a <ul> that has to land between two of the paragraphs.
+    // Blocks rather than a flat list of sentences, because the country tags are
+    // a <ul> that has to land after the paragraphs.
     var blocks = [];
     var range = formatRange(facts.firstStart, facts.lastEnd);
     function para(html) { blocks.push('<p class="hk-story-p">' + html + "</p>"); }
@@ -1172,34 +1316,22 @@
       );
     }
 
-    // The venues are a list, not a clause. Most of them carry a comma inside
-    // the name ("Cairo, Egypt"), so joining them with commas produced a
-    // sentence in which the separators and the names were the same character.
-    if (facts.demoDays) {
-      var v = facts.venues.length;
+    // Tags rather than a clause, the same way the venues were: a country list
+    // reads as a set, and a set reads as a row of tags. The whole block —
+    // sentence and tags together — is inside this one guard, so there is no
+    // state in which a lead-in introduces a row that is not there.
+    var countries = (facts.countries || []).filter(Boolean);
+    if (countries.length) {
       para(
-        "Each round ends on Demo Day, where the teams present what they built. " +
-        "<strong>" + facts.demoDays + "</strong> " +
-        plural(facts.demoDays, "Demo Day has", "Demo Days have") + " been held" +
-        (v ? ", at <strong>" + v + "</strong> " + plural(v, "venue", "venues") + ":" : ".")
+        "The EduHackers came from <strong>" + countries.length + "</strong> " +
+        plural(countries.length, "country", "countries") + ":"
       );
-      if (v) {
-        blocks.push('<ul class="hk-venues">' + facts.venues.map(function (name) {
-          return '<li class="hk-venue">' + escapeHtml(name) + "</li>";
-        }).join("") + "</ul>");
-      }
-    }
-
-    if (facts.arabicRounds.length) {
-      var rs = facts.arabicRounds.map(function (n) { return String(n); });
-      para(
-        plural(rs.length, "Round", "Rounds") + " " + escapeHtml(listSentence(rs)) +
-        " ran in Arabic."
-      );
+      blocks.push('<ul class="hk-countries">' + countries.map(function (name) {
+        return '<li class="hk-country">' + escapeHtml(name) + "</li>";
+      }).join("") + "</ul>");
     }
 
     return '<section class="hk-story" id="hk-story" aria-labelledby="hk-story-h">' +
-      '<h2 class="hk-story-h" id="hk-story-h">The EduHackAI story so far</h2>' +
       blocks.join("") +
     "</section>";
   }
@@ -1294,6 +1426,121 @@
   }
 
   // ------------------------------------------------------------
+  // Demo videos
+  // ------------------------------------------------------------
+  //
+  // WHY THERE ARE NO IFRAMES IN THIS MARKUP.
+  //
+  // Nine YouTube embeds is nine third-party players. Each one pulls a player
+  // bundle, a set of fonts and its own tracking state before anybody has
+  // pressed anything, on a page that already loads a starfield canvas, the
+  // Supabase client, twelve logo files and nine coach photographs. So each
+  // video renders as a FAÇADE: the poster image, a play button, and nothing
+  // else. The <iframe> is created by playVideo() at the moment somebody presses
+  // the button, and never before.
+  //
+  // Two consequences worth being explicit about:
+  //
+  //   * The frame is built against youtube-nocookie.com, so the player that
+  //     does eventually load is the one that does not write a tracking cookie
+  //     for a visitor who has not signed in to Google.
+  //   * The poster itself is still a request to i.ytimg.com. That is one image
+  //     per card against nine players plus their payloads, and it carries no
+  //     player and no cookie — but it is a third-party request and this comment
+  //     is not going to pretend otherwise.
+  //
+  // The poster is hqdefault.jpg, which YouTube serves at a real 480x360. Those
+  // are the width/height on the <img>, so the box is the right shape before the
+  // file arrives and nothing on the page moves when it does. CSS crops it to
+  // 16:9 inside a fixed-ratio frame, so the swap to the iframe — which is 16:9
+  // — costs no reflow either.
+
+  // Ids go into a URL and into an id-ish attribute, so anything that is not a
+  // YouTube id character is dropped rather than escaped. A surprising id can
+  // then only ever produce a 404, never a broken or hostile URL.
+  function safeVideoId(s) {
+    return String(s == null ? "" : s).replace(/[^A-Za-z0-9_-]/g, "");
+  }
+
+  function videoHtml(v) {
+    var id = safeVideoId(v && v.id);
+    if (!id) return "";
+    var title = String((v && v.title) || "").trim();
+    var t = escapeHtml(title);
+    var blurb = String((v && v.blurb) || "").trim();
+
+    return '<li class="hk-video">' +
+      '<span class="hk-video-media">' +
+        // The accessible name says what pressing it does AND which video it is:
+        // nine buttons reading "Play" would be nine identical announcements.
+        // The <img> carries the title as its alt as well, so the thumbnail is
+        // named in its own right wherever it is read outside the button.
+        '<button type="button" class="hk-video-play"' +
+          ' data-hk-video="' + id + '"' +
+          ' data-hk-title="' + t + '"' +
+          ' aria-label="' + escapeHtml("Play the demo video: " + title) + '">' +
+          '<img class="hk-video-thumb" src="https://i.ytimg.com/vi/' + id + '/hqdefault.jpg"' +
+            ' alt="' + t + '" loading="lazy" width="480" height="360">' +
+          '<span class="hk-video-cue" aria-hidden="true">' + playIcon + "</span>" +
+        "</button>" +
+      "</span>" +
+      '<h3 class="hk-video-title">' + t + "</h3>" +
+      (blurb ? '<p class="hk-video-desc">' + escapeHtml(blurb) + "</p>" : "") +
+    "</li>";
+  }
+
+  function videosHtml(list) {
+    var items = (list || []).map(videoHtml).join("");
+    if (!items) return "";
+    return '<section class="hk-videos" aria-labelledby="hk-videos-h">' +
+      '<h2 class="hk-videos-h" id="hk-videos-h">Demo videos</h2>' +
+      '<p class="hk-videos-intro">What the teams built, shown by the people who built it. ' +
+        "Pressing a thumbnail loads that video&rsquo;s player and nothing else.</p>" +
+      '<ul class="hk-video-grid">' + items + "</ul>" +
+      '<p class="hk-videos-more">' +
+        '<a class="hk-videos-link" href="' + escapeHtml(PLAYLIST_URL) + '"' +
+          ' target="_blank" rel="noopener noreferrer">' +
+          "Watch the full playlist on YouTube (opens in a new tab)</a>" +
+      "</p>" +
+    "</section>";
+  }
+
+  // The click-to-play swap. The button is replaced by the frame INSIDE its
+  // .hk-video-media wrapper, so the card's geometry is the wrapper's and does
+  // not depend on which of the two is currently in it.
+  //
+  // Focus moves to the frame afterwards, because the element that had focus has
+  // just been removed from the document and focus would otherwise fall back to
+  // <body> — a keyboard user would press play and lose their place on a page
+  // this long.
+  function playVideo(btn) {
+    if (!btn || !btn.parentNode) return;
+    var id = safeVideoId(btn.getAttribute("data-hk-video"));
+    if (!id) return;
+    var title = btn.getAttribute("data-hk-title") || "";
+    var media = btn.parentNode;
+    // autoplay is honest here: this runs from the reader's own click, so the
+    // thing that starts playing is the thing they just pressed.
+    media.innerHTML =
+      '<iframe class="hk-video-frame"' +
+        ' src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&amp;rel=0"' +
+        ' title="' + escapeHtml(title) + '"' +
+        ' width="480" height="270" loading="lazy"' +
+        ' allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"' +
+        " allowfullscreen></iframe>";
+    var frame = media.querySelector ? media.querySelector("iframe") : null;
+    if (frame && frame.focus) frame.focus();
+  }
+
+  if (videosEl && videosEl.addEventListener) {
+    videosEl.addEventListener("click", function (e) {
+      if (!e.target || !e.target.closest) return;
+      var btn = e.target.closest("[data-hk-video]");
+      if (btn) playVideo(btn);
+    });
+  }
+
+  // ------------------------------------------------------------
   // Closing call to action
   // ------------------------------------------------------------
 
@@ -1364,9 +1611,15 @@
     if (soonEl) soonEl.innerHTML = SOON.map(soonHtml).join("");
 
     // The history is about the rounds that have actually run, so it is
-    // computed over PAST — a round with no dates has no teams, no people and
-    // no Demo Day, and folding it in would only pull every number down.
-    if (storyEl) storyEl.innerHTML = storyHtml(storyFacts(PAST, TEAMS_BY_ROUND, ROSTER_BY_ROUND));
+    // computed over PAST — a round with no dates has no teams and no people,
+    // and folding it in would only pull every number down.
+    //
+    // One set of facts, two mounts: the heading renders above the stat tiles
+    // and the prose below them. Computed once so the two can never be guarded
+    // by different answers to the same question.
+    var facts = storyFacts(PAST, TEAMS_BY_ROUND, ROSTER_BY_ROUND);
+    if (storyHeadEl) storyHeadEl.innerHTML = storyHeadingHtml(facts);
+    if (storyEl) storyEl.innerHTML = storyHtml(facts);
     if (coachesEl) coachesEl.innerHTML = coachesHtml(dedupeCoaches(PAST, ROSTER_BY_ROUND));
     // Only offered when there is genuinely a round to register interest in.
     if (ctaEl) ctaEl.innerHTML = ctaHtml(SOON[0] || null);
@@ -1773,16 +2026,33 @@
     appsByRound: APPS_BY_ROUND,
     appsForRound: appsForRound,
     roundFigures: roundFigures,
+    // A renderer rather than a rule, exposed for one reason: every round on the
+    // page now HAS an app count, so "a round without one renders no chip"
+    // cannot be asserted off a rendered card any more. It is asserted on this
+    // function instead, which is the function the card is built by.
+    figureChipsHtml: figureChipsHtml,
     dedupeCoaches: dedupeCoaches,
-    demoVenues: demoVenues,
     storyFacts: storyFacts,
-    listSentence: listSentence
+    listSentence: listSentence,
+    eduhackerCountries: EDUHACKER_COUNTRIES,
+    countriesForRounds: countriesForRounds,
+    demoVideos: DEMO_VIDEOS,
+    playlistUrl: PLAYLIST_URL,
+    safeVideoId: safeVideoId
   };
 
   // The hero's brand mark is static markup, so it is wired straight away
   // rather than waiting on the database — there is nothing about it that
   // depends on what comes back.
   wireLogos(document);
+
+  // Same reasoning for the demo videos: the playlist is a fixed list in this
+  // file, not a query, so it is rendered at boot rather than inside
+  // renderChrome(). Putting it there would have made nine videos that have
+  // nothing to do with the archive disappear whenever the archive failed to
+  // load — and the posters are lazy, so rendering them early costs nothing
+  // until they scroll into view.
+  if (videosEl) videosEl.innerHTML = videosHtml(DEMO_VIDEOS);
 
   setStatus("Loading the EduHackAI archive…", false);
 

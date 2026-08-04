@@ -138,6 +138,22 @@ for (const d of describedBy) {
   ok(pageHtml.includes(`id="${d}"`), `hackathons.html: aria-describedby="${d}" resolves`);
 }
 
+// "Details of previous rounds:" — a static heading naming the filter chips,
+// the search box and the round cards below them. Static because the toolbar it
+// labels is static: a heading that only appeared after a fetch would leave the
+// search field unlabelled for as long as the fetch took.
+{
+  const heading = '<h2 class="hk-rounds-h">Details of previous rounds:</h2>';
+  ok(pageHtml.includes(heading), "hackathons.html: the rounds heading is present", heading);
+  const iStory = pageHtml.indexOf('id="hack-story"');
+  const iHeading = pageHtml.indexOf(heading);
+  const iToolbar = pageHtml.indexOf('class="hk-toolbar"');
+  const iRounds = pageHtml.indexOf('id="hack-rounds"');
+  ok(iStory < iHeading && iHeading < iToolbar && iToolbar < iRounds,
+    "hackathons.html: it sits between the story card and the round filter chips",
+    `story ${iStory}, heading ${iHeading}, toolbar ${iToolbar}, rounds ${iRounds}`);
+}
+
 const js = fs.readFileSync(path.join(REPO, "hackathons-ui.js"), "utf8");
 // Both stylesheets, read once here because the width check below resolves the
 // cascade across them together — the page's rules live in an inline <style>
@@ -189,7 +205,7 @@ function el(id, tag) {
 
 for (const id of [
   "hack-rounds", "hack-soon", "hack-status", "hack-stats", "hack-jump",
-  "hack-story", "hack-coaches", "hack-cta",
+  "hack-story-head", "hack-story", "hack-videos", "hack-coaches", "hack-cta",
   "hack-q", "hack-clear-q", "hack-count", "hk-interest", "hk-interest-title",
   "hk-interest-intro", "hk-interest-form", "hk-interest-submit",
   "hk-interest-done", "hk-done-text", "hk-form-error",
@@ -260,7 +276,9 @@ await new Promise((r) => setTimeout(r, 30));
 const roundsHtml = registry.get("hack-rounds").innerHTML;
 const soonHtml = registry.get("hack-soon").innerHTML;
 const statsHtml = registry.get("hack-stats").innerHTML;
+const storyHeadHtml = registry.get("hack-story-head").innerHTML;
 const storyHtml = registry.get("hack-story").innerHTML;
+const videosHtml = registry.get("hack-videos").innerHTML;
 const coachesHtml = registry.get("hack-coaches").innerHTML;
 const ctaHtml = registry.get("hack-cta").innerHTML;
 
@@ -268,13 +286,30 @@ ok(roundsHtml.length > 0, "rounds rendered");
 tagBalance(roundsHtml, "generated rounds markup");
 tagBalance(soonHtml, "generated coming-soon markup");
 tagBalance(statsHtml, "generated summary markup");
+tagBalance(storyHeadHtml, "generated story-heading markup");
 tagBalance(storyHtml, "generated history markup");
+tagBalance(videosHtml, "generated demo-videos markup");
 tagBalance(coachesHtml, "generated coaches markup");
 tagBalance(ctaHtml, "generated closing-CTA markup");
 
 // -- coming soon -----------------------------------------------------------
-ok(soonHtml.includes("is coming"), "round 5 renders as a plain statement that it is coming");
+ok(soonHtml.includes(">Coming Soon</span>"), "round 5 renders as <mark> Coming Soon");
+ok(!/is coming/.test(soonHtml), "the old \"is coming\" wording is gone", soonHtml);
 ok(soonHtml.includes("The next round"), "the panel's eyebrow says which round this is");
+
+// The mark and the words are one lockup, not a mark with text hanging off it.
+// Asserted on the STRUCTURE, because that is what makes the centring hold: the
+// logo slot and the verb have to be siblings inside the flex row that centres
+// them, and .hk-soon-h must not be that row itself (it is a block again, so the
+// lockup can be the only thing deciding where the middle is).
+{
+  const lock = (soonHtml.match(/<span class="hk-soon-lockup">([\s\S]*?)<\/span><\/h2>/) || [])[1];
+  ok(lock !== undefined, "the mark and the words sit in one .hk-soon-lockup", soonHtml);
+  ok(!!lock && /class="hk-logo hk-soon-logo"/.test(lock), "...the logo slot is inside it");
+  ok(!!lock && /class="hk-soon-verb"/.test(lock), "...and so are the words");
+  ok(!!lock && lock.indexOf("hk-soon-logo") < lock.indexOf("hk-soon-verb"),
+    "...with the mark first, so the words read after it");
+}
 ok(soonHtml.includes('data-hk-open="eduhackai-5"'), "coming-soon panel opens the dialog for round 5");
 ok(soonHtml.includes("Early bird discount"), "coming-soon panel names the early bird discount");
 ok(soonHtml.includes("interested to be with us"), "coming-soon panel uses the owner's words");
@@ -405,7 +440,24 @@ ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(RE
 // -- the history section ---------------------------------------------------
 {
   ok(storyHtml.length > 0, "the history section renders");
-  ok(/<h2 class="hk-story-h"/.test(storyHtml), "it has a heading");
+  // The heading is no longer inside the card: it renders into #hack-story-head,
+  // which sits ABOVE the four stat tiles. Both halves are asserted, and so is
+  // the fact that there is exactly one of it — two <h2 id="hk-story-h"> would
+  // make the card's aria-labelledby resolve to whichever the browser found
+  // first, which is not a thing to leave to chance.
+  ok(/<h2 class="hk-story-h" id="hk-story-h">/.test(storyHeadHtml),
+    "the heading renders into its own mount above the tiles", storyHeadHtml);
+  ok(storyHeadHtml.includes(">The EduHackAI story so far</h2>"),
+    "...and it is the heading the owner asked for");
+  ok(!/<h2/.test(storyHtml), "the story card no longer carries a heading of its own", storyHtml);
+  ok(storyHtml.includes('aria-labelledby="hk-story-h"'),
+    "...but still names the heading as its label");
+  {
+    const both = pageHtml + storyHeadHtml + storyHtml + roundsHtml + soonHtml +
+      videosHtml + coachesHtml + ctaHtml;
+    ok((both.match(/id="hk-story-h"/g) || []).length === 1,
+      "the heading's id exists exactly once in the document");
+  }
   // Every figure below is what the fixture actually contains. They are
   // asserted on the RENDERED prose, so a number that stopped being computed
   // and became a literal would still have to be the right literal — and
@@ -421,19 +473,34 @@ ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(RE
   ok(storyHtml.includes("<strong>9</strong> teams"), "the team total is the computed one");
   ok(storyHtml.includes("<strong>9</strong> people"),
     "people are counted once each across rounds");
-  // A list, not a comma-joined clause — most of these names contain a comma.
-  const venues = [...storyHtml.matchAll(/<li class="hk-venue">([^<]+)<\/li>/g)].map((m) => m[1]);
-  ok(venues.length === 3, `each Demo Day venue is its own list item (${venues.length})`);
-  ok(venues.includes("Cairo, Egypt") && venues.includes("Mercure Hotel, Dubai") &&
-     venues.includes("CodersHQ, Dubai"), "the Demo Day venues are named verbatim", venues.join(" | "));
-  ok(storyHtml.includes("<strong>4</strong> Demo Days have been held"),
-    "the Demo Day count is computed from the labelled locations");
-  ok(storyHtml.includes("Round 4 ran in Arabic."),
-    "the Arabic round is named, read back out of its own description");
-  // Nothing about countries: `hackathons` has no country column and the venue
-  // strings mix a bare city with a city-and-country, so a count could only
-  // come from knowledge this page does not have.
-  ok(!/countr/i.test(storyHtml), "no claim about countries is made");
+
+  // ---- the three deletions Ahmed asked for ----
+  // The fixture still carries all three: three labelled Demo Day venues across
+  // its rounds, and a round 4 whose description ends "this round ran in
+  // Arabic". So these are not passing because the data went away.
+  ok(!/hk-venue/.test(storyHtml), "the venue tags are gone from the prose", storyHtml);
+  for (const v of ["Cairo, Egypt", "CodersHQ, Dubai", "Mercure Hotel, Dubai"]) {
+    ok(!storyHtml.includes(v), `...including "${v}"`);
+  }
+  ok(!/Demo Day/i.test(storyHtml), "and the sentence that introduced them", storyHtml);
+  ok(!/ran in Arabic/i.test(storyHtml), "the Arabic sentence is gone", storyHtml);
+  // It is gone from the PROSE, not from the page: each round's own Demo Day
+  // venue is still on that round's chip line, which is where a venue belongs.
+  ok(/Demo Day: Cairo, Egypt/.test(roundsHtml),
+    "...but each round still shows its own Demo Day venue on its chip line");
+
+  // ---- the country tags ----
+  // ⚠ The row is DRIVEN BY EDUHACKER_COUNTRIES AND RENDERS NOTHING, because no
+  // ⚠ table on this project records a participant's country. These assertions
+  // ⚠ are the guard against somebody "fixing" the blank by inventing a list:
+  // ⚠ the row must be absent, not empty, and no country name may appear.
+  ok(!/hk-countries|hk-country/.test(storyHtml),
+    "the country tag row is absent entirely while the config is empty", storyHtml);
+  ok(!/came from/.test(storyHtml),
+    "...and so is the sentence that would introduce it");
+  for (const c of ["Egypt", "UAE", "India", "KSA", "Emirates", "Saudi"]) {
+    ok(!new RegExp(`\\b${c}\\b`).test(storyHtml), `no country is invented: "${c}" does not appear`);
+  }
   ok(!/undefined|NaN|null/.test(storyHtml), "no unresolved value reaches the prose");
 }
 
@@ -557,6 +624,139 @@ ok(/\.hk-round-toggle\s*\{[^}]*width:\s*100%/s.test(fs.readFileSync(path.join(RE
   }
 }
 
+// -- the demo videos -------------------------------------------------------
+// Nine videos from Ahmed's "EduHackAI — Participant App Demos" playlist,
+// rendered as click-to-play façades rather than as nine embedded players.
+{
+  const VIDEOS = [
+    ["psV1lJXPA_o", "EduHackAI-3 Winner Solution (Meya Sports) Demo Video"],
+    ["qTiGdyTIeZU", "AI App That Detects Cheating During Online Exams 😱 | Built in 10 Days!"],
+    ["Unm3CjFqmrY", "Built in 10 Days: AI App That Simplifies Smartphone Choices 💡"],
+    ["Osr5mmMdHaw", "A 19-Year-Old Built AI Glasses in Just 10 Days! 🤖👓"],
+    ["U4Cq-w3LIUk", "SkillSync AI – The 10-Day Hackathon App That Matches Skills to Projects 💡"],
+    ["jX90VIemkiM", "Our 10-Day Hackathon Project That Solves a Problem Using Microsoft Power Platform (Low-Code AI App)"],
+    ["HDUVb9o_v8s", "EduHackAI-2 (Suzy)"],
+    ["cfznj3X_ais", "EduHackAI-2 Winner Solution (Clever Mart)"],
+    ["zmPVq2zzJrQ", "EduHackAI-1 Winner Solution (EduPulse AI)"],
+  ];
+
+  ok(videosHtml.length > 0, "the demo videos section renders");
+  ok(/<h2 class="hk-videos-h" id="hk-videos-h">/.test(videosHtml), "it has a heading");
+  ok(videosHtml.includes('aria-labelledby="hk-videos-h"'), "...which labels the section");
+
+  const cards = videosHtml.match(/<li class="hk-video">/g) || [];
+  ok(cards.length === 9, `all nine videos render (${cards.length})`);
+  ok(T.demoVideos.length === 9, `the config holds nine videos (${T.demoVideos.length})`);
+
+  // Ids and titles are the playlist's, in the playlist's order. Checked one at
+  // a time against the list above rather than counted: nine cards is not the
+  // same claim as nine RIGHT cards.
+  VIDEOS.forEach(([id, title], i) => {
+    ok(T.demoVideos[i] && T.demoVideos[i].id === id,
+      `video ${i + 1} is ${id}, in playlist order`, T.demoVideos[i] && T.demoVideos[i].id);
+    ok(T.demoVideos[i] && T.demoVideos[i].title === title,
+      `video ${i + 1} carries its exact playlist title`, T.demoVideos[i] && T.demoVideos[i].title);
+  });
+  {
+    const ids = T.demoVideos.map((v) => v.id);
+    ok(new Set(ids).size === ids.length, "no video is listed twice");
+    ok(ids.every((i) => /^[A-Za-z0-9_-]{11}$/.test(i)),
+      "every id is a plain 11-character YouTube id",
+      ids.filter((i) => !/^[A-Za-z0-9_-]{11}$/.test(i)).join(", "));
+  }
+
+  // ---- ⚠ NO EMBEDS UNTIL SOMEBODY PRESSES ONE ----
+  // The whole point of the façade. If an <iframe> ever appears in this markup
+  // the page has quietly gained nine third-party players, and this is the line
+  // that catches it.
+  ok(!/<iframe/i.test(videosHtml), "⚠ no iframe is rendered — the section is a façade", videosHtml.slice(0, 400));
+  ok(!/youtube\.com\/embed|youtu\.be/.test(videosHtml), "...and no player URL is in the markup");
+  ok((videosHtml.match(/data-hk-video="/g) || []).length === 9,
+    "every card carries the id its play button will load");
+  // The frame the click DOES build is the no-cookie one, and it is built in the
+  // renderer, not in the markup. Comments are stripped first, so a note about
+  // youtube-nocookie is not youtube-nocookie.
+  const jsCode = js.replace(/^\s*\/\/.*$/gm, "");
+  ok(/youtube-nocookie\.com\/embed\//.test(jsCode),
+    "the player the click builds is youtube-nocookie.com");
+  ok(!/\/\/www\.youtube\.com\/embed/.test(jsCode),
+    "...and never the cookie-writing youtube.com player");
+  ok(/allowfullscreen/.test(jsCode), "...and it is allowed to go fullscreen");
+
+  // ---- thumbnails ----
+  const imgs = [...videosHtml.matchAll(/<img class="hk-video-thumb"[^>]*>/g)].map((m) => m[0]);
+  ok(imgs.length === 9, `every card has a poster image (${imgs.length})`);
+  ok(imgs.every((t) => /width="480" height="360"/.test(t)),
+    "every poster declares hqdefault's real 480x360, so nothing reflows",
+    imgs.find((t) => !/width="480" height="360"/.test(t)));
+  ok(imgs.every((t) => /loading="lazy"/.test(t)), "every poster is lazy-loaded");
+  ok(imgs.every((t) => /alt="[^"]+"/.test(t)),
+    "every poster has an accessible name naming its video",
+    imgs.find((t) => !/alt="[^"]+"/.test(t)));
+  VIDEOS.forEach(([id]) => {
+    ok(videosHtml.includes(`src="https://i.ytimg.com/vi/${id}/hqdefault.jpg"`),
+      `${id}'s poster comes from its own hqdefault.jpg`);
+  });
+
+  // ---- the play buttons ----
+  const btns = [...videosHtml.matchAll(/<button type="button" class="hk-video-play"[^>]*>/g)]
+    .map((m) => m[0]);
+  ok(btns.length === 9, `every card's control is a real <button> (${btns.length})`);
+  ok(btns.every((b) => /aria-label="Play the demo video: [^"]+"/.test(b)),
+    "...whose accessible name says what it does and which video it is",
+    btns.find((b) => !/aria-label="Play the demo video: /.test(b)));
+  {
+    const names = btns.map((b) => (b.match(/aria-label="([^"]+)"/) || [])[1]);
+    ok(new Set(names).size === 9, "no two buttons are announced identically");
+  }
+
+  // ---- the descriptions ----
+  // Twenty words maximum, and nothing in one that the title above it does not
+  // support. The word cap is machine-checkable and is checked; "nothing
+  // invented" is checked in the two ways it can be: no emoji carried over from
+  // a title, and no placing or team name in a blurb whose title has none.
+  T.demoVideos.forEach((v) => {
+    const words = String(v.blurb).trim().split(/\s+/).filter(Boolean);
+    ok(words.length > 0 && words.length <= 20,
+      `"${v.id}" is described in ${words.length} words (max 20)`, v.blurb);
+    ok(!/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(v.blurb),
+      `"${v.id}" carries no emoji in its description`, v.blurb);
+    // A blurb may only claim a win where its own title says "Winner".
+    const titleSaysWin = /winner/i.test(v.title);
+    ok(titleSaysWin || !/\bwin(ner|ning)\b/i.test(v.blurb),
+      `"${v.id}" does not claim a placing its title does not state`, v.blurb);
+  });
+  ok((videosHtml.match(/<p class="hk-video-desc">/g) || []).length === 9,
+    "every card shows its description");
+
+  // ---- the playlist link ----
+  ok(videosHtml.includes("PLHKe9OmckbU1C43jfevO26JLkmFcOW4JX"),
+    "the full playlist is linked");
+  ok(/class="hk-videos-link"[^>]*target="_blank"[^>]*rel="noopener noreferrer"/.test(videosHtml),
+    "...in a new tab, with both halves of rel");
+  ok(/opens in a new tab/.test(videosHtml), "...and the link says so in its own text");
+
+  // ---- id hygiene ----
+  ok(T.safeVideoId("abc/../../x?y=1") === "abcxy1",
+    "a video id is stripped to YouTube's own character set", T.safeVideoId("abc/../../x?y=1"));
+  ok(T.safeVideoId('"><script>') === "script", "...so nothing can be smuggled through it",
+    T.safeVideoId('"><script>'));
+  ok(T.safeVideoId(null) === "" && T.safeVideoId(undefined) === "", "no id, nothing");
+
+  // ---- where the section sits ----
+  // After the round cards and before the coaches: the reader meets the teams,
+  // then what they shipped, then the thank-you and the invitation.
+  {
+    const iRounds = pageHtml.indexOf('id="hack-rounds"');
+    const iVideos = pageHtml.indexOf('id="hack-videos"');
+    const iCoaches = pageHtml.indexOf('id="hack-coaches"');
+    const iCta = pageHtml.indexOf('id="hack-cta"');
+    ok(iRounds < iVideos && iVideos < iCoaches && iCoaches < iCta,
+      "the videos sit after the rounds and before the coaches and the CTA",
+      `rounds ${iRounds}, videos ${iVideos}, coaches ${iCoaches}, cta ${iCta}`);
+  }
+}
+
 // -- the closing CTA -------------------------------------------------------
 {
   ok(ctaHtml.includes('data-hk-open="eduhackai-5"'),
@@ -670,22 +870,52 @@ ok(!roundsHtml.includes("Team Four D".padEnd(0) + '</h4>') || true, "rank 4 gets
   ok(chips[3][0] === "6" && /AI-App/.test(chips[3][1]), "the app count is the configured one",
     JSON.stringify(chips[3]));
 
-  // Round 2 has no configured app count. The chip must be ABSENT — not zero,
-  // not a dash, not "TBC". This is the assertion that stops a placeholder
-  // sneaking in the next time the config is edited.
-  const r2 = roundsHtml.slice(roundsHtml.indexOf('id="eduhackai-2"'), roundsHtml.indexOf('id="eduhackai-1"'));
-  const r2head = r2.slice(0, r2.indexOf('class="hk-round-panel"'));
-  const r2chips = [...r2head.matchAll(/<span class="hk-chip-noun">([^<]+)<\/span>/g)].map((m) => m[1]);
-  ok(r2chips.length === 3, `a round with no app count shows three figures (${r2chips.length})`,
-    r2chips.join(", "));
-  ok(!/AI-App/.test(r2head), "...and no Apps chip at all");
+  // All four rounds now have an app count, so every round card carries the
+  // chip. That is the change; it is asserted rather than assumed.
+  for (const [slug, n] of [["eduhackai-4", "6"], ["eduhackai-3", "6"], ["eduhackai-2", "12"]]) {
+    const card = roundsHtml.slice(roundsHtml.indexOf(`id="${slug}"`));
+    const head = card.slice(0, card.indexOf('class="hk-round-panel"'));
+    ok(new RegExp(`<span class="hk-chip-n">${n}</span><span class="hk-chip-noun">AI-App`).test(head),
+      `${slug} shows its configured app count (${n})`,
+      head.replace(/<[^>]*>/g, " ").replace(/\s+/g, " "));
+  }
+
+  // A round with NO configured app count must render the chip ABSENT — not
+  // zero, not a dash, not "TBC". Every round in the fixture now has a count, so
+  // this can no longer be asserted off a rendered card; it is asserted on the
+  // renderer itself instead, which is the function the card is built by.
+  {
+    const withApps = T.figureChipsHtml({ coaches: 1, teams: 2, eduhackers: 3, apps: 7 });
+    const noApps = T.figureChipsHtml({ coaches: 1, teams: 2, eduhackers: 3, apps: null });
+    const nouns = (s) => [...s.matchAll(/<span class="hk-chip-noun">([^<]+)<\/span>/g)].map((m) => m[1]);
+    ok(nouns(withApps).length === 4 && /AI-App/.test(withApps),
+      "a round with an app count shows four figures", nouns(withApps).join(", "));
+    ok(nouns(noApps).length === 3, `a round with no app count shows three figures`,
+      nouns(noApps).join(", "));
+    ok(!/AI-App/.test(noApps), "...and no Apps chip at all", noApps);
+    ok(!/TBC|—|N\/A|>0</.test(noApps), "...and no zero and no textual placeholder either", noApps);
+  }
   // Specifically the Apps chip. A computed zero elsewhere is a real answer —
   // the fixture's round 2 genuinely has no non-mentor roster rows, and "0
   // EduHackers" is what the data says. An Apps zero could only ever be a
   // placeholder, because the figure is not computed at all.
   ok(!/hk-chip-n">0<\/span><span class="hk-chip-noun">AI-App/.test(roundsHtml),
     "no round renders a zero Apps chip");
-  ok(!/TBC|—|N\/A/.test(r2head.replace(/<[^>]*>/g, "")), "...and no textual placeholder either");
+
+  // ---- one chip line, not two ----
+  // Ahmed asked for the per-round chips to sit on ONE row on a wide screen.
+  // The markup half of that is asserted here — both chip groups are children of
+  // the single .hk-meta row — and the CSS half in section 5.
+  {
+    const meta = (head.match(/<div class="hk-meta">([\s\S]*?)<\/div><\/div>/) || [])[1];
+    ok(meta !== undefined, "the round's chips sit in one .hk-meta row", head);
+    ok(!!meta && /class="hk-chips"/.test(meta), "...which holds the mode / venue group");
+    ok(!!meta && /class="hk-chips hk-figures"/.test(meta), "...and the figures group");
+    ok(!!meta && meta.indexOf('class="hk-chips"') < meta.indexOf("hk-figures"),
+      "...in that order: what kind of round, then how big");
+    ok((roundsHtml.match(/class="hk-meta"/g) || []).length === 4,
+      "every round card has exactly one chip row");
+  }
 
   // The coming round has no data, so it gets no figures row — 0 Coaches and
   // 0 Teams on a round that has not run would be a claim, not a blank.
@@ -714,8 +944,23 @@ ok(!roundsHtml.includes("Team Four D".padEnd(0) + '</h4>') || true, "rank 4 gets
 }
 
 // -- the story section's heading and its width -----------------------------
-ok(storyHtml.includes(">The EduHackAI story so far</h2>"),
+ok(storyHeadHtml.includes(">The EduHackAI story so far</h2>"),
   "the story section carries the heading the owner asked for");
+// It renders into the mount that sits between the coming-soon panel and the
+// stat tiles, which is the order Ahmed marked on the screenshot. Asserted
+// against the PAGE, because the order is decided by where the mounts are in
+// hackathons.html and by nothing in the renderer.
+{
+  const iSoon = pageHtml.indexOf('id="hack-soon"');
+  const iHead = pageHtml.indexOf('id="hack-story-head"');
+  const iStats = pageHtml.indexOf('id="hack-stats"');
+  const iStory = pageHtml.indexOf('id="hack-story"');
+  ok(iSoon !== -1 && iHead !== -1 && iStats !== -1 && iStory !== -1,
+    "all four story-related mounts exist on the page");
+  ok(iSoon < iHead && iHead < iStats && iStats < iStory,
+    "the page reads: coming soon -> heading -> stat tiles -> story prose",
+    `soon ${iSoon}, head ${iHead}, stats ${iStats}, story ${iStory}`);
+}
 {
   // The width report, twice over now, so this is checked by resolving the
   // cascade rather than by grepping for the first max-width in the file.
@@ -977,20 +1222,71 @@ ok(T.coachPhotoSlug("") === "" && T.coachPhotoSlug(null) === "", "nothing in, no
 
 // -- "No of Apps": the one figure that is configured, not computed ---------
 {
-  ok(T.appsForRound(1) === 6, "round 1's app count comes from the config");
-  ok(T.appsForRound("1") === 6, "...whether the round number is a number or a string");
-  ok(T.appsForRound(2) === null && T.appsForRound(3) === null && T.appsForRound(4) === null,
-    "a round nobody has answered for is null, not 0");
+  // Ahmed's four answers, one at a time. Named individually rather than
+  // counted, because "the config has four entries" would pass with four wrong
+  // numbers in it.
+  for (const [n, want] of [[1, 6], [2, 12], [3, 6], [4, 6]]) {
+    ok(T.appsForRound(n) === want, `round ${n}'s app count is ${want}`, String(T.appsForRound(n)));
+    ok(T.appsForRound(String(n)) === want,
+      `...whether round ${n} is given as a number or a string`);
+  }
+  // The "not known" path has to keep working even though nothing uses it today.
+  // A round 6 nobody has been asked about is exactly as unknown as round 2 was
+  // before Ahmed answered, and the chip must stay absent for it.
   ok(T.appsForRound(9) === null, "a round that is not in the config at all is null");
   ok(T.appsForRound(null) === null && T.appsForRound(undefined) === null &&
      T.appsForRound("") === null, "no round number, no count");
-  // The shape Ahmed's answer has to land in. If somebody replaces a null with
-  // a 0 to make the chip appear, this says so.
+  // The shape Ahmed's answers landed in. If somebody adds a 0 to make a chip
+  // appear on a round that shipped nothing, this says so.
   const cfg = T.appsByRound;
   ok(Object.keys(cfg).join(",") === "1,2,3,4", "the config covers exactly the four rounds",
     Object.keys(cfg).join(","));
   ok(Object.keys(cfg).every((k) => cfg[k] === null || (typeof cfg[k] === "number" && cfg[k] > 0)),
     "every configured app count is either null or a real positive number");
+}
+
+// -- the country tags: a config that is EMPTY on purpose -------------------
+// ⚠ These are the assertions that keep the row honest. `hackathon_participants`
+// ⚠ holds email, full_name and university_or_company and nothing else, and the
+// ⚠ roster view exposes none of them, so there is no country data anywhere on
+// ⚠ this project. The config must therefore stay empty until somebody has a
+// ⚠ real list, and the row must render nothing while it is.
+{
+  const cfg = T.eduhackerCountries;
+  ok(Object.keys(cfg).join(",") === "1,2,3,4",
+    "the country config has APPS_BY_ROUND's shape: one entry per round that ran",
+    Object.keys(cfg).join(","));
+  const filled = Object.keys(cfg).filter((k) => (cfg[k] || []).length);
+  ok(filled.length === 0,
+    "⚠ the country config is EMPTY — nothing has been invented for it",
+    filled.map((k) => `${k}: ${JSON.stringify(cfg[k])}`).join(" | "));
+
+  const rounds = [{ round_number: 1 }, { round_number: 2 }, { round_number: 9 }];
+  ok(T.countriesForRounds(rounds).length === 0, "so the tag row has nothing to render");
+  ok(T.countriesForRounds([]).length === 0, "no rounds, no countries");
+  ok(T.countriesForRounds(null).length === 0, "no argument, no countries");
+
+  // The mechanism itself, exercised against a stand-in config so that "it
+  // renders nothing" is known to be the data's doing and not a dead function.
+  // countriesForRounds() reads the module's own object, so this reaches in and
+  // fills it, then puts it back exactly as it was.
+  const saved = { 1: cfg[1], 2: cfg[2], 3: cfg[3], 4: cfg[4] };
+  try {
+    cfg[1] = ["Egypt", "UAE"];
+    cfg[2] = ["UAE", "  ", "India", null];       // duplicate, blank and null
+    cfg[3] = [];
+    const got = T.countriesForRounds([{ round_number: 1 }, { round_number: 2 }, { round_number: 3 }]);
+    ok(got.join("|") === "Egypt|UAE|India",
+      "a filled config produces the union, deduplicated, in first-seen order", got.join("|"));
+    ok(T.countriesForRounds([{ round_number: 3 }]).length === 0,
+      "a round whose entry is empty contributes nothing");
+    ok(T.countriesForRounds([{ round_number: 9 }]).length === 0,
+      "a round the config says nothing about contributes nothing");
+  } finally {
+    for (const k of Object.keys(saved)) cfg[k] = saved[k];
+  }
+  ok(T.countriesForRounds([{ round_number: 1 }]).length === 0,
+    "...and the real config is still empty afterwards");
 }
 
 // -- per-round figures, computed from the rows ----------------------------
@@ -1007,31 +1303,12 @@ ok(T.coachPhotoSlug("") === "" && T.coachPhotoSlug(null) === "", "nothing in, no
   ok(f.coaches + f.eduhackers === roster.length,
     "every roster row lands in exactly one of the two");
   ok(f.apps === 6, "round 1's apps come from the config");
-  ok(T.roundFigures({ round_number: 2 }, [], []).apps === null,
+  ok(T.roundFigures({ round_number: 9 }, [], []).apps === null,
     "a round with no configured app count reports null");
   const none = T.roundFigures({ round_number: 5 }, null, null);
   ok(none.coaches === 0 && none.eduhackers === 0 && none.teams === 0 && none.apps === null,
     "a round with nothing in it computes to nothing");
 }
-
-// -- Demo Day venues out of `location` -------------------------------------
-ok(T.demoVenues("Demo Day: Cairo, Egypt").join("|") === "Cairo, Egypt", "one labelled venue");
-ok(T.demoVenues("Demo Day 1: CodersHQ, Dubai · Demo Day 2: Cairo, Egypt").length === 2,
-  "two demo days in one field");
-ok(T.demoVenues("Demo Day 1: CodersHQ, Dubai · Demo Day 2: Cairo, Egypt")[0] === "CodersHQ, Dubai",
-  "...split on the separator and stripped of their labels");
-// A location that does not say "Demo Day" is a location. Counting it as one
-// would be this page asserting something the database did not. The second
-// case is the one that matters: a bare "Alexandria" is also rejected by the
-// "must have a colon" step, so it cannot tell whether the label test is
-// doing anything. A colon-bearing value that is not a Demo Day can.
-ok(T.demoVenues("Alexandria").length === 0, "an unlabelled location is not a demo day");
-ok(T.demoVenues("Venue: Alexandria").length === 0,
-  "a labelled location that is not a Demo Day is not counted as one",
-  T.demoVenues("Venue: Alexandria").join("|"));
-ok(T.demoVenues("Demo Day: X · Somewhere Else: Y").length === 1,
-  "only the Demo Day half of a mixed field counts");
-ok(T.demoVenues(null).length === 0 && T.demoVenues("").length === 0, "no location, no venues");
 
 ok(T.listSentence(["a"]) === "a", "one item");
 ok(T.listSentence(["a", "b"]) === "a and b", "two items");
@@ -1057,11 +1334,18 @@ ok(T.listSentence([]) === "", "no items");
   ok(f.lastEnd === "2025-06-11", "latest end found, ignoring the round with none");
   ok(f.teams === 3, "teams totalled");
   ok(f.people === 2, `people deduplicated across rounds (${f.people})`);
-  ok(f.demoDays === 1 && f.venues.length === 1, "demo days counted from labelled locations only");
-  ok(f.arabicRounds.length === 1 && f.arabicRounds[0] === 2,
-    "the Arabic round is read out of the description, not hard-coded");
+  // The three fields Ahmed asked to be taken out of the prose are no longer
+  // computed at all — not computed and quietly dropped by the renderer, which
+  // is the state that rots. The fixture above still carries a labelled Demo Day
+  // and a description saying the round ran in Arabic, so these are meaningful.
+  for (const gone of ["demoDays", "venues", "arabicRounds"]) {
+    ok(!(gone in f), `storyFacts no longer computes ${gone}`, JSON.stringify(Object.keys(f)));
+  }
+  ok(Array.isArray(f.countries) && f.countries.length === 0,
+    "...and countries is the empty list the empty config produces",
+    JSON.stringify(f.countries));
   const none = T.storyFacts([], {}, {});
-  ok(none.rounds === 0 && none.firstStart === null && none.venues.length === 0,
+  ok(none.rounds === 0 && none.firstStart === null && none.countries.length === 0,
     "a programme with nothing in it computes to nothing");
 }
 
@@ -1326,7 +1610,7 @@ const allCss = sheet + "\n" + inlineStyle;
 // them out meant a new class could ship with no styling at all and nothing
 // would say so.
 const allRendered = pageHtml + roundsHtml + soonHtml + statsHtml +
-  storyHtml + coachesHtml + ctaHtml;
+  storyHeadHtml + storyHtml + videosHtml + coachesHtml + ctaHtml;
 const classAttrs = [...allRendered.matchAll(/class="([^"]*)"/g)];
 const used = new Set();
 for (const m of classAttrs) {
@@ -1339,7 +1623,7 @@ ok(missing.length === 0, `every hk- class used has a rule (${used.size} classes)
 // a note explaining why a rule went is not the rule coming back.
 const cssNoComments = allCss.replace(/\/\*[\s\S]*?\*\//g, "");
 const jsNoComments = js.replace(/^\s*\/\/.*$/gm, "");
-for (const dead of ["hk-podium", "hk-no-placings", "hk-provenance"]) {
+for (const dead of ["hk-podium", "hk-no-placings", "hk-provenance", "hk-venue"]) {
   ok(!cssNoComments.includes("." + dead) && !jsNoComments.includes(dead),
     `the ${dead} rules and markup are both gone`);
 }
@@ -1373,7 +1657,7 @@ function blocksOf(css, opener) {
 const rmMedia = blocksOf(allCss, "@media (prefers-reduced-motion: reduce)");
 ok(rmMedia.length > 0 && rmMedia.length < allCss.length / 4,
   "the reduced-motion media blocks are extracted, not the rest of the sheet");
-for (const sel of ["hk-medal", "hk-round-caret", "hk-round-toggle", "hk-spin"]) {
+for (const sel of ["hk-medal", "hk-round-caret", "hk-round-toggle", "hk-spin", "hk-video-cue"]) {
   ok(new RegExp("\\." + sel + "\\b").test(rmMedia), `prefers-reduced-motion switches off .${sel}`);
   ok(new RegExp("html\\.reduce-motion[^{}]*\\." + sel + "\\b[^{}]*\\{").test(allCss),
     `html.reduce-motion switches off .${sel}`);
@@ -1420,6 +1704,128 @@ ok(/\.hk-coach-photo\s*\{[^}]*display:\s*none/s.test(allCss) &&
    /\.hk-coach-photo\.is-ready\s*\{[^}]*display:\s*block/s.test(allCss),
   "coach photos start hidden and are revealed only once they decode");
 
+// ---- the coming-soon lockup and its gradient text ----
+// The centring Ahmed asked for is a property of the flex row, not of the two
+// children happening to be the same height, so the row is what is asserted.
+{
+  const lockup = blocksOf(allCss, ".hk-soon-lockup");
+  ok(/display:\s*flex/.test(lockup), ".hk-soon-lockup is a flex row");
+  ok(/align-items:\s*center/.test(lockup),
+    "...that centres the mark and the words on each other — the vertical centre line");
+  ok(!/\.hk-soon-h\s*\{[^}]*align-items/s.test(allCss),
+    ".hk-soon-h is not itself the flex row, so only the lockup decides the middle");
+
+  const verb = blocksOf(allCss, ".hk-soon-verb");
+  ok(/line-height:\s*1\b/.test(verb),
+    "the words' box is tight, so centring the box centres the glyphs");
+
+  // ---- the gradient, and the fallback that must survive without it ----
+  // The order is the safety property: `color` is set unconditionally and the
+  // transparent text fill only ever exists inside the @supports gate that also
+  // brings the gradient. A browser that cannot paint gradient text therefore
+  // cannot reach a state where this heading is invisible.
+  //
+  // The sheet carries FIVE blocks with this same @supports condition — the club
+  // wordmark's glow already uses the technique, which is why this heading uses
+  // it too rather than inventing a second mechanism — so the right one is found
+  // by a declaration inside it, not by the condition.
+  const supportsBlockFor = (css, needle) => {
+    const i = css.indexOf(needle);
+    if (i === -1) return "";
+    const open = css.lastIndexOf("@supports", i);
+    if (open === -1) return "";
+    let j = css.indexOf("{", open) + 1;
+    const start = j;
+    let depth = 1;
+    while (j < css.length && depth > 0) {
+      if (css[j] === "{") depth++;
+      else if (css[j] === "}") depth--;
+      j++;
+    }
+    return css.slice(start, j - 1);
+  };
+  const gate = supportsBlockFor(allCss, "linear-gradient(90deg, #9aa5ff");
+  ok(gate.length > 0, "the gradient text is behind an @supports gate");
+  ok(allCss.includes(gate), "...and that block was extracted whole");
+  ok(/-webkit-text-fill-color:\s*transparent/.test(gate),
+    "...and the transparent fill is inside that gate");
+  // ...and nowhere outside it. Scoped to this element: the sheet has other
+  // gradient-text rules of its own (the club wordmark's glow), and this is not
+  // a claim about them — it is a claim that THIS heading's transparent fill
+  // cannot exist without the gradient that paints it.
+  ok(!/-webkit-text-fill-color:\s*transparent/.test(
+       blocksOf(allCss.replace(gate, ""), ".hk-soon-verb")),
+    "...and this heading has no transparent fill outside that gate",
+    blocksOf(allCss.replace(gate, ""), ".hk-soon-verb"));
+  ok(/linear-gradient\(90deg,\s*#9aa5ff/.test(gate) && /#ff9ae8/.test(gate),
+    "the dark ramp is the measured blue -> magenta one");
+  ok(/linear-gradient\(90deg,\s*#1a1fd6/.test(gate) && /#9c0080/.test(gate),
+    "the light ramp is the measured deep blue -> deep magenta one");
+  ok(/background-clip:\s*text/.test(gate) && /-webkit-background-clip:\s*text/.test(gate),
+    "both the prefixed and the standard background-clip are declared");
+  // The solid fallbacks are the WORST end of each theme's ramp, so a browser
+  // that falls back gets a colour already measured at the gradient's own worst
+  // number. contrast.mjs measures both.
+  ok(/\.hk-soon-verb\s*\{[^}]*color:\s*#9aa5ff/s.test(allCss),
+    "the dark fallback is the blue end, which is the dark ramp's worst point");
+  ok(/html\.light-mode \.hk-soon-verb\s*\{[^}]*color:\s*#9c0080/s.test(allCss),
+    "the light fallback is the magenta end, which is the light ramp's worst point");
+  // Forced colours throw the gradient away; without this the text would be
+  // painted in a transparent fill with nothing behind it.
+  ok(/@media \(forced-colors: active\)/.test(gate) &&
+     /-webkit-text-fill-color:\s*currentColor/.test(gate),
+    "forced-colors hands the text back to the system colour");
+  // The mark's raw colours measure 1.57:1 and 3.40:1 on this panel. Neither
+  // may be used as the text colour, however tempting "the actual logo hex" is.
+  ok(!/\.hk-soon-verb[^{}]*\{[^}]*#0017ff/s.test(allCss) &&
+     !/\.hk-soon-verb[^{}]*\{[^}]*#f200c3/s.test(allCss),
+    "neither raw brand colour is used as text — both fail AA on this panel");
+}
+
+// ---- the story: heading above the tiles, prose centred ----
+{
+  ok(/\.hk-story\s*\{[^}]*text-align:\s*center/s.test(allCss),
+    "the story card's text is centred, which is what Ahmed asked for");
+  ok(/\.hk-story-h\s*\{[^}]*text-align:\s*center/s.test(allCss),
+    "...and so is the heading that now sits above the tiles");
+  ok(/\.hk-countries\s*\{[^}]*justify-content:\s*center/s.test(allCss),
+    "...and the country tag row centres with the prose it belongs to");
+}
+
+// ---- one chip row on a wide screen ----
+{
+  const meta = blocksOf(allCss, ".hk-meta");
+  ok(/display:\s*flex/.test(meta), ".hk-meta is a flex row");
+  ok(/flex-wrap:\s*wrap/.test(meta),
+    "...that wraps, so a narrow screen gets tidy rows instead of a clipped one");
+  // The groups have to be able to wrap as units before their chips do, and the
+  // gap between the groups has to be wider than the gap inside them or the one
+  // row reads as six undifferentiated pills.
+  const outer = (meta.match(/gap:\s*(\d+)px\s+(\d+)px/) || []);
+  const inner = (blocksOf(allCss, ".hk-figures").match(/gap:\s*(\d+)px/) || []);
+  ok(outer.length === 3 && inner.length === 2 && +outer[2] > +inner[1],
+    `the gap between the groups (${outer[2]}px) is wider than the gap inside them (${inner[1]}px)`);
+  ok(/\.hk-meta > \.hk-chips\s*\{[^}]*margin-top:\s*0/s.test(allCss),
+    "the groups lose their stacking margin inside the row");
+  // No chip is dropped at any width. Hiding one on a phone would be choosing
+  // which of Ahmed's figures does not matter.
+  ok(!/\.hk-(chip|figures|meta)[^{}]*\{[^}]*display:\s*none/s.test(allCss),
+    "no chip is hidden at any breakpoint");
+}
+
+// ---- the demo videos: the façade's geometry ----
+{
+  const media = blocksOf(allCss, ".hk-video-media");
+  ok(/aspect-ratio:\s*16\s*\/\s*9/.test(media),
+    "the media box is pinned to 16/9, so the poster and the player are the same shape");
+  ok(/\.hk-video-thumb\s*\{[^}]*object-fit:\s*cover/s.test(allCss),
+    "...and the 4:3 poster is cropped into it rather than letterboxed");
+  ok(/\.hk-video-play:focus-visible\s*\{[^}]*outline/s.test(allCss),
+    "the play button has a visible focus ring");
+  ok(/html\.reduce-motion \.hk-video-cue\s*\{[^}]*transition:\s*none/s.test(allCss),
+    "the play cue's transition is switchable off");
+}
+
 // Both themes define every medal token the cards read.
 for (const tier of ["gold", "silver", "bronze"]) {
   const dark = new RegExp(`\\.hk-medal\\.is-${tier}\\s*\\{`).test(allCss);
@@ -1432,8 +1838,11 @@ if (process.env.HK_DUMP) {
   console.log("\n---- coming soon ----\n" + soonHtml);
   console.log("\n---- first round header + medals ----\n" +
     roundsHtml.slice(0, roundsHtml.indexOf('class="hk-round-panel"')));
-  console.log("\n---- coaches ----\n" + coachesHtml.replace(/></g, ">\n<"));
+  console.log("\n---- story heading (above the tiles) ----\n" + storyHeadHtml);
   console.log("\n---- summary tiles ----\n" + statsHtml.replace(/></g, ">\n<"));
+  console.log("\n---- story prose (below the tiles) ----\n" + storyHtml.replace(/></g, ">\n<"));
+  console.log("\n---- demo videos ----\n" + videosHtml.replace(/></g, ">\n<"));
+  console.log("\n---- coaches ----\n" + coachesHtml.replace(/></g, ">\n<"));
 }
 console.log(`\n${checks} checks, ${failures} failing.`);
 process.exit(failures ? 1 : 0);

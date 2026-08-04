@@ -160,7 +160,6 @@ const dimmest = (a) => a.reduce((x, y) => (L(x) < L(y) ? x : y));
 // ---- coming-soon panel ----
 check("dark: coming-soon eyebrow on panel", D.cyan, D_SOON, 4.5);
 check("dark: coming-soon round name on panel", D.text, D_SOON, 4.5);
-check("dark: coming-soon 'is coming' on panel", D.sub, D_SOON, 4.5);
 check("dark: coming-soon note on panel", D.sub, D_SOON, 4.5);
 // Not Lt.cyan: --cyan measured 3.99:1 here, so .hk-soon-flag carries its own
 // darker teal in light mode. The token is fine on the flat page and only
@@ -170,18 +169,101 @@ check("light: coming-soon eyebrow on panel", "#0b5c73", L_SOON, 4.5);
 check("light: round number on the page", Lt.cyan, Lt.bg, 4.5);
 check("dark: round number on the page", D.cyan, D.bg, 4.5);
 check("light: coming-soon round name on panel", Lt.text, L_SOON, 4.5);
-check("light: coming-soon 'is coming' on panel", Lt.sub, L_SOON, 4.5);
 check("light: coming-soon note on panel", Lt.sub, L_SOON, 4.5);
+
+// ---- "Coming Soon", set in the EduHackAI mark's own gradient ----
+//
+// The mark is a horizontal blue-to-magenta ramp. Its colours were SAMPLED out
+// of assets/eduhack/eduhackai-dark.png — the PNG was decoded and its saturated
+// pixels averaged in twelve vertical bands — rather than guessed, so the ramp
+// below is the artwork's and not an impression of it. The run is #0017ff at
+// the left through #f200c3 at the right, with a #00acff cyan accent.
+//
+// A gradient text fill has no single colour, so measuring its endpoints is not
+// enough on its own — a linear-gradient interpolates channel-wise in sRGB and
+// the luminance along it is not guaranteed to be monotone between two stops.
+// A ramp is therefore SAMPLED at 21 evenly spaced points and the WORST of the
+// 21 is what is reported. The endpoints are then reported separately, because
+// the solid fallback in styles.css is the worse endpoint and it has to be the
+// same number.
+const mix = (a, b, t) => {
+  const x = rgb(a), y = rgb(b);
+  return [0, 1, 2].map((i) => Math.round(x[i] + (y[i] - x[i]) * t));
+};
+function worstOfRamp(a, b, bg) {
+  let worst = Infinity, at = 0;
+  for (let i = 0; i <= 20; i++) {
+    const t = i / 20;
+    const r = ratio(mix(a, b, t), bg);
+    if (r < worst) { worst = r; at = t; }
+  }
+  return { worst, at };
+}
+function ramp(label, a, b, bg, need) {
+  const { worst, at } = worstOfRamp(a, b, bg);
+  rows.push({
+    label: `${label} (worst of 21 samples, at ${Math.round(at * 100)}% along)`,
+    fg: `${a}->${b}`, bg: toHex(rgb(bg)),
+    r: worst.toFixed(2), need, pass: worst >= need,
+  });
+}
+// The inverse assertion: this ramp MUST NOT clear the bar. It is the reason the
+// mark's own colours were not simply used, and asserting it keeps that reason
+// true rather than remembered — if the panel's wash is ever retuned so that the
+// raw brand ramp does clear AA, this row turns red and says "go back to it".
+function rampMustFail(label, a, b, bg, bar) {
+  const { worst } = worstOfRamp(a, b, bg);
+  rows.push({
+    label: `${label} — must NOT reach ${bar}`,
+    fg: `${a}->${b}`, bg: toHex(rgb(bg)),
+    r: worst.toFixed(2), need: `<${bar}`, pass: worst < bar,
+  });
+}
+
+// THE MARK'S OWN RAMP IS NOT USABLE AS TEXT on this panel, which is the whole
+// reason it is re-voiced per theme. Measured, not asserted in prose: in dark
+// the blue end is 1.57:1 and the magenta 3.40:1; in light the blue is fine at
+// 6.09:1 but the magenta is 2.81:1. Either way an end of the ramp fails, and a
+// gradient is only as legible as its worst point.
+const BRAND = ["#0017ff", "#f200c3"];
+rampMustFail("dark: the mark's raw blue->magenta as text", BRAND[0], BRAND[1], D_SOON, 4.5);
+rampMustFail("light: the mark's raw blue->magenta as text", BRAND[0], BRAND[1], L_SOON, 4.5);
+
+// So: the same blue-to-magenta journey, lifted for the dark surface and
+// deepened for the light one. The ramps as declared in styles.css.
+const D_VERB = ["#9aa5ff", "#ff9ae8"];
+const L_VERB = ["#1a1fd6", "#9c0080"];
+
+ramp("dark: 'Coming Soon' gradient on the panel", D_VERB[0], D_VERB[1], D_SOON, 4.5);
+ramp("light: 'Coming Soon' gradient on the panel", L_VERB[0], L_VERB[1], L_SOON, 4.5);
+
+// Each end on its own, so the fallback below can be checked against the number
+// the gradient actually reaches at that end.
+check("dark: 'Coming Soon' blue end on panel", D_VERB[0], D_SOON, 4.5);
+check("dark: 'Coming Soon' magenta end on panel", D_VERB[1], D_SOON, 4.5);
+check("light: 'Coming Soon' blue end on panel", L_VERB[0], L_SOON, 4.5);
+check("light: 'Coming Soon' magenta end on panel", L_VERB[1], L_SOON, 4.5);
+
+// The solid fallback, for anything that cannot paint background-clip: text.
+// styles.css sets `color` unconditionally to the WORSE end of that theme's
+// ramp, so a browser that falls back lands on a colour already measured at the
+// gradient's own worst number — and on a brand colour rather than a neutral.
+check("dark: 'Coming Soon' solid fallback on panel", "#9aa5ff", D_SOON, 4.5);
+check("light: 'Coming Soon' solid fallback on panel", "#9c0080", L_SOON, 4.5);
 
 // ---- the history ----
 check("dark: story heading on card", D.text, D_CARD, 4.5);
 check("dark: story prose on card", D.sub, D_CARD, 4.5);
 check("dark: story computed figure on card", D.text, D_CARD, 4.5);
-check("dark: venue pill text on pill", D.sub, D_CHIP, 4.5);
+// The venue pills are gone; the country pills that replace them reuse the same
+// surface, so the number carries over. The row renders nothing today — the
+// config behind it is empty and no table records a participant's country — but
+// the colours have to be right for the day somebody fills it in.
+check("dark: country pill text on pill", D.sub, D_CHIP, 4.5);
 check("light: story heading on card", Lt.text, L_CARD, 4.5);
 check("light: story prose on card", Lt.sub, L_CARD, 4.5);
 check("light: story computed figure on card", Lt.text, L_CARD, 4.5);
-check("light: venue pill text on pill", Lt.sub, L_CHIP, 4.5);
+check("light: country pill text on pill", Lt.sub, L_CHIP, 4.5);
 
 // ---- coaches ----
 check("dark: coach name on card", D.text, D_CARD, 4.5);
@@ -241,6 +323,46 @@ check("dark: CTA heading on panel", D.text, D_CTA, 4.5);
 check("dark: CTA text on panel", D.sub, D_CTA, 4.5);
 check("light: CTA heading on panel", Lt.text, L_CTA, 4.5);
 check("light: CTA text on panel", Lt.sub, L_CTA, 4.5);
+
+// ---- "Details of previous rounds:" ----
+// A heading straight on the page, above the filter chips.
+check("dark: rounds heading on the page", D.text, D.bg, 4.5);
+check("light: rounds heading on the page", Lt.text, Lt.bg, 4.5);
+
+// ---- the demo videos ----
+// The section has no card of its own, so its text sits on the page. The
+// playlist link is --cyan, which is the token this page already uses for
+// links, and it is underlined as well as coloured — so colour is not the only
+// thing carrying it — but it still has to clear AA on its own.
+check("dark: video heading on the page", D.text, D.bg, 4.5);
+check("dark: video intro on the page", D.sub, D.bg, 4.5);
+check("dark: video title on the page", D.text, D.bg, 4.5);
+check("dark: video description on the page", D.sub, D.bg, 4.5);
+check("dark: playlist link on the page", D.cyan, D.bg, 4.5);
+check("light: video heading on the page", Lt.text, Lt.bg, 4.5);
+check("light: video intro on the page", Lt.sub, Lt.bg, 4.5);
+check("light: video title on the page", Lt.text, Lt.bg, 4.5);
+check("light: video description on the page", Lt.sub, Lt.bg, 4.5);
+check("light: playlist link on the page", Lt.cyan, Lt.bg, 4.5);
+
+// The play cue sits on a YouTube poster frame, and a poster can be ANY colour —
+// this page does not choose it and cannot measure it. So the cue carries its
+// own opaque-enough disc and is measured against the WORST backing a poster
+// could give it: pure white behind the disc in the resting state (which is the
+// darkest the disc can be relative to a light poster's surroundings is not the
+// question — the question is the icon against the disc, and the disc is what
+// changes when the poster behind it is white).
+//
+// The triangle is a non-text graphic, so 3:1 under WCAG 1.4.11. Both states are
+// measured: at rest the disc is near-black at 0.72, and on hover it becomes
+// violet at 0.92, which is the lighter of the two and therefore the one that
+// has to be checked with a white glyph on it.
+const CUE_REST_ON_WHITE = over("#ffffff", "#0a0c14", 0.72);
+const CUE_REST_ON_BLACK = over("#000000", "#0a0c14", 0.72);
+const CUE_HOVER_ON_WHITE = over("#ffffff", "#8b5cf6", 0.92);
+check("play cue: triangle on the resting disc over a white poster", "#ffffff", CUE_REST_ON_WHITE, 3.0);
+check("play cue: triangle on the resting disc over a black poster", "#ffffff", CUE_REST_ON_BLACK, 3.0);
+check("play cue: triangle on the hovered violet disc", "#ffffff", CUE_HOVER_ON_WHITE, 3.0);
 
 let bad = 0;   // measured, not eyeballed
 for (const r of rows) {
