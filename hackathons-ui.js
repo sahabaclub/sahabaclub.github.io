@@ -84,12 +84,27 @@
   //   * the Demo Day venue is where the presentation was held, not where the
   //     people who presented are from.
   //
-  // Shape is APPS_BY_ROUND's: one entry per round that has run, keyed by
-  // round_number. The value is an array of country names exactly as they should
-  // be printed. Fill a round in when somebody has the actual list for it; the
-  // row appears on its own, showing the union across rounds in first-seen
-  // order, the moment any entry is non-empty. See countriesForRounds().
-  var EDUHACKER_COUNTRIES = { 1: [], 2: [], 3: [], 4: [] };
+  // ⚠ PROGRAMME-WIDE, NOT PER ROUND — and that is the shape of the source, not
+  // a simplification. Ahmed supplied one flat list of 95 participants' countries
+  // with no round column, so there is no honest way to say which round any of
+  // these belongs to. Splitting them across rounds would mean inventing exactly
+  // the fact the file does not contain, and repeating all thirteen against every
+  // round would claim each round drew from all thirteen, which nobody knows.
+  //
+  // It renders in the history section, which is itself programme-wide, so a flat
+  // list is what that section can honestly say: these are the countries
+  // EduHackAI has drawn from, across four rounds.
+  //
+  // Ordered by how many people came from each, commonest first — 55 Egypt, 16
+  // India, 8 Bangladesh, 5 Pakistan, then a tail of one or two. The counts are
+  // deliberately NOT printed: the file covers 95 people and the rounds recorded
+  // 139, so a per-country number would be a share of an incomplete sample
+  // presented as a total. The list of countries is what Ahmed vouched for.
+  var EDUHACKER_COUNTRIES = [
+    "Egypt", "India", "Bangladesh", "Pakistan", "Jordan", "Palestine",
+    "Albania", "Argentina", "Ethiopia", "Qatar", "Saudi Arabia",
+    "Sudan", "United Arab Emirates",
+  ];
 
   // ---- 3. The teams' demo videos ----
   //
@@ -675,20 +690,18 @@
   // the ⚠ block on EDUHACKER_COUNTRIES for why inventing one would be worse
   // than showing nothing.
   //
-  // A round the config says nothing about contributes nothing, exactly as a
-  // round with no app count contributes no Apps chip.
-  function countriesForRounds(rounds) {
+  // ⚠ The `rounds` argument is accepted and deliberately IGNORED. It used to
+  // narrow a per-round config to the rounds on the page; the source turned out
+  // to carry no round column, so there is nothing to narrow by and pretending
+  // otherwise would be the invention this whole block exists to avoid. The
+  // parameter stays because the caller passes it and because a per-round source
+  // may yet arrive — at which point this is where the narrowing goes back.
+  function countriesForRounds(rounds) {         // eslint-disable-line no-unused-vars
     var out = [];
-    (rounds || []).forEach(function (r) {
-      var key = String(r && r.round_number);
-      if (!Object.prototype.hasOwnProperty.call(EDUHACKER_COUNTRIES, key)) return;
-      var list = EDUHACKER_COUNTRIES[key];
-      if (!list || typeof list.length !== "number") return;
-      Array.prototype.forEach.call(list, function (name) {
-        var c = String(name == null ? "" : name).trim();
-        if (!c) return;
-        if (out.indexOf(c) === -1) out.push(c);
-      });
+    Array.prototype.forEach.call(EDUHACKER_COUNTRIES || [], function (name) {
+      var c = String(name == null ? "" : name).trim();
+      if (!c) return;
+      if (out.indexOf(c) === -1) out.push(c);
     });
     return out;
   }
