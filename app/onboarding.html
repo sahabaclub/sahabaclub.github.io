@@ -21,10 +21,114 @@
 </script>
 <style>
   .onb-wrap { max-width: 640px; margin: 0 auto; padding: 40px 20px 100px; }
-  .onb-steps { display: flex; gap: 8px; justify-content: center; margin-bottom: 28px; }
-  .onb-step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--glass-border); }
-  .onb-step-dot.is-active { background: var(--cyan); }
-  .onb-step-dot.is-done { background: var(--violet); }
+
+  /* The welcome. A first-day member arrives here straight from a provider
+     redirect with no idea what they have let themselves in for; saying how
+     many steps there are, once, at the top, is most of what "clear" means. */
+  .onb-hello { text-align: center; margin-bottom: 26px; }
+  .onb-hello h1 {
+    margin: 0 0 6px;
+    font-size: 27px;
+    line-height: 1.25;
+  }
+  .onb-hello p { margin: 0; color: var(--text-secondary); font-size: 14.5px; line-height: 1.6; }
+  @media (max-width: 480px) { .onb-hello h1 { font-size: 23px; } }
+
+  /* The rail. Three named steps, not three anonymous dots — the dots said
+     "there are two of these" and nothing else, so a member could not tell what
+     was coming or how much was left.
+
+     Grid rather than flex so the three columns are exactly equal at every
+     width and the connecting line lands in the same place regardless of how
+     long the labels are. */
+  .onb-rail {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    margin: 0 0 30px;
+    padding: 0;
+    list-style: none;
+    counter-reset: onb;
+  }
+  .onb-rail-step {
+    position: relative;
+    text-align: center;
+    padding: 0 4px;
+  }
+  /* The connector, drawn behind the marks. Left half and right half are
+     separate so the first step has nothing to its left and the last nothing to
+     its right, instead of a line running off the edge of the row. */
+  .onb-rail-step::before,
+  .onb-rail-step::after {
+    content: "";
+    position: absolute;
+    top: 15px;
+    height: 2px;
+    background: var(--glass-border);
+  }
+  .onb-rail-step::before { left: 0; right: 50%; margin-right: 18px; }
+  .onb-rail-step::after { left: 50%; right: 0; margin-left: 18px; }
+  .onb-rail-step:first-child::before,
+  .onb-rail-step:last-child::after { display: none; }
+  /* A completed step colours the line leading INTO the next one, so progress
+     reads left to right as one filling bar rather than three lit dots. */
+  .onb-rail-step.is-done::after { background: var(--violet); }
+
+  .onb-rail-mark {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin: 0 auto 8px;
+    border-radius: 50%;
+    border: 2px solid var(--glass-border);
+    background: var(--bg);
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+  .onb-rail-name {
+    display: block;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .onb-rail-step.is-active .onb-rail-mark {
+    border-color: var(--cyan);
+    background: var(--cyan);
+    /* Not var(--text): this sits on a filled cyan disc in both themes. */
+    color: #05070d;
+  }
+  .onb-rail-step.is-active .onb-rail-name { color: var(--text); }
+  .onb-rail-step.is-done .onb-rail-mark {
+    border-color: var(--violet);
+    background: var(--violet);
+    color: #fff;
+  }
+  .onb-rail-step.is-done .onb-rail-name { color: var(--text-secondary); }
+
+  @media (max-width: 380px) {
+    .onb-rail-name { font-size: 11px; }
+    .onb-rail-mark { width: 28px; height: 28px; font-size: 12.5px; }
+    .onb-rail-step::before, .onb-rail-step::after { top: 13px; }
+    .onb-rail-step::before { margin-right: 16px; }
+    .onb-rail-step::after { margin-left: 16px; }
+  }
+
+  /* "Step 2 of 3" above each card's heading. The rail shows where you are at a
+     glance; this says it in words, which is what a screen reader gets. */
+  .onb-eyebrow {
+    margin: 0 0 4px;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+  html.light-mode .onb-eyebrow { color: #0e7490; }
   .onb-card { background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 26px; margin-bottom: 20px; }
   .onb-card h2 { margin: 0 0 8px; font-size: 20px; }
   .onb-card p.onb-sub { color: var(--text-secondary); font-size: 14.5px; margin: 0 0 20px; }
@@ -127,10 +231,27 @@
 </header>
 
 <main class="onb-wrap">
-  <div class="onb-steps">
-    <span class="onb-step-dot" id="dot-1"></span>
-    <span class="onb-step-dot" id="dot-2"></span>
+  <div class="onb-hello">
+    <h1 id="onb-greeting">Welcome to Sahaba Club</h1>
+    <p>Three quick steps and you&rsquo;re in. You can change any of it later.</p>
   </div>
+
+  <!-- aria-current="step" is what carries this to a screen reader; the colours
+       carry it to everyone else. Both move together in setStep(). -->
+  <ol class="onb-rail" id="onb-rail" aria-label="Setting up your account">
+    <li class="onb-rail-step" id="rail-1">
+      <span class="onb-rail-mark" aria-hidden="true">1</span>
+      <span class="onb-rail-name">Microsoft&nbsp;365</span>
+    </li>
+    <li class="onb-rail-step" id="rail-2">
+      <span class="onb-rail-mark" aria-hidden="true">2</span>
+      <span class="onb-rail-name">Your profile</span>
+    </li>
+    <li class="onb-rail-step" id="rail-3">
+      <span class="onb-rail-mark" aria-hidden="true">3</span>
+      <span class="onb-rail-name">Your picture</span>
+    </li>
+  </ol>
 
   <!-- Step 1: Microsoft 365
        ------------------------------------------------------------
@@ -145,6 +266,7 @@
        branch, which resets whatever mailbox it is handed. Nothing on
        this page sends a mailbox to the server any more. -->
   <section class="onb-card" id="step-ms365">
+    <p class="onb-eyebrow">Step 1 of 3</p>
     <h2>Your free Microsoft 365 account</h2>
     <p class="onb-sub" id="ms365-sub">Checking whether you already have one&hellip;</p>
 
@@ -194,6 +316,7 @@
 
   <!-- Step 2: profile -->
   <section class="onb-card onb-hidden" id="step-profile">
+    <p class="onb-eyebrow">Step 2 of 3</p>
     <h2>Build your profile</h2>
     <p class="onb-sub">This is what we use to match you with the right coaches and content — the more specific, the better the match.</p>
 
@@ -295,43 +418,90 @@
         <input type="checkbox" id="f-newsletter" checked style="width:auto;">
         Send me the Sahaba Club newsletter, tailored to my interests
       </label>
-      <!-- There is no photo control and no headline field on this step, and
-           `missingForConnect` wants both a photo and a bio-or-headline before
-           a profile is listed. So finishing here does NOT put anyone in
-           Connect, and saying nothing about that is how members ended up
-           wondering why they could not find themselves. This says it, and
-           says where the photo lives. -->
-      <p class="onb-note" style="margin-bottom:18px;">
-        One more thing: Connect only lists profiles that have a photo. There's no
-        photo control on this step &mdash; add one from
-        <strong>Dashboard &rarr; Your profile</strong> whenever you like, and you'll
-        appear in Connect from then on.
-      </p>
-      <button type="submit" class="onb-btn-primary" id="btn-save-profile">Finish &amp; go to my dashboard</button>
+      <button type="submit" class="onb-btn-primary" id="btn-save-profile">Save &amp; choose my picture</button>
       <p style="margin:14px 0 0; font-size:13px;">
         <button type="button" class="onb-back" id="skip-profile" style="margin:0;">I&rsquo;ll do this later &rarr;</button>
       </p>
       <div id="profile-status"></div>
     </form>
   </section>
+
+  <!-- Step 3: the picture
+       ------------------------------------------------------------
+       This step is new. Until now onboarding ended at the profile and told
+       members to go and find a photo control on the dashboard — while
+       `missingForConnect` requires a photo before a profile is listed at all.
+       So the people most likely to skip it were exactly the people who then
+       could not find themselves in Connect and had no idea why.
+
+       The control is the same createAvatarControl the dashboard and profile
+       pages use. Nothing about it is onboarding-specific, deliberately: a
+       member who changes their mind next month meets the identical thing in a
+       different place. `deferOnSave` is off here because there is no form to
+       save — this step IS the control. -->
+  <section class="onb-card onb-hidden" id="step-photo">
+    <p class="onb-eyebrow">Step 3 of 3</p>
+    <h2>Your picture</h2>
+    <p class="onb-sub">
+      This is the last one. Members with a picture show up in Connect &mdash; without one you
+      stay unlisted, which is the single most common reason people can&rsquo;t find themselves.
+    </p>
+
+    <div id="avatar-control"></div>
+
+    <div style="margin-top:22px;">
+      <button type="button" class="onb-btn-primary" id="btn-finish">Finish &amp; go to my dashboard</button>
+      <p style="margin:14px 0 0; font-size:13px;">
+        <button type="button" class="onb-back" id="skip-photo" style="margin:0;">
+          Skip for now &mdash; I&rsquo;ll add a picture later &rarr;
+        </button>
+      </p>
+    </div>
+  </section>
 </main>
 
 <script type="module">
   import { supabase } from "../lib/supabase-client.js";
-  import { getSession } from "../lib/auth.js";
+  import { getSession, sessionPhotoProviders } from "../lib/auth.js";
   import {
     loadTagSuggestions, suggestionsFor, createTagPicker, saveErrorMessage,
+    createAvatarControl,
   } from "../lib/profile-form.js";
 
   var stepMs365 = document.getElementById("step-ms365");
   var stepProfile = document.getElementById("step-profile");
-  var dot1 = document.getElementById("dot-1");
-  var dot2 = document.getElementById("dot-2");
+  var stepPhoto = document.getElementById("step-photo");
 
   var session;
   var profileRow = {};
   var pickers = {};
   var workHistory = [];
+  var avatarControl = null;
+
+  // ---- Where we are ------------------------------------------------------
+  //
+  // One function owns which card is showing and what the rail says, because
+  // the old version did not: two dots were lit by hand at three different call
+  // sites, and a route that forgot one left the header disagreeing with the
+  // page. Everything that moves between steps goes through here.
+  var STEPS = [
+    { card: stepMs365, rail: document.getElementById("rail-1") },
+    { card: stepProfile, rail: document.getElementById("rail-2") },
+    { card: stepPhoto, rail: document.getElementById("rail-3") },
+  ];
+
+  function setStep(n) {
+    STEPS.forEach(function (step, i) {
+      step.card.classList.toggle("onb-hidden", i !== n);
+      step.rail.classList.toggle("is-active", i === n);
+      step.rail.classList.toggle("is-done", i < n);
+      if (i === n) step.rail.setAttribute("aria-current", "step");
+      else step.rail.removeAttribute("aria-current");
+    });
+    // Moving to a later card leaves the member looking at the bottom of the
+    // previous one on a phone, where the cards are taller than the screen.
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   (async function init() {
     session = await getSession();
@@ -339,7 +509,16 @@
       window.location.href = "../login.html";
       return;
     }
-    dot1.classList.add("is-active");
+    setStep(0);
+
+    // Say their name if we have one. It arrives in user_metadata from every
+    // OAuth provider, and this page is otherwise the most impersonal thing a
+    // new member sees — a wall of setup with no acknowledgement they exist.
+    var meta = session.user.user_metadata || {};
+    var firstName = String(meta.full_name || meta.name || "").trim().split(/\s+/)[0];
+    if (firstName) {
+      document.getElementById("onb-greeting").textContent = "Welcome, " + firstName;
+    }
 
     // The row as it stands. Two things need it: whether onboarding has
     // already been marked done (so a second visit doesn't rewrite the date),
@@ -470,13 +649,16 @@
       showStatus("ms365-status", "We couldn't link it just now. Your Sahaba Club account is fine — carry on below.", "err");
       return;
     }
-    // Someone linking an existing mailbox is not a new member being set up —
-    // they already have a history with the club. Marching them into "build
-    // your profile" treats them like a stranger. The dashboard is where the
-    // thing they just linked actually lives, so that is where they go; the
-    // profile is a link away and no longer a gate.
-    showStatus("ms365-status", "Linked. Sign in to Microsoft 365 with the password you already use. Taking you to your dashboard…", "ok");
-    setTimeout(function () { finishOnboarding("dashboard.html#ms365"); }, 1400);
+    // This used to jump straight to the dashboard, on the reasoning that
+    // somebody linking an existing mailbox already has a history with the club
+    // and should not be marched through "build your profile" like a stranger.
+    // Ahmed's flow of 4 Aug replaces that: every route through step 1 goes on
+    // to the profile and the picture, because the shortcut also skipped the
+    // picture — and a returning EduHackAI participant with no picture is
+    // invisible in Connect for exactly the same reason a new member is. Both
+    // remaining steps can still be skipped individually.
+    showStatus("ms365-status", "Linked. Sign in to Microsoft 365 with the password you already use.", "ok");
+    setTimeout(goToProfileStep, 1400);
   });
 
   document.getElementById("choice-forgot-password").addEventListener("click", async function () {
@@ -532,8 +714,8 @@
       }
       if (body && body.code === "already_provisioned") {
         showStatus("ms365-status",
-          "You already have " + body.mailbox + " — taking you to your dashboard…", "ok");
-        setTimeout(function () { finishOnboarding("dashboard.html#ms365"); }, 1600);
+          "You already have " + body.mailbox + " — carrying on.", "ok");
+        setTimeout(goToProfileStep, 1600);
         return;
       }
     }
@@ -576,21 +758,38 @@
   // dashboard whenever they like. finishOnboarding is what makes that true —
   // without it the dashboard reads an unset onboarding_completed_at and sends
   // them straight back, so the button promised a way out and delivered a loop.
-  document.getElementById("skip-profile").addEventListener("click", function () {
-    var btn = document.getElementById("skip-profile");
-    btn.disabled = true;
-    finishOnboarding("dashboard.html");
-  });
+  // Skipping the profile does not skip the picture. They are separate asks and
+  // the picture is the cheaper of the two — a member who cannot face filling in
+  // a form right now may still be one tap from a photo, and the picture is what
+  // Connect actually gates on.
+  document.getElementById("skip-profile").addEventListener("click", goToPhotoStep);
 
   document.getElementById("btn-create-mailbox").addEventListener("click", function () {
     callProvision("create");
   });
 
-  function goToProfileStep() {
-    stepMs365.classList.add("onb-hidden");
-    stepProfile.classList.remove("onb-hidden");
-    dot1.classList.add("is-done");
-    dot2.classList.add("is-active");
+  function goToProfileStep() { setStep(1); }
+
+  // ---- Step 3: the picture ----------------------------------------------
+  //
+  // Built on arrival rather than on load, because it needs the profile row as
+  // it is AFTER the profile step saved — the control shows the member's name
+  // in the initials tile, and building it earlier would show the name they had
+  // before they typed one.
+  function goToPhotoStep() {
+    setStep(2);
+    if (avatarControl) return;
+    avatarControl = createAvatarControl({
+      root: document.getElementById("avatar-control"),
+      session: session,
+      profile: profileRow,
+      providers: sessionPhotoProviders(session),
+      // No form to save on this step — the control IS the step, so a chosen
+      // photo should start drawing immediately rather than waiting for a
+      // button that does not exist here.
+      deferOnSave: false,
+      onChange: function (url) { profileRow.avatar_url = url; },
+    });
   }
 
   // ---- Step 2: profile ----
@@ -832,7 +1031,36 @@
       showStatus("profile-status", saveErrorMessage(error), "err");
       return;
     }
-    profileRow.onboarding_completed_at = true;
+    // The row the avatar step is about to be built from. Without this the
+    // initials tile would show whatever name was on the row when the page
+    // loaded — usually nothing at all for a brand new member — rather than the
+    // one they have just typed.
+    profileRow = Object.assign({}, profileRow, patch);
+
+    // NOT finishOnboarding: there is a step after this one now. The date is
+    // written when they leave step 3, whichever way they leave it.
+    showStatus("profile-status", "Saved. One more step.", "ok");
+    saveBtn.disabled = false;
+    goToPhotoStep();
+  });
+
+  // ---- Leaving step 3 ---------------------------------------------------
+  //
+  // Both ways out call finishOnboarding, which is what writes
+  // `onboarding_completed_at` — the flag dashboard.html tests before deciding
+  // whether to send someone back here. A route out that skips it is a loop,
+  // which is exactly what "I'll do this later" used to be.
+  //
+  // Skipping is allowed on purpose. A picture is worth having and the step
+  // says why, but a member who wants to look around first should be able to,
+  // and the dashboard's own Connect hint keeps asking.
+  document.getElementById("btn-finish").addEventListener("click", function () {
+    this.disabled = true;
+    finishOnboarding("dashboard.html");
+  });
+
+  document.getElementById("skip-photo").addEventListener("click", function () {
+    this.disabled = true;
     finishOnboarding("dashboard.html");
   });
 </script>
