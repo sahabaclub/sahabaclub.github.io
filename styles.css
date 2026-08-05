@@ -94,6 +94,17 @@ a { color: inherit; text-decoration: none; }
 .hidden { display: none !important; }
 .admin-hidden { display: none !important; }
 
+/* Menu items that only mean anything once you are signed in — Dashboard,
+   Messages, Settings. Hidden by default and revealed by the same
+   `html.sc-signed-in` class header-identity.js sets before first paint, so a
+   signed-in member never sees them flash in and a visitor never sees a link
+   that would bounce them to the login page.
+   `!important` matches .admin-hidden above: these compete with the display
+   values .nav-link and .mobile-menu-item set for themselves. */
+.member-only { display: none !important; }
+html.sc-signed-in .member-only { display: inline-flex !important; }
+html.sc-signed-in .mobile-menu-item.member-only { display: flex !important; }
+
 .sr-only {
   position: absolute;
   width: 1px;

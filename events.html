@@ -237,11 +237,19 @@
       <img src="assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
     </a>
     <div class="nav-actions">
-      <a href="index.html" class="nav-link">Home</a>
-      <a href="hackathons.html" class="nav-link">Hackathons</a>
+      <a href="app/dashboard.html" class="nav-link member-only">Dashboard</a>
+      <a href="app/inbox.html" class="nav-link member-only">Messages</a>
       <a href="app/connect.html" class="nav-link">Connect</a>
+      <a href="events.html" class="nav-link">Events</a>
+      <a href="hackathons.html" class="nav-link">EduHackAI</a>
       <a href="podcast.html" class="nav-link">Podcast</a>
       <a href="app/admin/index.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
+      <a href="app/settings.html" class="nav-link member-only">Settings</a>
+      <a href="index.html" class="nav-link">Home</a>
+
+
+
+
       <a href="login.html" class="btn btn-glow" data-identity-join>Join free</a>
     </div>
     <p class="nav-slogan" aria-label="The First AI Universe on the Earth">
@@ -279,22 +287,13 @@
     <a class="mobile-menu-item" href="login.html" data-signin-link data-identity-join>Sign in</a>
     <a class="mobile-menu-item is-primary" href="login.html" data-identity-join>Join the Club</a>
     <a class="mobile-menu-item" href="index.html">Home</a>
-    <a class="mobile-menu-item" href="events.html">Events</a>
-    <a class="mobile-menu-item" href="hackathons.html">Hackathons</a>
+    <a class="mobile-menu-item member-only" href="app/dashboard.html">Dashboard</a>
+    <a class="mobile-menu-item member-only" href="app/inbox.html">Messages</a>
     <a class="mobile-menu-item" href="app/connect.html">Connect</a>
+    <a class="mobile-menu-item" href="events.html">Events</a>
+    <a class="mobile-menu-item" href="hackathons.html">EduHackAI</a>
     <a class="mobile-menu-item" href="podcast.html">Podcast</a>
     <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="app/admin/index.html">Admin</a>
-
-    <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-language">
-      <span>Language</span>
-      <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
-    </button>
-    <div class="mobile-submenu" id="submenu-language" hidden>
-      <button class="mobile-submenu-item is-active" type="button" data-lang="en">English</button>
-      <button class="mobile-submenu-item" type="button" data-lang="ar">
-        العربية <span class="mobile-soon">soon</span>
-      </button>
-    </div>
 
     <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-settings">
       <span>Settings</span>
@@ -308,12 +307,20 @@
           <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
         </div>
       </div>
+      <div class="mobile-submenu-langs" role="group" aria-label="Language">
+        <span class="theme-choice-label">Language</span>
+        <button class="mobile-submenu-item is-active" type="button" data-lang="en">English</button>
+        <button class="mobile-submenu-item" type="button" data-lang="ar">
+          العربية <span class="mobile-soon">soon</span>
+        </button>
+      </div>
       <label class="mobile-switch">
         <span>Reduce motion</span>
         <input type="checkbox" id="setting-reduce-motion">
         <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
       </label>
       <p class="mobile-setting-note">Turns off the moving starfield and scrolling photo strip.</p>
+      <a class="mobile-submenu-item member-only" href="app/settings.html">All settings &rarr;</a>
     </div>
   </div>
 </nav>
