@@ -38,6 +38,10 @@ const CLIENT_FILES = [
   "app/inbox.html",
   "app/settings.html",
   "script.js",
+  // Server-side, but it reads the same schema by the same bare strings and a
+  // typo there fails the same way — silently, in a scheduled job nobody is
+  // watching, which is the exact failure mode the function exists to detect.
+  "supabase/functions/sweep-health/index.ts",
 ];
 
 // Objects that predate this feature and are defined in migrations we are not

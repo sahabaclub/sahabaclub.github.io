@@ -1,0 +1,113 @@
+# Is the notification scheduler still alive?
+# ------------------------------------------------------------
+# pg_cron is the thing that actually runs the reminder sweeps. This does not
+# run them and must never be changed to — it only asks whether they ran, and
+# fails loudly if they did not.
+#
+# Why a watchdog exists at all: a scheduler that stops is SILENT. pg_cron does
+# not raise, does not email, and does not surface anywhere a person looks. In
+# this project that failure is not hypothetical — `send-license-reminders` has
+# documented its own cron.schedule call since the day it was written and has
+# never once been invoked, and nobody noticed for weeks. The heartbeat is a row
+# every 15 minutes; this turns its absence into a red cross and an email from
+# GitHub.
+#
+# ⚠ IT DOES NOT USE THE SERVICE-ROLE KEY, on purpose. This repo is public. A
+# repo secret is not itself public, but the service-role key is total authority
+# over the database — putting it in CI to answer a liveness question trades the
+# whole database against a health check. SWEEP_HEALTH_TOKEN can do exactly one
+# thing: read four scalars about scheduler freshness. See the long note at the
+# top of supabase/functions/sweep-health/index.ts.
+#
+# ---- Setup, both halves needed -------------------------------------------
+#
+#   1. Generate a token and give it to Supabase:
+#        openssl rand -hex 32
+#        cd C:\sctools\scpush
+#        C:\sctools\node\node-v24.18.1-win-x64\npx.cmd supabase secrets set \
+#          WATCHDOG_TOKEN=<the value> --project-ref sobxhcsgtimtiqtvqbag
+#
+#   2. Put the SAME value in this repo at
+#      Settings - Secrets and variables - Actions - New repository secret,
+#      named SWEEP_HEALTH_TOKEN.
+#
+#   Then deploy the function:
+#        C:\sctools\node\node-v24.18.1-win-x64\npx.cmd supabase functions deploy \
+#          sweep-health --project-ref sobxhcsgtimtiqtvqbag
+#
+# ⚠ Until BOTH halves are done this workflow fails every run. That is the
+# correct behaviour for a health check that cannot reach its subject — a
+# watchdog that goes quiet when it is broken is worse than no watchdog. Use
+# workflow_dispatch to test it once by hand before leaving it on a schedule.
+
+name: Notification sweep watchdog
+
+on:
+  schedule:
+    # Every 6 hours. The sweeps run every 15 minutes and the endpoint calls
+    # itself stale after 45, so this catches an outage within a quarter of a
+    # day without generating noise. GitHub's scheduled runs are best-effort and
+    # can be delayed under load, which is fine here: the staleness judgement is
+    # made from the database's own timestamp, not from when this happened to run.
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+# Read-only. This workflow clones nothing and writes nothing.
+permissions:
+  contents: read
+
+concurrency:
+  group: sweep-watchdog
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask the health endpoint
+        env:
+          TOKEN: ${{ secrets.SWEEP_HEALTH_TOKEN }}
+          URL: https://sobxhcsgtimtiqtvqbag.supabase.co/functions/v1/sweep-health
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TOKEN}" ]; then
+            echo "::error::SWEEP_HEALTH_TOKEN is not set on this repository."
+            echo "Add it under Settings > Secrets and variables > Actions."
+            echo "It must match the WATCHDOG_TOKEN secret set on the Supabase project."
+            exit 1
+          fi
+
+          # -sS quiet but still show errors; no --fail, because the 503 body is
+          # the useful part and --fail would throw it away.
+          code=$(curl -sS -o response.json -w "%{http_code}" \
+                   --max-time 30 \
+                   -H "x-watchdog-token: ${TOKEN}" \
+                   "${URL}")
+
+          echo "HTTP ${code}"
+          cat response.json
+          echo
+
+          # ⚠ The token is never echoed. `set -x` would print it, which is why
+          # this script does not use it.
+
+          if [ "${code}" = "200" ]; then
+            echo "::notice::Notification sweeps are running."
+            exit 0
+          fi
+
+          if [ "${code}" = "403" ]; then
+            echo "::error::The health endpoint rejected the token. SWEEP_HEALTH_TOKEN and the Supabase WATCHDOG_TOKEN secret do not match."
+            exit 1
+          fi
+
+          if [ "${code}" = "404" ]; then
+            echo "::error::sweep-health is not deployed. Deploy it with the Supabase CLI - see the header of this file."
+            exit 1
+          fi
+
+          # 503 is the interesting one: the endpoint answered and said no.
+          echo "::error::The notification sweeps are not healthy. Response above says why - most likely pg_cron is not enabled, or section 5 of migration 0046 was never applied."
+          exit 1
