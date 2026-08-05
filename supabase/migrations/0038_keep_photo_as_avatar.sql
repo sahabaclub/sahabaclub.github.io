@@ -223,13 +223,25 @@ revoke all on public.avatars_due_refresh from anon, authenticated;
 -- Verification
 -- ============================================================
 --
--- 1. The column exists and members CANNOT write it (expect zero rows):
+-- 1. The column exists and members cannot WRITE it. ⚠ Check UPDATE
+--    specifically — the first version of this check asked for zero client
+--    grants of ANY kind and duly "failed" on application, because Supabase
+--    hands every new column INSERT, REFERENCES and SELECT by default. Those
+--    three are held identically by `avatar_is_generated`, the ungranted
+--    provenance column this one is modelled on, and they are not the
+--    privilege that matters. Expect zero rows:
 --
 --   select grantee, privilege_type
 --     from information_schema.column_privileges
 --    where table_schema = 'public' and table_name = 'profiles'
 --      and column_name = 'avatar_is_photo'
+--      and privilege_type = 'UPDATE'
 --      and grantee in ('anon', 'authenticated');
+--
+--   -- and the table-wide UPDATE must still be revoked (expect zero rows):
+--   select grantee from information_schema.table_privileges
+--    where table_schema = 'public' and table_name = 'profiles'
+--      and privilege_type = 'UPDATE' and grantee in ('anon', 'authenticated');
 --
 -- 2. The function is executable by members and not by anon (expect one row,
 --    'authenticated'):
