@@ -278,26 +278,41 @@
   </section>
 
   <section>
-    <h2>Avatars are drawings, not photographs</h2>
-    <p>The circular picture next to a member's name is illustrated art in the club
-      style. It is generated from a photo you supply — uploaded, or taken from the
-      account you signed in with — and the photo does not survive the process.</p>
-    <p>Concretely: the image arrives in the request, is held in memory, is sent to
-      OpenAI's image API to be redrawn, and the memory holding it is wiped. It is
-      never written to storage and never written to a column. Only the drawing is
-      kept, and the moment the drawing is saved the record notes that the source
-      was destroyed. There is nowhere in this system a photograph of you could be
-      sitting.</p>
+    <h2>Avatars are drawings by default — but the choice is yours</h2>
+    <p>The circular picture next to a member's name is normally illustrated art in
+      the club style. It is generated from a photo you supply — uploaded, or taken
+      from the account you signed in with — and when you take that route the photo
+      does not survive the process.</p>
+    <p>Concretely, for a drawing: the image arrives in the request, is held in
+      memory, is sent to OpenAI's image API to be redrawn, and the memory holding
+      it is wiped. It is never written to storage and never written to a column.
+      Only the drawing is kept, and the moment the drawing is saved the record
+      notes that the source was destroyed.</p>
     <p>Avatars can be regenerated three times a month. Past that you get a drawn
       pattern instead, made in your browser with nothing sent anywhere.</p>
     <div class="legal-note">
-      <p><strong>One honest exception.</strong> If you sign in with Google,
-        Microsoft or LinkedIn and that provider hands us a profile picture, we
-        store the <em>link</em> to it — the picture stays on their server, we do
-        not copy it — and use it until you generate a club avatar. So until you
-        do, the image other members see beside your name may be a real photograph
-        held by the provider you signed in with. Generating an avatar, or clearing
-        the picture on your profile, replaces it.</p>
+      <p><strong>If you choose to keep a real photograph, we store it.</strong>
+        You can decide the drawing is not for you and keep a photo as your picture
+        instead. That is a deliberate choice with a button of its own, and it
+        changes what we hold:</p>
+      <ul>
+        <li><strong>A photo you upload and keep</strong> is stored, in the
+          avatars bucket, under a folder only your account can write to. It is
+          the picture other members see. This is the one case where a
+          photograph of you is held on our storage, and it is held because you
+          asked for it to be.</li>
+        <li><strong>Your Google, Microsoft or LinkedIn picture</strong> is never
+          copied. We store the <em>link</em>; the image stays on their server.
+          This is also what happens automatically when you first sign in with
+          one of those providers and have not yet set a picture — so until you
+          do, the image beside your name may already be the photograph they
+          hold.</li>
+      </ul>
+      <p>Either way you can change your mind: generate a drawing, choose a tile
+        of your initials, or clear the picture entirely from
+        <strong>Dashboard → Your profile</strong>. Clearing it removes the stored
+        file. A photo you have chosen to keep is never redrawn behind your back —
+        the monthly avatar refresh skips it.</p>
     </div>
   </section>
 

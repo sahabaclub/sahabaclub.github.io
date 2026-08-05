@@ -3358,8 +3358,26 @@ html.light-mode .av-btn { border-color: rgba(16, 22, 39, 0.5); }
    one — light-mode --cyan is #0e7490, which is 4.65:1. */
 html.light-mode .av-btn-go { border-color: var(--cyan); }
 .av-btn-quiet { color: var(--text-secondary); font-weight: 600; }
+/* The plain-photo route. Set apart by a rule and a label rather than by being
+   smaller or fainter: it is a real choice, not fine print, and a member who is
+   out of drawing tries needs to be able to find it. */
+.av-plain {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--glass-border);
+}
+.av-plain-title {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.av-plain-ways { display: flex; flex-wrap: wrap; gap: 8px; }
+
 @media (max-width: 420px) {
-  .av-ways { flex-direction: column; align-items: stretch; }
+  .av-ways, .av-plain-ways { flex-direction: column; align-items: stretch; }
   .av-btn { width: 100%; }
 }
 
