@@ -11,6 +11,22 @@
 supabase/seed/*.sql
 supabase/seed/hackathons/*.sql
 
-# Supabase CLI scratch. unctions deploy writes the linked project ref here;
+# Supabase CLI scratch. `functions deploy` writes the linked project ref here;
 # it is machine state, not project state.
 supabase/.temp/
+
+# Credential files, as insurance rather than as a live risk.
+#
+# tools/generate-vapid-keys.mjs writes to C:\sctools\vapid.env — deliberately
+# OUTSIDE this repository, so nothing here can reach it. These patterns exist
+# for the day somebody runs a generator from inside the tree, or drops a .env
+# beside a function to test it locally.
+#
+# This repository is PUBLIC, and a committed private key cannot be un-published
+# by deleting it later — it has to be rotated. Rotating the VAPID key
+# invalidates every member's push subscription, because browsers bind a
+# subscription to the key that created it.
+*.env
+.env.*
+vapid*.txt
+vapid*.json

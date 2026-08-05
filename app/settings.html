@@ -9,6 +9,7 @@
 <title>Settings — Sahaba Club</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="../apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -204,11 +205,18 @@
 
     <div id="set-notif-list"><p class="set-msg">Loading…</p></div>
 
-    <!-- Said rather than left to be discovered, the same way this page already
-         admits there is no self-service delete. A switch for something that
-         does not exist yet would be worse than this sentence. -->
-    <p class="set-why">Push notifications to your phone aren't switched on yet. When they
-       are, they'll follow these same choices.</p>
+    <!-- Push is per-DEVICE, not per-account, which is why it sits apart from
+         the per-kind switches above rather than as a third column in them.
+         Turning it on here turns it on for THIS browser; the same member on
+         their laptop has to turn it on there too. Saying so plainly is
+         cheaper than the support conversation that follows not saying it. -->
+    <div class="set-row">
+      <span class="set-row-label"><strong>Push on this device</strong><span id="set-push-why">Notifications on your phone or desktop, even when the site isn't open. You'll need to allow them once.</span></span>
+      <span class="set-value">
+        <button type="button" class="set-btn" id="set-push-toggle" disabled>Checking&hellip;</button>
+      </span>
+    </div>
+    <p class="set-msg" id="set-push-msg" role="status" aria-live="polite"></p>
   </section>
 
   <section class="set-card">
@@ -241,6 +249,10 @@
   import {
     fetchKinds, fetchOptOuts, setOptOut, refreshNavBadges,
   } from "../lib/notifications.js";
+  import {
+    pushUnavailableReason, enablePush, disablePush, isSubscribedHere,
+    deviceCount, reconcile, listenForResubscribe,
+  } from "../lib/push.js";
 
   var session = await getSession();
   if (!session) {
@@ -531,6 +543,96 @@
     var btn = ev.target.closest("[data-master]");
     if (!btn) return;
     toggle("*", btn.getAttribute("data-master"), null);
+  });
+
+  // ---- Push, which is per-device -----------------------------------------
+  //
+  // ⚠ Every failure here is explained, never hidden. A "Turn on" button that
+  // silently does nothing is the worst possible version of this control: the
+  // member believes push is on, and finds out weeks later that it never was.
+  // So each reason push cannot work has its own sentence, and the iOS one in
+  // particular is a real instruction rather than an apology — Safari exposes
+  // ServiceWorker and PushManager in an ordinary tab, so every capability
+  // check passes and subscribe() still never delivers anything until the site
+  // is on the Home Screen.
+
+  var PUSH_WHY = {
+    unsupported: "This browser doesn't support push notifications.",
+    "needs-install": "On iPhone and iPad, push only works once the site is on your Home Screen. "
+      + "Tap Share, then Add to Home Screen, and open Sahaba Club from there.",
+    "not-configured": "Push isn't switched on for the club yet.",
+    denied: "You've blocked notifications for this site. Turn them back on in your browser's "
+      + "settings for sahabaclub.ai, then reload this page.",
+  };
+
+  var pushToggle = document.getElementById("set-push-toggle");
+  var pushWhy = document.getElementById("set-push-why");
+
+  function paintPush(subscribed, devices) {
+    pushToggle.disabled = false;
+    pushToggle.textContent = subscribed ? "On · turn off" : "Turn on";
+    pushToggle.classList.toggle("is-active", subscribed);
+    pushToggle.setAttribute("aria-pressed", subscribed ? "true" : "false");
+
+    if (subscribed) {
+      pushWhy.textContent = devices > 1
+        ? "On for this device. You have " + devices + " devices set up."
+        : "On for this device.";
+    } else {
+      pushWhy.textContent = "Notifications on your phone or desktop, even when the site isn't "
+        + "open. You'll need to allow them once."
+        + (devices > 0
+            ? " You have " + devices + (devices === 1 ? " other device" : " other devices") + " set up."
+            : "");
+    }
+  }
+
+  (async function loadPushSettings() {
+    var reason = pushUnavailableReason();
+    if (reason) {
+      pushToggle.textContent = "Unavailable";
+      pushToggle.disabled = true;
+      pushWhy.textContent = PUSH_WHY[reason] || "Push isn't available here.";
+      return;
+    }
+
+    var results = await Promise.all([isSubscribedHere(), deviceCount()]);
+    paintPush(results[0], results[1]);
+
+    // Repair any drift between what this browser holds and what the club
+    // knows — a rotated endpoint, an interrupted turn-off, cleared site data.
+    reconcile();
+    listenForResubscribe();
+  })();
+
+  pushToggle.addEventListener("click", async function () {
+    // ⚠ The permission prompt MUST happen inside this click. Browsers refuse a
+    // requestPermission() that was not triggered by a user gesture, and the
+    // refusal is indistinguishable from the member pressing Block. Nothing is
+    // awaited before enablePush() for that reason.
+    var wasOn = pushToggle.getAttribute("aria-pressed") === "true";
+    pushToggle.disabled = true;
+    say("set-push-msg", wasOn ? "Turning off…" : "Turning on…", "");
+
+    var ok = wasOn ? await disablePush() : await enablePush();
+
+    if (!ok) {
+      pushToggle.disabled = false;
+      // Re-read the reason: the member may have just pressed Block, which
+      // changes the answer from "available" to "denied" mid-click.
+      var reason = pushUnavailableReason();
+      say(
+        "set-push-msg",
+        reason ? (PUSH_WHY[reason] || "That didn't work.")
+               : (wasOn ? "Couldn't turn that off just now." : "Couldn't turn that on just now."),
+        "err"
+      );
+      return;
+    }
+
+    var results = await Promise.all([isSubscribedHere(), deviceCount()]);
+    paintPush(results[0], results[1]);
+    say("set-push-msg", wasOn ? "Push is off for this device." : "Push is on for this device.", "ok");
   });
 
   (async function loadNotificationSettings() {

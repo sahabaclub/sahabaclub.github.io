@@ -719,6 +719,22 @@
           // Live from here: a message arriving while this page is open
           // increments the badge without a reload.
           mod.subscribeToCounts(session.user.id);
+
+          // Repair any drift between what this browser's push subscription
+          // holds and what the club knows — a rotated endpoint, an
+          // interrupted turn-off, cleared site data. Runs on every page rather
+          // than only on Settings, because the member most affected by a
+          // silently dead subscription is the one who never visits Settings
+          // again after switching it on. It is a no-op when push was never
+          // enabled here, and it never prompts: reconcile() returns early
+          // unless permission is already granted.
+          return import("./lib/push.js").then(function (push) {
+            push.reconcile();
+            push.listenForResubscribe();
+          }).catch(function () {
+            // Push is strictly additive. A failure to load it must never
+            // affect the badges, which have already been painted above.
+          });
         });
       });
     })
