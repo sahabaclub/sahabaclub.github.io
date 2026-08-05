@@ -74,6 +74,8 @@
     requireUser, loadMessages, groupThreads, sendMessage, markRead, hideThread,
     getMember, escapeHtml, initialOf, relativeTime, CONNECT_OFF_MESSAGE,
   } from "../lib/connect.js";
+  import { supabase } from "../lib/supabase-client.js";
+  import { markConversationRead, refreshNavBadges } from "../lib/notifications.js";
 
   var pageStatus = document.getElementById("page-status");
   var inboxEl = document.getElementById("inbox");
@@ -281,6 +283,14 @@
         renderThreads();
       }
     }
+
+    // Clear the menu badge for this conversation too. The message rows and the
+    // notification row are separate records of the same event, and leaving one
+    // marked read while the other stays unread is how a badge ends up
+    // insisting there is something to see on a page the member just read.
+    markConversationRead(userId).then(function (n) {
+      if (n) refreshNavBadges();
+    });
   }
 
   async function onSend(e) {
@@ -350,6 +360,101 @@
 
   // ---- Load -------------------------------------------------------------
 
+  // ---- Live messages ----------------------------------------------------
+  //
+  // Send "hi", get the reply without touching the page. Supabase Realtime
+  // pushes the row; nothing here polls.
+  //
+  // Realtime authorises `postgres_changes` against RLS, and 0013's policy on
+  // member_messages is "only the two parties" — so this subscription can only
+  // ever deliver rows this member could already have SELECTed. The two filters
+  // below narrow what crosses the wire; they are NOT the access control, and
+  // removing them would change efficiency rather than privacy.
+  //
+  // Two subscriptions, because a `postgres_changes` filter takes one condition
+  // and a conversation has two directions:
+  //   recipient_id — the reply arriving, which is the whole point;
+  //   sender_id    — the same member typing on their phone while this tab is
+  //                  open on their laptop, which otherwise silently diverges.
+  var channel = null;
+
+  function startRealtime() {
+    if (!me || channel) return;
+
+    function handler(payload) { onIncoming(payload.new); }
+
+    channel = supabase
+      .channel("sc-inbox-" + me.id)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "member_messages",
+        filter: "recipient_id=eq." + me.id,
+      }, handler)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "member_messages",
+        filter: "sender_id=eq." + me.id,
+      }, handler)
+      .subscribe();
+  }
+
+  async function onIncoming(msg) {
+    if (!msg || !msg.id || !me) return;
+
+    var otherId = msg.sender_id === me.id ? msg.recipient_id : msg.sender_id;
+    var thread = findThread(otherId);
+    if (!thread) {
+      thread = { userId: otherId, messages: [], unread: 0, last: null };
+      threads.push(thread);
+    }
+
+    // ⚠ Dedupe by id, always. onSend() already appends the row it got back
+    // from the insert, and the sender_id subscription then delivers that same
+    // row a moment later — without this every message you send appears twice
+    // in your own thread.
+    if (thread.messages.some(function (m) { return m.id === msg.id; })) return;
+
+    thread.messages.push(msg);
+    thread.last = msg;
+
+    // Arriving into the thread already on screen counts as read; arriving into
+    // any other thread is a new unread. Marking read here keeps the badge, the
+    // list and the open conversation from disagreeing with each other.
+    if (msg.recipient_id === me.id && !msg.read_at) {
+      if (openWith === otherId) {
+        var res = await markRead(otherId);
+        if (!res.error) msg.read_at = new Date().toISOString();
+      } else {
+        thread.unread = (thread.unread || 0) + 1;
+      }
+    }
+
+    // A first-ever message comes from somebody not yet in the people map.
+    if (!people[otherId]) {
+      var found = await getMember(otherId);
+      people[otherId] = found.data || null;
+    }
+
+    threads.sort(function (a, b) {
+      return new Date(b.last.created_at) - new Date(a.last.created_at);
+    });
+
+    // The member may be sitting on the "No messages yet" state, which returns
+    // early from init() with the inbox still hidden. Their first message must
+    // replace that rather than arrive behind it.
+    if (inboxEl.hidden) {
+      inboxEl.hidden = false;
+      pageStatus.innerHTML = "";
+    }
+
+    renderThreads();
+    if (openWith === otherId) renderConvo();
+  }
+
+  window.addEventListener("pagehide", function () {
+    if (!channel) return;
+    try { supabase.removeChannel(channel); } catch (e) {}
+    channel = null;
+  });
+
   (async function init() {
     me = await requireUser("../login.html");
     if (!me) return;
@@ -367,6 +472,11 @@
     }
 
     threads = groupThreads(msgs.data, me.id);
+
+    // Started here, BEFORE the empty-state branch below returns early. A
+    // member with no messages is exactly the member most likely to receive
+    // their first one while looking at the page.
+    startRealtime();
 
     // Someone arriving from a "Message" button. Their thread may not exist
     // yet, which is fine — an empty one is a compose box.

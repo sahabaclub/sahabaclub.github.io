@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https: ; connect-src 'self' https://sobxhcsgtimtiqtvqbag.supabase.co wss://sobxhcsgtimtiqtvqbag.supabase.co https://www.google-analytics.com https://region1.google-analytics.com https://esm.sh; frame-src https://www.youtube.com https://www.youtube-nocookie.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Send a notification — Sahaba Club Admin</title>
+
+<!-- Writes a notification into members' dashboards. Three things worth knowing
+     before changing anything here:
+
+       1. THERE IS NO UNSEND. The rows are in people's dashboards the moment the
+          call returns, and nothing on this page or in the database can pull
+          them back. The confirm step names the audience and the number on
+          purpose — "are you sure?" alone is a button people learn to click.
+       2. The gate is in the database, not on this page.
+          staff_send_notification is security definer and checks is_staff()
+          inside its own body, because anyone signed in can call an RPC.
+          Hiding this page would gate nothing.
+       3. The recipient count shown before sending is a CEILING, never an exact
+          figure. Opt-outs live in notification_optouts, which is readable only
+          by the member it belongs to — staff genuinely cannot see who has
+          switched a kind off. The number after sending is the real one. -->
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="stylesheet" href="admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body class="admin">
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>Send a notification</h1>
+      <p>Writes a message into members' dashboards and lights up their menu. Goes to
+         everybody, or to people you pick.</p>
+    </div>
+
+    <div id="nt-notice"></div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head"><h2>What to say</h2></div>
+      <div class="ad-panel-body">
+        <div class="ad-field">
+          <label for="nt-kind">Kind</label>
+          <select id="nt-kind"></select>
+          <span class="ad-hint" id="nt-kind-hint"></span>
+        </div>
+
+        <div class="ad-field">
+          <label for="nt-title">Title</label>
+          <input type="text" id="nt-title" maxlength="200" placeholder="Registration for EduHackAI 5 is open">
+          <span class="ad-hint">The line members actually read. Keep it a sentence, not a paragraph.</span>
+        </div>
+
+        <div class="ad-field">
+          <label for="nt-body">Message <span style="font-weight:400;">(optional)</span></label>
+          <textarea id="nt-body" maxlength="1000" placeholder="Teams of up to four. Applications close on the 30th."></textarea>
+        </div>
+
+        <div class="ad-field">
+          <label for="nt-link">Link <span style="font-weight:400;">(optional)</span></label>
+          <input type="text" id="nt-link" placeholder="/events.html">
+          <span class="ad-hint">Where tapping it goes. Must be a path on this site starting with a
+            single &ldquo;/&rdquo; &mdash; full https:// addresses are refused by the database, so a
+            notification can never be turned into a link off the site.</span>
+          <div id="nt-link-suggest" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <h2>Who gets it</h2>
+        <div class="ad-spacer"></div>
+        <button type="button" class="ad-btn ad-btn-sm" id="nt-aud-everyone">Everybody</button>
+        <button type="button" class="ad-btn ad-btn-sm" id="nt-aud-picked">Pick people</button>
+      </div>
+
+      <div id="nt-picker" hidden>
+        <div class="ad-panel-head">
+          <input type="search" class="ad-search" id="nt-q" placeholder="Search by name&hellip;">
+          <span class="ad-cell-dim" id="nt-count"></span>
+          <div class="ad-spacer"></div>
+          <!-- Says "shown", and means it: this selects what the search has
+               filtered to, not the whole club. Selecting 400 people while the
+               screen shows 3 would be a genuinely dangerous surprise. -->
+          <button type="button" class="ad-btn ad-btn-sm" id="nt-select-shown">Select shown</button>
+          <button type="button" class="ad-btn ad-btn-sm" id="nt-clear">Clear</button>
+          <button type="button" class="ad-btn ad-btn-sm" id="nt-refresh">Refresh</button>
+        </div>
+        <div class="ad-tablewrap">
+          <table class="ad-table">
+            <thead>
+              <tr><th>Member</th><th>ID</th><th>Joined</th></tr>
+            </thead>
+            <tbody id="nt-members">
+              <tr><td colspan="3" class="ad-empty">Loading&hellip;</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="ad-panel-body">
+        <p class="ad-cell-dim" id="nt-summary" style="font-size:13.5px;line-height:1.7;margin:0 0 12px;"></p>
+        <button type="button" class="ad-btn" id="nt-send" disabled>Send notification</button>
+      </div>
+    </div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head"><h2>What this does, and what it doesn&rsquo;t</h2></div>
+      <div class="ad-panel-body">
+        <p class="ad-cell-dim" style="font-size:13.5px;line-height:1.7;margin:0 0 10px;">
+          It writes a notification into each member&rsquo;s dashboard and adds one to the count on
+          their menu. It does <strong>not</strong> send an email, and it does <strong>not</strong>
+          send anything to a phone &mdash; push notifications aren&rsquo;t switched on yet. Email is
+          reserved for the things with a deadline attached: Microsoft&nbsp;365 expiry, membership
+          renewal, and the hour before an event you registered for.
+        </p>
+        <p class="ad-cell-dim" style="font-size:13.5px;line-height:1.7;margin:0 0 10px;">
+          <strong>There is no unsend.</strong> Once the confirm is accepted the rows exist in
+          people&rsquo;s dashboards and nothing here can take them back.
+        </p>
+        <p class="ad-cell-dim" style="font-size:13.5px;line-height:1.7;margin:0;">
+          Members who have switched this kind off in their settings will not receive it, and this
+          page cannot tell you who they are &mdash; those preferences are readable only by the
+          member they belong to. That is why the number before sending says &ldquo;up to&rdquo; and
+          the number afterwards does not.
+        </p>
+      </div>
+    </div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head"><h2>Already sent</h2></div>
+      <div class="ad-tablewrap">
+        <table class="ad-table">
+          <thead>
+            <tr><th>Title</th><th>Kind</th><th>Audience</th><th>Received</th><th>Sent</th></tr>
+          </thead>
+          <tbody id="nt-history">
+            <tr><td colspan="5" class="ad-empty">Loading&hellip;</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module" src="notify.js"></script>
+</body>
+</html>

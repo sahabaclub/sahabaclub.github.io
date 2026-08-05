@@ -190,6 +190,22 @@ td.ad-num, th.ad-num { text-align: right; font-variant-numeric: tabular-nums; }
 html.light-mode .ad-btn-primary { color: #fff; }
 .ad-btn-danger { color: var(--ad-danger); border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.08); }
 .ad-btn-sm { padding: 5px 11px; font-size: 12.5px; }
+/* Selected state for buttons used as a choice rather than an action — the
+   audience switch on notify.html. `.ad-nav.is-active` already existed and
+   `.ad-btn.is-active` did not, so the two audience buttons rendered
+   identically whichever was chosen: the page would have looked the same
+   whether it was about to write to one member or to the whole club.
+
+   The chosen one is marked three ways, not one: a brighter border, a filled
+   background, and aria-pressed in the markup. Colour alone would leave the
+   distinction invisible to anyone who cannot see the accent, on a control
+   where being wrong is expensive. Text colour is unchanged from .ad-btn, so
+   its measured contrast carries over untouched. */
+.ad-btn.is-active {
+  border-color: var(--ad-violet);
+  background: var(--ad-panel);
+  box-shadow: inset 0 0 0 1px var(--ad-violet);
+}
 
 /* ---- Forms ---- */
 .ad-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
