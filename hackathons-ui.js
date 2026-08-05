@@ -847,6 +847,15 @@
   function load() {
     return import("./lib/supabase-client.js").then(function (mod) {
       var sb = mod.supabase;
+      // Is anybody signed in? It decides ONE thing: whether the roster query
+      // may ask for profile_user_id. 0041 took that column off the anon grant,
+      // and PostgREST refuses the WHOLE query when any requested column is
+      // ungranted — so asking for it while signed out would empty the roster
+      // rather than merely omitting a field.
+      return sb.auth.getSession()
+        .then(function (r) { return !!(r && r.data && r.data.session); })
+        .catch(function () { return false; })
+        .then(function (hasSession) {
       return Promise.all([
         sb.from("hackathons")
           .select("id,slug,round_number,name,tagline,description,status,starts_on,ends_on,location,mode,partner")
@@ -860,8 +869,12 @@
         // than refine it, silently, which is how the coach row would stop
         // leading with the person it is meant to lead with.
         sb.from("hackathon_roster")
-          .select("hackathon_id,team_id,full_name,role_in_team,is_mentor,is_judge,profile_user_id,avatar_url,headline")
+          .select(
+            "hackathon_id,team_id,full_name,role_in_team,is_mentor,is_judge,avatar_url,headline" +
+            (hasSession ? ",profile_user_id" : "")
+          )
       ]);
+      });
     }).then(function (res) {
       var rounds = res[0], teams = res[1], roster = res[2];
       if (rounds.error) throw rounds.error;
