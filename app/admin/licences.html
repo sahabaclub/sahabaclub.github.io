@@ -31,6 +31,33 @@
          "how many are about to lapse", not "show me everyone". -->
     <div class="ad-stats" id="ad-stats"></div>
 
+    <!-- Tenant health.
+         ------------------------------------------------------------
+         provision-ms365 has carried a staff-only, read-only `diagnose`
+         action since it was written, and NOTHING HAS EVER CALLED IT — so the
+         one question that decides whether provisioning can work at all has
+         been open since 1 Aug: are there free licence seats?
+
+         It matters more than it looks. createMailbox() creates the Graph user,
+         then assigns the licence, and if that assignment throws it DELETES the
+         account it just made and rethrows. So a tenant with no free seats
+         produces no mailbox, no credential email, and no trace in Resend —
+         which is exactly the shape of "members never get their password".
+
+         Read-only: it calls /organization and /subscribedSkus and writes
+         nothing. -->
+    <div class="ad-panel" style="margin-bottom:18px;">
+      <div class="ad-panel-head">
+        <strong style="font-size:14px;">Microsoft 365 tenant health</strong>
+        <button type="button" class="ad-btn" id="ms-diag-run">Run check</button>
+        <span class="ad-cell-dim" id="ms-diag-when"></span>
+      </div>
+      <div id="ms-diag-out" style="padding:14px 16px; font-size:13.5px; line-height:1.6;">
+        <span class="ad-cell-dim">Checks the Graph credentials and how many licence seats are
+        free. Nothing is changed.</span>
+      </div>
+    </div>
+
     <div class="ad-panel">
       <div class="ad-panel-head">
         <input type="search" class="ad-search" id="ad-q" placeholder="Search name or mailbox…">
@@ -357,6 +384,116 @@
     closeEditor();
     showMessage("ad-msg", "Saved.", "ok");
     await load();
+  });
+
+  // ---- Tenant health -----------------------------------------------------
+  //
+  // Calls provision-ms365 { action: "diagnose" } — staff-gated server-side and
+  // read-only. Everything is built with createElement rather than innerHTML:
+  // every string here (SKU names, the tenant's own display name, Graph's error
+  // text) came back from Microsoft, and an admin page is the last place to be
+  // pasting a remote string into markup.
+  const diagBtn = document.getElementById("ms-diag-run");
+  const diagOut = document.getElementById("ms-diag-out");
+
+  function diagLine(label, value, tone) {
+    const row = document.createElement("p");
+    row.style.margin = "0 0 6px";
+    const b = document.createElement("strong");
+    b.textContent = label + ": ";
+    row.appendChild(b);
+    const v = document.createElement("span");
+    v.textContent = value;
+    if (tone === "bad") v.style.color = "#fca5a5";
+    if (tone === "good") v.style.color = "#4ade80";
+    row.appendChild(v);
+    return row;
+  }
+
+  diagBtn.addEventListener("click", async () => {
+    diagBtn.disabled = true;
+    diagOut.replaceChildren(document.createTextNode("Asking Microsoft…"));
+
+    let data = null, error = null;
+    try {
+      const res = await supabase.functions.invoke("provision-ms365", { body: { action: "diagnose" } });
+      data = res.data; error = res.error;
+    } catch (err) { error = err; }
+
+    diagBtn.disabled = false;
+    document.getElementById("ms-diag-when").textContent = "checked " + new Date().toLocaleTimeString();
+
+    if (error || !data || !data.ok) {
+      // The useful text is in the response body, which invoke() hides behind a
+      // generic FunctionsHttpError.
+      let detail = "";
+      if (error && error.context && typeof error.context.json === "function") {
+        try { detail = (await error.context.json()).error || ""; } catch (e) {}
+      }
+      diagOut.replaceChildren(diagLine(
+        "Check failed",
+        detail || "Couldn't reach the Microsoft Graph diagnostic. You may not be staff, or the credentials are wrong.",
+        "bad",
+      ));
+      return;
+    }
+
+    // Field names taken from graphDiagnostics() in _shared/graph.ts, not
+    // guessed: tokenOk, tenant, domains, configuredSkuId, configuredSku,
+    // configuredSkuFound, allSkus.
+    const d = data.diagnostics || {};
+    const out = document.createDocumentFragment();
+    if (d.tenant) out.appendChild(diagLine("Tenant", String(d.tenant)));
+    if (Array.isArray(d.domains) && d.domains.length) {
+      out.appendChild(diagLine("Verified domains", d.domains.join(", ")));
+    }
+
+    const skus = Array.isArray(d.allSkus) ? d.allSkus : [];
+    const configured = d.configuredSkuFound ? d.configuredSku : null;
+
+    if (!configured) {
+      out.appendChild(diagLine(
+        "Configured licence",
+        "MS_GRAPH_LICENSE_SKU_ID does not match any SKU on this tenant — nothing can be licensed.",
+        "bad",
+      ));
+    } else {
+      const free = Number(configured.free);
+      out.appendChild(diagLine("Configured licence", String(configured.name || configured.skuId)));
+      out.appendChild(diagLine(
+        "Free seats",
+        free + " of " + configured.enabled + " (" + configured.consumed + " in use)",
+        free > 0 ? "good" : "bad",
+      ));
+      if (!(free > 0)) {
+        const warn = document.createElement("p");
+        warn.style.cssText = "margin:8px 0 0; color:#fca5a5;";
+        warn.textContent =
+          "No free seats. assignLicense returns 400, and createMailbox deletes the account it " +
+          "just made and rethrows — so provisioning produces no mailbox and no credential email. " +
+          "Free a seat or point MS_GRAPH_LICENSE_SKU_ID at a SKU that has one.";
+        out.appendChild(warn);
+      }
+    }
+
+    if (skus.length) {
+      const t = document.createElement("p");
+      t.style.cssText = "margin:12px 0 4px; font-weight:600;";
+      t.textContent = "All licences on this tenant";
+      out.appendChild(t);
+      const ul = document.createElement("ul");
+      ul.style.cssText = "margin:0; padding-left:20px;";
+      skus.forEach((s) => {
+        const li = document.createElement("li");
+        li.textContent =
+          (s.name || s.skuId) + " — " + s.free + " free of " + s.enabled +
+          (s.isConfigured ? "  (this is the configured one)" : "");
+        ul.appendChild(li);
+      });
+      out.appendChild(ul);
+    }
+
+    diagOut.replaceChildren(out);
   });
 
   await load();
