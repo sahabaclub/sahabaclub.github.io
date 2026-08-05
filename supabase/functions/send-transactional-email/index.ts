@@ -19,7 +19,17 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Sahaba Club <members@sahabaclub.com>";
 
-type TemplateName = "welcome" | "ms365_credential" | "ms365_reset_request" | "hackathon_interest";
+type TemplateName =
+  | "welcome"
+  | "ms365_credential"
+  | "ms365_linked"
+  | "ms365_reset_request"
+  | "hackathon_interest";
+
+// Every link in a member-facing email points at the live site. Relative URLs
+// are meaningless in an inbox, and a hard-coded host that drifts is how a
+// welcome email ends up sending people to a 404.
+const SITE = (Deno.env.get("SITE_URL") ?? "https://www.sahabaclub.ai").replace(/\/+$/, "");
 
 // ⚠ TEMPLATES WHOSE RECIPIENT IS DECIDED HERE, NOT BY THE CALLER.
 //
@@ -38,6 +48,23 @@ const INTEREST_NOTIFY_EMAIL = Deno.env.get("INTEREST_NOTIFY_EMAIL") ?? "ahmed@sa
 const FIXED_RECIPIENT: Partial<Record<TemplateName, string>> = {
   hackathon_interest: INTEREST_NOTIFY_EMAIL,
 };
+
+// ---- Keeping Ahmed on the member-facing mail --------------------------
+//
+// Ahmed's ask, 5 Aug: copy him on every onboarding email. Deliberately a
+// per-template allowlist rather than a blanket cc, because two of the four
+// templates are ALREADY addressed to him — `hackathon_interest` and
+// `ms365_reset_request` both land in a club inbox — and cc-ing those would
+// simply deliver him everything twice.
+//
+// ⚠ `ms365_credential` carries a temporary password, so this puts that password
+// in a second inbox. It is a one-use credential that Microsoft forces the
+// member to change at first sign-in, and Ahmed is the tenant admin who can
+// reset it anyway, so the marginal exposure is small — but it is real, and
+// swapping `cc` for `bcc` below is the one-word change if it should not be
+// visible to the member either.
+const CC_ADDRESS = Deno.env.get("ONBOARDING_CC_EMAIL") ?? "ahmed@sahabaclub.com";
+const CC_ON_MEMBER_MAIL: TemplateName[] = ["welcome", "ms365_credential", "ms365_linked"];
 
 // ⚠ NOTHING FROM A CALLER GOES INTO HTML WITHOUT PASSING THROUGH HERE.
 //
@@ -137,23 +164,129 @@ function renderTemplate(template: TemplateName, data: Record<string, unknown>) {
         : "Your Sahaba Club Microsoft 365 account is ready",
       html: `
         <p>Hi,</p>
-        <p>${preExisting ? "Your existing" : "Your new"} Microsoft 365 mailbox is ready:</p>
-        <p><strong>${mailbox}</strong></p>
-        <p>Temporary password: <code>${tempPassword}</code></p>
-        <p>You'll be asked to set your own password the first time you sign in at
-           <a href="https://portal.office.com">portal.office.com</a>. This benefit is
-           free for your first 3 months as a Sahaba Club member.</p>
+        <p>${preExisting ? "Your existing" : "Your new"} Microsoft 365 mailbox is ready.</p>
+
+        <table cellpadding="6" style="border-collapse:collapse;margin:12px 0">
+          <tr><td><strong>Email</strong></td><td><code>${mailbox}</code></td></tr>
+          <tr><td><strong>Temporary password</strong></td><td><code>${tempPassword}</code></td></tr>
+        </table>
+
+        <p><strong>Signing in the first time</strong></p>
+        <ol>
+          <li>Go to <a href="https://www.microsoft365.com">microsoft365.com</a> and choose
+              <strong>Sign in</strong>.</li>
+          <li>Use the address above — <em>not</em> your personal email.</li>
+          <li>Enter the temporary password, then choose one of your own. Microsoft will insist,
+              and after that only you know it.</li>
+          <li>You may be asked for a phone number or the Authenticator app. That is for
+              recovering your own account; the club cannot see it.</li>
+        </ol>
+
+        <p><strong>What comes with it</strong></p>
+        <ul>
+          <li>Email at your @sahabaclub.com address, in Outlook on the web or the app.</li>
+          <li>Word, Excel, PowerPoint and OneNote in the browser.</li>
+          <li>1&nbsp;TB of OneDrive storage.</li>
+          <li>Microsoft Teams, for club events and talking to other members.</li>
+          <li>Forms, Planner, Lists and Sway — what the hackathons run on.</li>
+        </ul>
+        <p style="color:#555;font-size:13px">The desktop Office apps are not on this licence.
+           The browser versions do the same work.</p>
+
+        <p>Free for your first 3 months as a member. These details are also on
+           <a href="${SITE}/app/dashboard.html">your dashboard</a> under Microsoft 365 if you
+           lose this email.</p>
         <p>— Sahaba Club</p>
       `,
     };
   }
-  // "welcome" — sent right after signup, before the Microsoft 365 step.
+  // "ms365_linked" — a member who ALREADY had an @sahabaclub.com mailbox and
+  // has just connected it to their club account.
+  //
+  // This path sent nothing at all until now, which was the worse half of the
+  // gap: returning EduHackAI participants linked an account and heard silence.
+  // It deliberately carries NO password — they already have one, the club never
+  // knew it, and offering to "remind" them of it would be a lie. Everything
+  // else is the same welcome the created-mailbox members get.
+  if (template === "ms365_linked") {
+    const mailbox = String(data.mailbox ?? "");
+    return {
+      subject: "Your Microsoft 365 account is connected",
+      html: `
+        <p>Hi,</p>
+        <p>Your Microsoft 365 mailbox is now connected to your Sahaba Club account:</p>
+        <p><strong>${esc(mailbox)}</strong></p>
+        <p>Sign in at <a href="https://www.microsoft365.com">microsoft365.com</a> with the
+           password you already use for it. We don't have that password and can't see it — if
+           you've forgotten it, ask for a reset from
+           <a href="${SITE}/app/dashboard.html">your dashboard</a> and we'll sort it out.</p>
+
+        <p><strong>What comes with it</strong></p>
+        <ul>
+          <li>Email at your @sahabaclub.com address, in Outlook on the web or the app.</li>
+          <li>Word, Excel, PowerPoint and OneNote in the browser.</li>
+          <li>1&nbsp;TB of OneDrive storage.</li>
+          <li>Microsoft Teams, for club events and talking to other members.</li>
+          <li>Forms, Planner, Lists and Sway — what the hackathons run on.</li>
+        </ul>
+
+        <p>While you're here: <a href="${SITE}/app/connect.html">Connect</a> lists members who
+           have a profile picture, and <a href="${SITE}/hackathons.html">EduHackAI round 5</a>
+           is open.</p>
+        <p>— Sahaba Club</p>
+      `,
+    };
+  }
+
+  // "welcome" — sent once, the first time a member reaches onboarding.
+  //
+  // This template existed from the beginning and NOTHING EVER SENT IT, so the
+  // first thing a new member heard from the club was a Microsoft password. It
+  // is now the front door: what they get, and where to go next. Every link is
+  // absolute and points at a page that is actually live — PromptArena is
+  // deliberately absent because it is hidden until its challenge bank is
+  // seeded, and a welcome email that opens with a dead link is worse than one
+  // that says less.
+  //
+  // `data.fullName` is a member's own name off their profile. esc()'d like
+  // everything else: it is not a string this codebase generated.
+  const who = String(data.fullName ?? "").trim();
   return {
     subject: "Welcome to Sahaba Club",
     html: `
-      <p>Welcome to Sahaba Club — you're in.</p>
-      <p>Next up: setting up your free Microsoft 365 account, and building your profile
-         so we can match you with the right coaches and content.</p>
+      <p>${who ? `Hi ${esc(who.split(/\s+/)[0])},` : "Hi,"}</p>
+      <p>Welcome to Sahaba Club — you're in. Here is what that gets you, and where to start.</p>
+
+      <p><strong>What's included</strong></p>
+      <ul>
+        <li><strong>Microsoft 365, free for 3 months</strong> — your own @sahabaclub.com mailbox,
+            Office in the browser, 1&nbsp;TB of OneDrive and Teams.</li>
+        <li><strong>Events and workshops</strong>, online and in person across the Gulf and
+            North Africa.</li>
+        <li><strong>EduHackAI hackathons</strong> — four rounds run so far, and round 5 is open
+            for registration.</li>
+        <li><strong>The member directory</strong>, so you can find people building the same
+            things you are.</li>
+        <li><strong>The podcast</strong>, and a newsletter tailored to the interests on your
+            profile.</li>
+      </ul>
+
+      <p><strong>Where to go next</strong></p>
+      <ul>
+        <li><a href="${SITE}/app/dashboard.html">Your dashboard</a> — everything in one place</li>
+        <li><a href="${SITE}/app/connect.html">Connect</a> — meet the other members</li>
+        <li><a href="${SITE}/events.html">Events</a> — what's coming up</li>
+        <li><a href="${SITE}/hackathons.html">EduHackAI</a> — the hackathons, and round 5</li>
+        <li><a href="${SITE}/podcast.html">Podcast</a> — conversations with people in the field</li>
+        <li><a href="${SITE}/membership.html">Membership</a> — what free and premium include</li>
+      </ul>
+
+      <p><strong>Two things worth doing today.</strong> Finish your profile — it is what we match
+         coaches, events and introductions against, so a thin one gets thin results. And add a
+         picture: <em>Connect only lists members who have one</em>, which is the single most
+         common reason people cannot find themselves in the directory.</p>
+
+      <p>Any questions, just reply to this email.</p>
       <p>— Sahaba Club</p>
     `,
   };
@@ -192,13 +325,30 @@ Deno.serve(async (req) => {
     // of this call that delivers a public form's contents anywhere else.
     const recipient = FIXED_RECIPIENT[template as TemplateName] ?? to;
 
+    // Copy Ahmed on member-facing mail only — see CC_ON_MEMBER_MAIL. Skipped
+    // when he is already the recipient, which would otherwise deliver the
+    // staff notifications to him twice.
+    const wantsCc = CC_ON_MEMBER_MAIL.indexOf(template as TemplateName) !== -1;
+    const ccList = wantsCc && CC_ADDRESS &&
+        String(recipient).toLowerCase() !== CC_ADDRESS.toLowerCase()
+      ? [CC_ADDRESS]
+      : null;
+
+    const payload: Record<string, unknown> = {
+      from: RESEND_FROM,
+      to: recipient,
+      subject,
+      html,
+    };
+    if (ccList) payload.cc = ccList;
+
     const resp = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from: RESEND_FROM, to: recipient, subject, html }),
+      body: JSON.stringify(payload),
     });
     if (!resp.ok) {
       throw new Error(`Resend error ${resp.status}: ${await resp.text()}`);
