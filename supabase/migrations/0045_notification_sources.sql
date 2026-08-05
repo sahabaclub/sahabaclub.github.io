@@ -1,0 +1,730 @@
+-- 0045 — what actually fires a notification
+-- ============================================================
+--
+-- 0044 built the engine and emitted nothing. This connects it to the six
+-- departments Ahmed named: a message arrives, somebody follows you, a member
+-- joins, an event is added, EduHackAI announces a version, an episode goes up
+-- — plus the dashboard's own account notices, which are the ones with real
+-- consequences attached.
+--
+-- Two things here are NOT plumbing and should be read before the code:
+--
+-- ⚠ **`events` had no machine-readable start time, so "one hour before the
+--   event" was not computable.** `event_date` is a `date` and the time of day
+--   lives in `time_label`, which is free text — "6:00 PM – 8:00 PM",
+--   "10:00 AM GST". §1 adds a real `starts_at timestamptz`. The reminder sweep
+--   skips any event without one rather than guessing a time zone: a reminder
+--   that arrives at the wrong hour is worse than one that does not arrive,
+--   because the member stops trusting the next one. Every existing event needs
+--   `starts_at` filled in before its reminder can work, and that is data entry
+--   nobody can do from here.
+--
+-- ⚠ **A message preview lives in the notification row, and `notifications` has
+--   no staff read policy — deliberately.** 0013 excluded staff from
+--   `member_messages` on purpose: "an admin who needs to investigate abuse
+--   should go through a report, not read everyone's mail by default." Putting
+--   the first 140 characters of a message into a notification would hand staff
+--   a way around that the moment anyone adds a staff policy to `notifications`
+--   for convenience. There is no such policy in 0044, there must not be one,
+--   and the verification block checks for it.
+
+-- ============================================================
+-- 1. Events get a real start time
+-- ============================================================
+
+alter table public.events
+  add column if not exists starts_at timestamptz;
+
+comment on column public.events.starts_at is
+  'The real, machine-readable start instant. `event_date` + `time_label` '
+  'cannot be computed with — time_label is display text such as '
+  '"6:00 PM – 8:00 PM". Reminders fire only for events that have this set; '
+  'they skip the rest rather than guess a time zone.';
+
+-- No grant: `events` is staff-write already (0003 policies), and members have
+-- no UPDATE on it. Nothing to add, and adding something would be the bug.
+
+create index if not exists events_starts_at_idx
+  on public.events (starts_at)
+  where starts_at is not null and is_published;
+
+-- ============================================================
+-- 2. Podcast episodes become data
+-- ============================================================
+--
+-- They were fifteen hardcoded objects in `podcast-data.js`, so "a new episode
+-- was added" was a git commit and a Pages rebuild — there was no event for a
+-- notification to hang off. As a table, adding one is an ordinary insert that
+-- fires the trigger in §3, and publishing an episode stops requiring a deploy.
+--
+-- The Podcast page is public, so `anon` reads published rows. That is not a
+-- widening: the same list is already served to the world as JavaScript.
+
+create table if not exists public.podcast_episodes (
+  id uuid primary key default gen_random_uuid(),
+  episode_number int not null unique,
+  -- 11 characters, YouTube's own alphabet. Checked because a malformed id
+  -- renders as a broken thumbnail and a dead player rather than an error.
+  youtube_id text not null unique check (youtube_id ~ '^[A-Za-z0-9_-]{11}$'),
+  language text not null default 'en' check (language in ('en', 'ar')),
+  topic text not null check (length(topic) between 1 and 200),
+  title_ar text check (title_ar is null or length(title_ar) <= 200),
+  published_at date,
+  is_published boolean not null default true,
+  -- Set by the trigger when the club-wide notification goes out. Also what
+  -- keeps the fifteen seeded episodes quiet — see the ordering note in §3.
+  announced_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create trigger podcast_episodes_set_updated_at before update on public.podcast_episodes
+  for each row execute procedure public.set_updated_at();
+
+alter table public.podcast_episodes enable row level security;
+
+drop policy if exists "episodes: public reads published" on public.podcast_episodes;
+create policy "episodes: public reads published" on public.podcast_episodes
+  for select using (is_published or public.is_staff());
+
+drop policy if exists "episodes: staff write" on public.podcast_episodes;
+create policy "episodes: staff write" on public.podcast_episodes
+  for all using (public.is_staff()) with check (public.is_staff());
+
+revoke all on public.podcast_episodes from anon, authenticated;
+grant select on public.podcast_episodes to anon, authenticated;
+
+-- The existing fifteen. GENERATED by tools/generate-podcast-seed.mjs from
+-- podcast-data.js — not retyped. Nine of these titles are Arabic, and a
+-- transcription slip in one would be invisible in review and would ship a
+-- wrong title to every member. 0043 is in this repo because four objects were
+-- reproduced from memory rather than from their source; this is the same
+-- lesson applied before the fact.
+--
+-- ⚠ This INSERT runs BEFORE the notify trigger is created in §3. That
+-- ordering is the whole reason no member gets fifteen "new episode"
+-- notifications the moment this migration is applied. Do not reorder it.
+
+insert into public.podcast_episodes
+  (episode_number, youtube_id, language, topic, title_ar, is_published, announced_at)
+select v.n, v.yt, v.lang, v.topic, v.ar, true, now()
+  from (values
+  (1, 'e3J3z4u7zl0', 'ar', 'AI for Everyone', 'الذكاء الأصطناعي للجميع'),
+  (2, 'gX0kZjRbeMQ', 'ar', 'Cloud Career Growth', 'الفرص في زمن الكلاود'),
+  (3, 'XYbtH5H5NDo', 'en', 'Human Hacked', null),
+  (4, 'qs1muOWOvIE', 'ar', 'AI in Government', 'الذكاء الاصطناعي في الحكومات'),
+  (5, '3LhZWTVpGsM', 'en', 'GenAI Solutions', null),
+  (6, 'buj-lwzcy_Q', 'ar', 'EduTech', 'التعليم في زمن الذكاء الاصطناعي'),
+  (7, 'rPSVWP5oJWo', 'en', 'AI Lady', null),
+  (8, 'RmoMwL7cliA', 'ar', 'Cloud Migration', 'الحوسبه السحابيه'),
+  (9, 'EYnUywthLAo', 'en', 'SON in 5G', null),
+  (10, '_g71YvmSuM8', 'ar', 'Money in AI', 'الفلوس في زمن الذكاء الاصطناعي'),
+  (11, 'SPBBoCAJjRo', 'en', 'Agentic AI', null),
+  (12, 'YjlYqC1bLug', 'ar', 'Cybersecurity Innovation', 'الابتكار في الأمن السيبراني'),
+  (13, 'zBv232YnAWE', 'en', 'GenAI: Your Key to Unlocking Sales Transformation', null),
+  (14, 'b-oKWg7ULHM', 'ar', 'Art of AI Development', 'فن البرمجة في زمن الذكاء الأصطناعي'),
+  (15, 'rQscKY4qr88', 'en', 'AI & Data Mastery — MoneyBot', null)
+  ) as v (n, yt, lang, topic, ar)
+on conflict (youtube_id) do nothing;
+
+-- ============================================================
+-- 3. The triggers
+-- ============================================================
+--
+-- All of these are AFTER triggers returning null: the notification is a
+-- consequence of the row, never a condition of it. A failure to notify must
+-- never be able to roll back the message, the follow or the event itself.
+
+-- --- Messages --------------------------------------------------------------
+
+create or replace function public.notify_new_message()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_sender text;
+begin
+  select coalesce(nullif(trim(p.full_name), ''), 'A member')
+    into v_sender
+    from public.profiles p
+   where p.user_id = new.sender_id;
+
+  perform public.emit_notification(
+    p_user_id    => new.recipient_id,
+    p_kind       => 'message_received',
+    p_title      => coalesce(v_sender, 'A member') || ' sent you a message',
+    -- A preview, not the message. See the header note about staff access.
+    p_body       => left(new.body, 140),
+    p_href       => '/app/inbox.html?to=' || new.sender_id::text,
+    p_actor_id   => new.sender_id,
+    p_subject_id => new.id,
+    -- One unread badge per conversation, not per message: a member who sends
+    -- six lines in a row should produce one notification, and the seventh
+    -- should not push the first out of view. Re-reading the thread clears it.
+    p_dedupe_key => 'msg:' || new.sender_id::text || ':' || new.recipient_id::text
+  );
+
+  return null;
+end;
+$$;
+
+drop trigger if exists member_messages_notify_trg on public.member_messages;
+create trigger member_messages_notify_trg
+  after insert on public.member_messages
+  for each row execute procedure public.notify_new_message();
+
+-- ⚠ The dedupe key above is deliberately stable per conversation, which means
+-- a SECOND message only notifies once the first is marked read. That is the
+-- behaviour you want for a badge and the wrong behaviour for a list, so
+-- `mark_notifications_read` on a message notification must be called when the
+-- member opens the thread — the client does that in lib/notifications.js.
+
+-- --- Follows ---------------------------------------------------------------
+
+create or replace function public.notify_new_follower()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_name text;
+begin
+  select coalesce(nullif(trim(p.full_name), ''), 'Someone')
+    into v_name
+    from public.profiles p
+   where p.user_id = new.follower_id;
+
+  perform public.emit_notification(
+    p_user_id    => new.following_id,
+    p_kind       => 'new_follower',
+    p_title      => coalesce(v_name, 'Someone') || ' started following you',
+    p_body       => null,
+    p_href       => '/app/member.html?u=' || new.follower_id::text,
+    p_actor_id   => new.follower_id,
+    p_subject_id => null,
+    -- Unfollow, refollow, unfollow, refollow must not be a way to fill
+    -- somebody's notification list.
+    p_dedupe_key => 'follow:' || new.follower_id::text || ':' || new.following_id::text
+  );
+
+  return null;
+end;
+$$;
+
+drop trigger if exists member_follows_notify_trg on public.member_follows;
+create trigger member_follows_notify_trg
+  after insert on public.member_follows
+  for each row execute procedure public.notify_new_follower();
+
+-- --- A new member, and a changed picture -----------------------------------
+--
+-- Both hang off `profiles`, and both need to know WHO did it.
+--
+-- "New member joined" fires when a profile becomes discoverable, not when the
+-- account is created. Signing up leaves `is_discoverable` false (0013's
+-- default); a member becomes visible to the club when they finish their
+-- profile and choose to be listed. Announcing at signup would announce people
+-- who never appear in the directory, and would announce them before they had
+-- decided to be seen.
+--
+-- "Your picture changed" fires only when the CLUB changed it — the monthly
+-- redraw job — and not when the member changed it themselves. `auth.uid()` is
+-- null in a service-role or cron session and equals the member in a browser
+-- session, which is exactly the distinction needed. Telling somebody "your
+-- picture changed" one second after they changed it is noise, and noise is
+-- what makes people switch notifications off.
+
+create or replace function public.notify_profile_changes()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_name text;
+begin
+  -- Newly listed in the directory → tell the club.
+  if new.is_discoverable and not old.is_discoverable then
+    v_name := coalesce(nullif(trim(new.full_name), ''), 'A new member');
+
+    perform public.emit_notification_to_members(
+      p_kind            => 'member_joined',
+      p_title           => v_name || ' joined the club',
+      p_body            => nullif(trim(coalesce(new.headline, '')), ''),
+      p_href            => '/app/member.html?u=' || new.user_id::text,
+      p_subject_id      => new.user_id,
+      p_dedupe_key      => 'joined:' || new.user_id::text,
+      p_exclude_user_id => new.user_id
+    );
+  end if;
+
+  -- Picture replaced by the club rather than by its owner.
+  if new.avatar_url is distinct from old.avatar_url
+     and new.avatar_url is not null
+     and auth.uid() is null
+  then
+    perform public.emit_notification(
+      p_user_id    => new.user_id,
+      p_kind       => 'avatar_changed',
+      p_title      => 'Your profile picture was updated',
+      p_body       => 'Your club picture has been redrawn. You can change it, '
+                      || 'or keep a photograph instead, from your profile.',
+      p_href       => '/app/dashboard.html#profile',
+      p_actor_id   => null,
+      p_subject_id => new.user_id,
+      -- One per member per month: the redraw runs monthly and re-running it
+      -- must not stack up.
+      p_dedupe_key => 'avatar:' || to_char(now(), 'YYYY-MM')
+    );
+  end if;
+
+  return null;
+end;
+$$;
+
+drop trigger if exists profiles_notify_trg on public.profiles;
+create trigger profiles_notify_trg
+  after update of is_discoverable, avatar_url on public.profiles
+  for each row execute procedure public.notify_profile_changes();
+
+-- --- Events ----------------------------------------------------------------
+--
+-- Fires on a newly published event, and on an existing draft being published.
+-- Not on every UPDATE: staff fixing a typo in the location must not re-announce
+-- the event to the whole club.
+
+create or replace function public.notify_event_published()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if not new.is_published then
+    return null;
+  end if;
+
+  -- ⚠ Nested deliberately, NOT written as `if tg_op = 'UPDATE' and
+  -- old.is_published`. This trigger fires on INSERT as well, and on an INSERT
+  -- `OLD` is unassigned — plpgsql builds the whole boolean expression before
+  -- evaluating it, so a single combined condition raises "record old is not
+  -- assigned yet" on every newly created event rather than short-circuiting.
+  -- The nesting is what makes OLD unreachable on the INSERT path.
+  if tg_op = 'UPDATE' then
+    if old.is_published then
+      return null;
+    end if;
+  end if;
+
+  perform public.emit_notification_to_members(
+    p_kind       => 'event_published',
+    p_title      => 'New event: ' || new.title,
+    p_body       => trim(both ' · ' from
+                      coalesce(to_char(new.event_date, 'FMDay DD FMMonth'), '')
+                      || ' · ' || coalesce(new.location, coalesce(new.mode, ''))),
+    p_href       => '/events.html',
+    p_subject_id => new.id,
+    p_dedupe_key => 'event:' || new.id::text
+  );
+
+  return null;
+end;
+$$;
+
+drop trigger if exists events_notify_trg on public.events;
+create trigger events_notify_trg
+  after insert or update of is_published on public.events
+  for each row execute procedure public.notify_event_published();
+
+-- --- Podcast ---------------------------------------------------------------
+
+create or replace function public.notify_episode_published()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+begin
+  if not new.is_published or new.announced_at is not null then
+    return null;
+  end if;
+
+  perform public.emit_notification_to_members(
+    p_kind       => 'episode_published',
+    p_title      => 'New episode: ' || new.topic,
+    p_body       => 'Tech Talk with Zoka, episode ' || new.episode_number::text || '.',
+    p_href       => '/podcast.html',
+    p_subject_id => new.id,
+    p_dedupe_key => 'episode:' || new.id::text
+  );
+
+  update public.podcast_episodes
+     set announced_at = now()
+   where id = new.id;
+
+  return null;
+end;
+$$;
+
+drop trigger if exists podcast_episodes_notify_trg on public.podcast_episodes;
+create trigger podcast_episodes_notify_trg
+  after insert or update of is_published on public.podcast_episodes
+  for each row execute procedure public.notify_episode_published();
+
+-- ============================================================
+-- 4. What staff can send by hand
+-- ============================================================
+--
+-- Ahmed's ask: "from the control panel, send push notifications to specific
+-- people in the club." Two functions — one for a named list, one for everybody
+-- — and a log, because a message the club sent to its members should be
+-- answerable later.
+--
+-- ⚠ Both are `security definer`, so they bypass RLS, so `is_staff()` is
+-- checked INSIDE the function body. A definer function that relies on the
+-- page having gated the button is not gated at all: anyone can call an RPC.
+-- 0022's five admin functions established this pattern here; this follows it.
+
+create table if not exists public.notification_broadcasts (
+  id uuid primary key default gen_random_uuid(),
+  -- Nullable on purpose. `not null` here alongside `on delete set null` is a
+  -- contradiction that does not show up until the day somebody deletes a staff
+  -- account: the cascade tries to null the column, the constraint refuses, and
+  -- the delete fails with an error pointing at a log table nobody was thinking
+  -- about. The broadcast's own record of what was sent outlives the sender.
+  sent_by uuid references auth.users (id) on delete set null,
+  kind text not null references public.notification_kinds (kind),
+  title text not null,
+  body text,
+  href text,
+  -- Null means "everybody". Otherwise the explicit list that was asked for,
+  -- kept so "who did we tell?" has an answer that does not depend on the
+  -- notifications themselves surviving.
+  target_user_ids uuid[],
+  recipients_written int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+alter table public.notification_broadcasts enable row level security;
+
+drop policy if exists "broadcasts: staff only" on public.notification_broadcasts;
+create policy "broadcasts: staff only" on public.notification_broadcasts
+  for select using (public.is_staff());
+
+revoke all on public.notification_broadcasts from anon, authenticated;
+grant select on public.notification_broadcasts to authenticated;
+
+create or replace function public.staff_send_notification(
+  p_user_ids uuid[],          -- null or empty = every member
+  p_kind text,
+  p_title text,
+  p_body text default null,
+  p_href text default null
+) returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_count int := 0;
+  v_broadcast_id uuid;
+  v_target uuid;
+begin
+  if not public.is_staff() then
+    raise exception 'staff_send_notification: staff only';
+  end if;
+
+  if p_title is null or length(trim(p_title)) = 0 then
+    raise exception 'staff_send_notification: a title is required';
+  end if;
+
+  -- Only the kinds a human should be able to send by hand. Not, for example,
+  -- 'ms365_expiring_1' — a hand-sent licence warning that does not match the
+  -- database would be worse than none.
+  if p_kind not in ('system_message', 'eduhackai_launch') then
+    raise exception 'staff_send_notification: % is not a hand-sendable kind', p_kind
+      using hint = 'Use system_message for club announcements, eduhackai_launch for EduHackAI.';
+  end if;
+
+  insert into public.notification_broadcasts
+    (sent_by, kind, title, body, href, target_user_ids)
+  values (v_uid, p_kind, p_title, p_body, p_href, p_user_ids)
+  returning id into v_broadcast_id;
+
+  if p_user_ids is null or cardinality(p_user_ids) = 0 then
+    v_count := public.emit_notification_to_members(
+      p_kind       => p_kind,
+      p_title      => p_title,
+      p_body       => p_body,
+      p_href       => p_href,
+      p_subject_id => v_broadcast_id,
+      p_dedupe_key => 'broadcast:' || v_broadcast_id::text
+    );
+  else
+    foreach v_target in array p_user_ids loop
+      if public.emit_notification(
+           p_user_id    => v_target,
+           p_kind       => p_kind,
+           p_title      => p_title,
+           p_body       => p_body,
+           p_href       => p_href,
+           p_actor_id   => null,
+           p_subject_id => v_broadcast_id,
+           p_dedupe_key => 'broadcast:' || v_broadcast_id::text
+         ) is not null
+      then
+        v_count := v_count + 1;
+      end if;
+    end loop;
+  end if;
+
+  update public.notification_broadcasts
+     set recipients_written = v_count
+   where id = v_broadcast_id;
+
+  return v_count;
+end;
+$$;
+
+revoke execute on function public.staff_send_notification(uuid[], text, text, text, text) from public, anon;
+grant execute on function public.staff_send_notification(uuid[], text, text, text, text) to authenticated;
+
+-- ============================================================
+-- 5. The scheduled sweeps
+-- ============================================================
+--
+-- These are what pg_cron calls. Each one is idempotent BY DEDUPE KEY, not by
+-- bookkeeping: running a sweep twice, or running it while the previous run is
+-- still going, writes the same rows and the unique index absorbs the second
+-- attempt. That property is what makes it safe to run them often, and running
+-- them often is what makes a missed window recoverable.
+--
+-- ⚠ Nothing in this project has ever had a scheduler. `send-license-reminders`
+-- has documented its own `cron.schedule` call since it was written and has
+-- never once been invoked. Creating these functions does NOT schedule them —
+-- see 0046 and the Extensions page.
+
+create or replace function public.sweep_ms365_expiry_reminders()
+returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_total int := 0;
+  v_days int;
+  r record;
+begin
+  foreach v_days in array array[30, 10, 3, 1] loop
+    for r in
+      select a.user_id, a.license_expires_at, a.mailbox
+        from public.ms365_accounts a
+       where a.license_expires_at is not null
+         and not a.licence_exempt
+         and a.status in ('active', 'grace_unlicensed')
+         and a.license_expires_at = (current_date + v_days)
+    loop
+      if public.emit_notification(
+           p_user_id    => r.user_id,
+           p_kind       => 'ms365_expiring_' || v_days::text,
+           p_title      => case v_days
+                             when 1 then 'Your Microsoft 365 licence ends tomorrow'
+                             else 'Your Microsoft 365 licence ends in ' || v_days::text || ' days'
+                           end,
+           p_body       => 'Keep ' || r.mailbox || ' by going Premium before '
+                           || to_char(r.license_expires_at, 'FMDD FMMonth YYYY') || '.',
+           -- Ahmed's own example: this click goes to the upgrade, not to a
+           -- read-only status panel.
+           p_href       => '/membership.html',
+           p_actor_id   => null,
+           p_subject_id => r.user_id,
+           p_dedupe_key => 'ms365:' || r.license_expires_at::text || ':' || v_days::text
+         ) is not null
+      then
+        v_total := v_total + 1;
+      end if;
+    end loop;
+  end loop;
+
+  return v_total;
+end;
+$$;
+
+create or replace function public.sweep_premium_renewal_reminders()
+returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_total int := 0;
+  v_days int;
+  r record;
+begin
+  -- 30 / 7 / 1. Ahmed did not name thresholds for this one; these mirror the
+  -- Microsoft 365 ladder without its 10-day step, which exists there because a
+  -- mailbox migration takes longer to arrange than a card payment.
+  foreach v_days in array array[30, 7, 1] loop
+    for r in
+      select s.user_id, s.renews_at
+        from public.subscriptions s
+       where s.tier = 'premium'
+         and s.status = 'active'
+         and s.renews_at is not null
+         and s.renews_at = (current_date + v_days)
+    loop
+      if public.emit_notification(
+           p_user_id    => r.user_id,
+           p_kind       => 'premium_renewal',
+           p_title      => case v_days
+                             when 1 then 'Your Premium membership renews tomorrow'
+                             else 'Your Premium membership renews in ' || v_days::text || ' days'
+                           end,
+           p_body       => 'Renews on ' || to_char(r.renews_at, 'FMDD FMMonth YYYY') || '.',
+           p_href       => '/membership.html',
+           p_actor_id   => null,
+           p_subject_id => r.user_id,
+           p_dedupe_key => 'renewal:' || r.renews_at::text || ':' || v_days::text
+         ) is not null
+      then
+        v_total := v_total + 1;
+      end if;
+    end loop;
+  end loop;
+
+  return v_total;
+end;
+$$;
+
+create or replace function public.sweep_event_reminders()
+returns integer
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_total int := 0;
+  r record;
+begin
+  -- The window is deliberately wider than an hour. A cron running every 15
+  -- minutes will see each event in several consecutive sweeps; the dedupe key
+  -- makes all but the first a no-op, and the width means a single missed or
+  -- delayed run does not silently drop the reminder. Narrow windows plus an
+  -- exact schedule is how reminders quietly stop arriving.
+  for r in
+    select reg.user_id, e.id as event_id, e.title, e.starts_at, e.location, e.mode
+      from public.event_registrations reg
+      join public.events e on e.id = reg.event_id
+     where e.is_published
+       -- ⚠ Skipped, not guessed. An event with no starts_at gets no reminder.
+       and e.starts_at is not null
+       and e.starts_at > now()
+       and e.starts_at <= now() + interval '70 minutes'
+       and reg.status = 'registered'
+  loop
+    if public.emit_notification(
+         p_user_id    => r.user_id,
+         p_kind       => 'event_starting_soon',
+         p_title      => r.title || ' starts soon',
+         p_body       => 'Starting at ' || to_char(r.starts_at, 'HH24:MI')
+                         || coalesce(' · ' || r.location, coalesce(' · ' || r.mode, '')) || '.',
+         p_href       => '/events.html',
+         p_actor_id   => null,
+         p_subject_id => r.event_id,
+         p_dedupe_key => 'event-soon:' || r.event_id::text
+       ) is not null
+    then
+      v_total := v_total + 1;
+    end if;
+  end loop;
+
+  return v_total;
+end;
+$$;
+
+-- Cron and the service role call these. Nothing in a browser does.
+revoke execute on function public.sweep_ms365_expiry_reminders() from public, anon, authenticated;
+revoke execute on function public.sweep_premium_renewal_reminders() from public, anon, authenticated;
+revoke execute on function public.sweep_event_reminders() from public, anon, authenticated;
+
+-- ============================================================
+-- Verification
+-- ============================================================
+--
+-- ⚠ Checks 5 and 6 need AN ORDINARY MEMBER SESSION. They are the only ones
+-- that prove a member is refused rather than that a policy reads as though
+-- they would be. Do not tick them off by reading them.
+--
+-- 1. The fifteen episodes landed and NOBODY was notified about them — the
+--    §2-before-§3 ordering. Expect 15 and 0:
+--
+--   select (select count(*) from public.podcast_episodes) as episodes,
+--          (select count(*) from public.notifications
+--            where kind = 'episode_published') as notifications;
+--
+-- 2. Every trigger is attached (expect 6 rows):
+--
+--   select tgname, tgrelid::regclass as on_table
+--     from pg_trigger
+--    where not tgisinternal
+--      and tgname in ('member_messages_notify_trg','member_follows_notify_trg',
+--                     'profiles_notify_trg','events_notify_trg',
+--                     'podcast_episodes_notify_trg','notifications_department_trg');
+--
+-- 3. `notifications` has NO staff read policy — the message-preview boundary
+--    described in the header. Expect zero rows, and if this ever returns one,
+--    read the policy before assuming it is harmless:
+--
+--   select polname, pg_get_expr(polqual, polrelid) as using_expr
+--     from pg_policy where polrelid = 'public.notifications'::regclass
+--      and pg_get_expr(polqual, polrelid) ilike '%is_staff%';
+--
+-- 4. The sweeps are not callable from a browser (expect zero rows):
+--
+--   select routine_name, grantee from information_schema.routine_privileges
+--    where routine_schema = 'public' and routine_name like 'sweep\_%'
+--      and grantee in ('anon','authenticated','PUBLIC');
+--
+--    …and staff_send_notification IS (expect one row, 'authenticated'):
+--
+--   select grantee from information_schema.routine_privileges
+--    where routine_schema = 'public' and routine_name = 'staff_send_notification'
+--      and grantee in ('anon','authenticated');
+--
+-- 5. ⚠ AS AN ORDINARY MEMBER — the staff sender must REFUSE, proving the gate
+--    is in the function and not merely on the button:
+--
+--   select public.staff_send_notification(null, 'system_message', 'from a member');
+--   -- expect: ERROR staff_send_notification: staff only
+--
+-- 6. ⚠ AS AN ORDINARY MEMBER — a real message produces exactly one
+--    notification, with the right link. From a SECOND account, send this
+--    member a message, then as this member:
+--
+--   select kind, title, href, read_at from public.notifications
+--    where kind = 'message_received';
+--   -- expect 1 row, href '/app/inbox.html?to=<the sender's uuid>'
+--   -- send a SECOND message from that account and re-run: still 1 row,
+--   --   because the dedupe key is per-conversation.
+--
+-- 7. How many events can actually produce a T-1h reminder today. This is a
+--    data-entry gap, not a failure — expect `without_start_time` to be every
+--    event that existed before this migration:
+--
+--   select count(*) filter (where starts_at is not null) as with_start_time,
+--          count(*) filter (where starts_at is null)     as without_start_time
+--     from public.events where is_published;
+--
+-- 8. The sweeps run and are idempotent. Run each TWICE; the second call must
+--    return 0:
+--
+--   select public.sweep_ms365_expiry_reminders();
+--   select public.sweep_ms365_expiry_reminders();   -- expect 0
+--   select public.sweep_premium_renewal_reminders();
+--   select public.sweep_premium_renewal_reminders();-- expect 0
+--   select public.sweep_event_reminders();
+--   select public.sweep_event_reminders();          -- expect 0

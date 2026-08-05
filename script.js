@@ -672,3 +672,66 @@
     // point, so the markup's own state is the right one to leave standing.
   });
 })();
+
+// Unread counts on the menu.
+// ------------------------------------------------------------
+// The badge numbers for Dashboard, Messages, Connect, Events, EduHackAI and
+// Podcast, painted from `my_notification_counts` and kept live over Realtime.
+//
+// This lives in script.js rather than in its own tag on every page for one
+// reason: script.js is already loaded by all sixteen member-facing pages, and
+// header-identity.js — the other obvious host — is loaded by only eleven,
+// missing dashboard.html and inbox.html, which are the two that most need a
+// badge. One hook here beats twenty-six edits and the drift that follows them.
+//
+// The admin pages and unsubscribe.html load neither file and get no badge.
+// That is correct: neither carries the member menu.
+//
+// Dynamic import() in a classic external script resolves against THE SCRIPT'S
+// OWN URL, not the document's — which is why "./lib/..." is right here even
+// though app/dashboard.html loads this file as "../script.js". The block
+// above has relied on that since it was written.
+(function () {
+  // Nothing to paint on a page with no menu — login.html, and any page whose
+  // header is just the logo.
+  if (!document.querySelector(".nav-link, .mobile-menu-item")) return;
+
+  var notifications = null;
+
+  import("./lib/supabase-client.js")
+    .then(function (client) {
+      // A repo published before its Supabase project exists has no counts to
+      // read and no session to read them with.
+      if (!client.isConfigured) return null;
+      return import("./lib/auth.js").then(function (auth) {
+        return auth.getSession();
+      });
+    })
+    .then(function (session) {
+      // Signed out is the common case on the public pages. No session, no
+      // badges, no query — a visitor reading the events page should not be
+      // made to wait on a request that can only ever return nothing.
+      if (!session || !session.user) return null;
+
+      return import("./lib/notifications.js").then(function (mod) {
+        notifications = mod;
+        return mod.refreshNavBadges().then(function () {
+          // Live from here: a message arriving while this page is open
+          // increments the badge without a reload.
+          mod.subscribeToCounts(session.user.id);
+        });
+      });
+    })
+    .catch(function () {
+      // Offline, the CDN is unreachable, or the counts view is not there yet
+      // because 0044 has not been applied. In every one of those cases the
+      // right menu is the one already in the markup — a menu with no numbers
+      // on it. Never let a badge failure break navigation.
+    });
+
+  // Close the socket on the way out rather than leaving the server to time it
+  // out. `pagehide` fires where `unload` does not on mobile Safari.
+  window.addEventListener("pagehide", function () {
+    if (notifications) notifications.unsubscribe();
+  });
+})();

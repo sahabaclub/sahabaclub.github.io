@@ -251,6 +251,38 @@ html.light-mode .logo-img-light { display: block; }
 .nav-link { font-size: 14px; font-weight: 600; color: var(--text-secondary); padding: 8px 4px; transition: color 0.2s; }
 .nav-link:hover { color: var(--text); }
 
+/* Unread count on a menu item, written by lib/notifications.js.
+   ------------------------------------------------------------
+   --badge-bg is its OWN variable rather than --violet, which shifts between
+   themes for contrast reasons of its own. White on the dark theme's --violet
+   (#8b5cf6) measures 4.23:1 — under AA for text this size, and 11px/700 is
+   NOT WCAG large text, which needs 18.66px at bold. The two values below are
+   measured, not chosen: see tools/check-badge-contrast.mjs.
+
+   inline-block, not inline-flex on the parent: .nav-link is an inline element
+   whose layout the rest of the header depends on, and a badge should not be a
+   reason to change how the menu lays out. In the mobile drawer the parent is
+   already flex with space-between, so it lands at the right edge on its own. */
+.nav-badge {
+  --badge-bg: #7c3aed;
+  display: inline-block;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--badge-bg);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  vertical-align: middle;
+  /* Tabular figures so a count ticking 9 → 10 does not shift the menu item. */
+  font-variant-numeric: tabular-nums;
+}
+html.light-mode .nav-badge { --badge-bg: #6d28d9; }
+
 /* Handwritten brand slogan, centred in the header bar.
    This is the loud one. The footer carries the same words quietly — see
    .footer-signature — and the two are deliberately far apart in size and

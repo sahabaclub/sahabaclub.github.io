@@ -183,6 +183,34 @@
     <p class="set-msg" id="set-news-msg" role="status" aria-live="polite"></p>
   </section>
 
+  <!-- Notifications.
+       Rendered from public.notification_kinds rather than from a list written
+       here, so a kind added in a later migration turns up in everyone's
+       settings without this page changing. -->
+  <section class="set-card">
+    <h2>Notifications</h2>
+    <p class="set-why">Switch off anything you don't want. <strong>In app</strong> is the
+       number on the menu and the list on your dashboard; <strong>Email</strong> goes to
+       your personal address.</p>
+
+    <div class="set-row">
+      <span class="set-row-label"><strong>Everything</strong><span>Silence the lot, including any kind added later.</span></span>
+      <span class="set-value" id="set-notif-master">
+        <button type="button" class="set-btn" data-master="inapp" aria-pressed="false">In app</button>
+        <button type="button" class="set-btn" data-master="email" aria-pressed="false">Email</button>
+      </span>
+    </div>
+    <p class="set-msg" id="set-notif-msg" role="status" aria-live="polite"></p>
+
+    <div id="set-notif-list"><p class="set-msg">Loading…</p></div>
+
+    <!-- Said rather than left to be discovered, the same way this page already
+         admits there is no self-service delete. A switch for something that
+         does not exist yet would be worse than this sentence. -->
+    <p class="set-why">Push notifications to your phone aren't switched on yet. When they
+       are, they'll follow these same choices.</p>
+  </section>
+
   <section class="set-card">
     <h2>Account</h2>
     <div class="set-row">
@@ -210,6 +238,9 @@
 <script type="module">
   import { supabase } from "../lib/supabase-client.js";
   import { getSession, signOut } from "../lib/auth.js";
+  import {
+    fetchKinds, fetchOptOuts, setOptOut, refreshNavBadges,
+  } from "../lib/notifications.js";
 
   var session = await getSession();
   if (!session) {
@@ -321,6 +352,197 @@
     await signOut();
     window.location.href = "../index.html";
   });
+
+  // ---- Notifications ----------------------------------------------------
+  //
+  // Built from notification_kinds, so this page never holds its own copy of
+  // what the notification kinds are. Absence of an opt-out row means ON, so
+  // the switches start On and writing a row is what turns one off.
+  //
+  // ⚠ `var` throughout, like the rest of this module. There is a real
+  // top-level `await getSession()` at the top of this file, and a `const` or
+  // `let` declared below it would not exist while that await is pending —
+  // the bug that once rendered the admin panel as an empty database with
+  // nothing in the UI to say why.
+
+  var CHANNELS = [
+    { id: "inapp", label: "In app" },
+    { id: "email", label: "Email" },
+  ];
+
+  var DEPT_HEADING = {
+    dashboard: "Your account",
+    messages: "Messages",
+    connect: "Connect",
+    events: "Events",
+    eduhackai: "EduHackAI",
+    podcast: "Podcast",
+  };
+
+  // kind -> channel -> true when switched OFF
+  var offMap = {};
+
+  function isOff(kind, channel) {
+    return Boolean(offMap[kind] && offMap[kind][channel]);
+  }
+
+  function setLocalOff(kind, channel, off) {
+    if (!offMap[kind]) offMap[kind] = {};
+    offMap[kind][channel] = off;
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function paintButton(btn) {
+    var off = isOff(btn.getAttribute("data-kind"), btn.getAttribute("data-channel"));
+    btn.classList.toggle("is-active", !off);
+    btn.setAttribute("aria-pressed", off ? "false" : "true");
+    // The visible word carries the state too, so it does not depend on colour
+    // alone — the button reads "In app · On" rather than being green.
+    btn.textContent = btn.getAttribute("data-label") + " · " + (off ? "Off" : "On");
+  }
+
+  function paintMaster() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll("#set-notif-master [data-master]"),
+      function (btn) {
+        var ch = btn.getAttribute("data-master");
+        var off = isOff("*", ch);
+        btn.classList.toggle("is-active", off);
+        btn.setAttribute("aria-pressed", off ? "true" : "false");
+        var label = ch === "inapp" ? "In app" : "Email";
+        btn.textContent = label + (off ? " · all off" : " · on");
+      }
+    );
+  }
+
+  function renderKinds(kinds) {
+    var host = document.getElementById("set-notif-list");
+
+    // ⚠ null is "the read failed", [] is "there genuinely are none". Saying
+    // "no notifications to configure" after a query that never returned would
+    // report a clean bill of health for something nobody looked at.
+    if (kinds === null) {
+      host.innerHTML = '<p class="set-msg err">Couldn\'t load your notification settings. '
+        + "Refresh the page to try again.</p>";
+      return;
+    }
+
+    var real = kinds.filter(function (k) { return k.kind !== "*"; });
+    if (!real.length) {
+      host.innerHTML = '<p class="set-msg">There\'s nothing to configure yet.</p>';
+      return;
+    }
+
+    var html = "";
+    var lastDept = null;
+
+    real.forEach(function (k) {
+      if (k.department !== lastDept) {
+        lastDept = k.department;
+        html += '<p class="set-why" style="margin-top:18px;"><strong>'
+          + escapeHtml(DEPT_HEADING[k.department] || k.department) + "</strong></p>";
+      }
+
+      // Only the channels this kind actually uses. 'push' is registered in the
+      // database already but nothing delivers it yet, so no switch is drawn
+      // for it — a control that does nothing is worse than its absence, and
+      // the card says so in words underneath.
+      var channels = CHANNELS.filter(function (c) {
+        return (k.default_channels || []).indexOf(c.id) !== -1;
+      });
+      if (!channels.length) return;
+
+      html += '<div class="set-row">'
+        + '<span class="set-row-label"><strong>' + escapeHtml(k.label) + "</strong>"
+        + "<span>" + escapeHtml(k.description)
+        + (k.is_critical
+            ? " <strong>Switching this off means we can't warn you before something expires.</strong>"
+            : "")
+        + "</span></span>"
+        + '<span class="set-value">';
+
+      channels.forEach(function (c) {
+        html += '<button type="button" class="set-btn"'
+          + ' data-kind="' + escapeHtml(k.kind) + '"'
+          + ' data-channel="' + c.id + '"'
+          + ' data-label="' + c.label + '"'
+          + (k.is_critical ? ' data-critical="1"' : "")
+          + "></button>";
+      });
+
+      html += "</span></div>";
+    });
+
+    host.innerHTML = html;
+    Array.prototype.forEach.call(host.querySelectorAll("[data-kind]"), paintButton);
+  }
+
+  async function toggle(kind, channel, btn) {
+    var off = isOff(kind, channel);
+
+    // Critical kinds can still be switched off — Ahmed asked for control over
+    // any kind, and a settings page that silently refuses is worse than one
+    // that asks. It asks once, on the way off only.
+    if (!off && btn && btn.getAttribute("data-critical") === "1") {
+      var ok = window.confirm(
+        "Switch this off?\n\nThis is how we warn you before your Microsoft 365 "
+        + "licence or your membership runs out. You can switch it back on here at any time."
+      );
+      if (!ok) return;
+    }
+
+    say("set-notif-msg", "Saving…", "");
+    var saved = await setOptOut(kind, channel, !off);
+    if (!saved) {
+      say("set-notif-msg", "Couldn't save that just now.", "err");
+      return;
+    }
+
+    setLocalOff(kind, channel, !off);
+    say("set-notif-msg", "Saved.", "ok");
+
+    if (kind === "*") {
+      paintMaster();
+      // The per-kind switches are unchanged in the database — the wildcard is
+      // checked alongside them, not instead of them — but they are no longer
+      // what decides the outcome. Dim them so the page does not show a row of
+      // "On" switches that are being overridden.
+      var list = document.getElementById("set-notif-list");
+      list.style.opacity = isOff("*", "inapp") && isOff("*", "email") ? "0.5" : "1";
+    } else if (btn) {
+      paintButton(btn);
+    }
+
+    refreshNavBadges();
+  }
+
+  document.getElementById("set-notif-list").addEventListener("click", function (ev) {
+    var btn = ev.target.closest("[data-kind]");
+    if (!btn) return;
+    toggle(btn.getAttribute("data-kind"), btn.getAttribute("data-channel"), btn);
+  });
+
+  document.getElementById("set-notif-master").addEventListener("click", function (ev) {
+    var btn = ev.target.closest("[data-master]");
+    if (!btn) return;
+    toggle("*", btn.getAttribute("data-master"), null);
+  });
+
+  (async function loadNotificationSettings() {
+    var results = await Promise.all([fetchKinds(), fetchOptOuts()]);
+    var kinds = results[0];
+    var outs = results[1];
+
+    (outs || []).forEach(function (row) { setLocalOff(row.kind, row.channel, true); });
+
+    renderKinds(kinds);
+    paintMaster();
+  })();
 </script>
 <script src="../script.js"></script>
 </body>

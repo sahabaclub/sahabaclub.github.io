@@ -47,6 +47,36 @@
   /* Not yet built, and saying so honestly: dimmed, unfocusable, no pointer. */
   .dash-nav.is-soon { opacity: 0.4; cursor: default; }
   .dash-nav.is-soon:hover { background: none; color: var(--text-secondary); }
+  /* Desktop sidebar: the full word. The mobile bar swaps these round — see
+     the media query, where the slot is far too narrow for "Notifications". */
+  .dash-label-short { display: none; }
+
+  /* ---- Notifications list ---- */
+  .note-list { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+  .note {
+    display: flex; gap: 12px; align-items: flex-start;
+    width: 100%; text-align: left;
+    padding: 14px 15px;
+    border: 1px solid var(--glass-border); border-radius: 14px;
+    background: var(--glass); color: var(--text);
+    font-family: inherit; font-size: 14.5px; cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .note:hover { border-color: var(--cyan); }
+  /* Unread is carried by a bar and by weight, never by colour alone — the
+     same state has to be readable to someone who cannot see the accent. */
+  .note.is-unread { border-left: 3px solid var(--cyan); }
+  .note.is-unread .note-title { font-weight: 700; }
+  .note-title { font-weight: 500; line-height: 1.35; }
+  .note-body { color: var(--text-secondary); font-size: 13.5px; margin-top: 3px; line-height: 1.45; }
+  .note-when { color: var(--text-muted); font-size: 12.5px; margin-top: 5px; }
+  .note-dept {
+    flex-shrink: 0; margin-left: auto; align-self: center;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .note-empty { color: var(--text-secondary); padding: 18px 2px; }
+  .note-actions { display: flex; justify-content: flex-end; margin-bottom: 4px; }
 
   .dash-side-foot { margin-top: auto; padding-top: 18px; }
   .dash-side-foot .dash-navlabel { padding-top: 0; }
@@ -267,6 +297,11 @@
     .dash-nav-label { font-size: 10.5px; line-height: 1.25; }
     .dash-nav-main { display: contents; }
     .dash-more { display: flex; }
+    /* Six slots across a phone leaves each item about 56px. "Notifications"
+       is one unbreakable word wider than that, so it would clip rather than
+       wrap the way "Microsoft 365" does. */
+    .dash-label-long { display: none; }
+    .dash-label-short { display: inline; }
 
     /* Everything that doesn't earn a permanent slot on a phone lives in a
        sheet behind "More" — the coming-soon list and signing out. */
@@ -316,6 +351,22 @@
   <nav class="dash-side" aria-label="Dashboard sections">
     <p class="dash-navlabel">My account</p>
     <div class="dash-nav-main">
+      <!-- The bell carries the unread count for every department, not just the
+           dashboard's own — this tab is the one place all six are listed. The
+           badge span is written by the script below, never by the markup, so a
+           member with nothing unread has no empty circle sitting in their nav.
+
+           Two labels: the mobile bar gives each item about 56px at 360px wide,
+           and "Notifications" is a single unbreakable word wider than that. It
+           would clip rather than wrap, so the bar says "Alerts" and the
+           desktop sidebar says "Notifications". -->
+      <button type="button" class="dash-nav" data-section="notifications">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8.6a6 6 0 1 0-12 0c0 6-2 7.4-2 7.4h16s-2-1.4-2-7.4"/><path d="M13.7 19.4a2 2 0 0 1-3.4 0"/></svg>
+        <span class="dash-nav-label">
+          <span class="dash-label-long">Notifications</span>
+          <span class="dash-label-short">Alerts</span>
+        </span>
+      </button>
       <button type="button" class="dash-nav" data-section="profile">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>
         <span class="dash-nav-label">Profile</span>
@@ -380,6 +431,19 @@
     </div>
 
     <!-- ---- Profile ---- -->
+    <section class="dash-section" id="section-notifications">
+      <div class="note-actions">
+        <button type="button" class="btn btn-ghost" id="note-mark-all" hidden>Mark all as read</button>
+      </div>
+      <!-- aria-live so a notification arriving over Realtime while this tab is
+           open is announced, rather than silently appearing above whatever the
+           member was reading. "polite" because none of this is urgent enough
+           to interrupt what a screen reader is already saying. -->
+      <div class="note-list" id="note-list" aria-live="polite" aria-busy="true">
+        <p class="note-empty">Loading…</p>
+      </div>
+    </section>
+
     <section class="dash-section" id="section-profile" aria-labelledby="dash-greeting">
       <!-- The member's profile as it stands. This used to drop straight into an
            empty-looking form, which gave someone who had already filled it in no
@@ -756,6 +820,10 @@
   } from "../lib/auth.js";
   import { recommendEvents } from "../lib/event-social.js";
   import {
+    fetchList, markRead, markDepartmentRead, refreshNavBadges, subscribeToCounts,
+    onCountsChange,
+  } from "../lib/notifications.js";
+  import {
     loadCountries, loadTagSuggestions, suggestionsFor, fillCountrySelect,
     createTagPicker, connectHint, onConnectHintJump, createAvatarControl,
     avatarIsDrawing, mergeExtracted, saveErrorMessage, OPEN_TO, nullIfBlank, intOrNull,
@@ -775,8 +843,14 @@
 
   // Which section the URL is asking for. The hash is the single source of
   // truth, so a refresh or a shared link lands in the same place.
-  var SECTIONS = ["profile", "membership", "ms365", "events"];
+  var SECTIONS = ["notifications", "profile", "membership", "ms365", "events"];
   var loaded = {};            // sections are fetched once, on first view
+
+  // Notifications is FIRST in the list but is NOT the default section —
+  // currentSection() still falls back to "profile" for a bare /dashboard.html.
+  // Landing a member somewhere different depending on whether they happen to
+  // have unread items would make the dashboard feel like it moved under them.
+  // The badge is what draws the eye; the hash is what routes.
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -808,6 +882,7 @@
   }
 
   var SUBHEADS = {
+    notifications: "Everything the club has told you, newest first.",
     profile: "Keep this current and the matches get better.",
     membership: "What you're on today, and what Premium adds.",
     ms365: "Your @sahabaclub.com account and what comes with it.",
@@ -829,6 +904,13 @@
       if (name === "membership") loadMembership();
       if (name === "ms365") loadMs365();
       if (name === "events") loadEvents();
+      if (name === "notifications") loadNotifications();
+    } else if (name === "notifications") {
+      // The exception to load-once. Everything else on this dashboard is a
+      // snapshot of the member's own settings and does not change while they
+      // are looking at it; notifications are the one thing that does. Coming
+      // back to this tab must not show a stale list.
+      loadNotifications();
     }
   }
 
@@ -906,8 +988,55 @@
     renderProfileCard(profileRow);
     loaded.profile = true;
     showSection(currentSection());
+
+    // The bell in the sidebar carries the total across all six departments,
+    // because this tab is where all six are listed. The menu badges (painted
+    // by script.js) stay per-department.
+    paintBellBadge(await refreshNavBadges());
+
+    // One subscription for the whole page — subscribeToCounts is idempotent
+    // and script.js has very likely already opened it. This registers a
+    // listener on it rather than replacing it.
+    subscribeToCounts(session.user.id);
+    onCountsChange(function (counts) {
+      paintBellBadge(counts);
+      // Only rebuild the list if the member is actually looking at it.
+      if (currentSection() === "notifications") loadNotifications();
+    });
+
     syncAvatar(session).catch(function () {});
   })();
+
+  // Total unread on the sidebar bell. Reuses .nav-badge so there is one
+  // definition of what a count looks like, and one place its contrast is
+  // measured (tools/check-badge-contrast.mjs).
+  function paintBellBadge(counts) {
+    var btn = document.querySelector('[data-section="notifications"]');
+    if (!btn) return;
+
+    // null means the read failed — leave whatever is there rather than
+    // clearing it, which would read as "you have nothing".
+    if (!counts) return;
+
+    var total = Object.keys(counts).reduce(function (sum, k) {
+      return sum + (Number(counts[k]) || 0);
+    }, 0);
+
+    var badge = btn.querySelector(".nav-badge");
+    if (!total) {
+      if (badge) badge.remove();
+      btn.removeAttribute("aria-label");
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.className = "nav-badge";
+      badge.setAttribute("aria-hidden", "true");
+      btn.appendChild(badge);
+    }
+    badge.textContent = total > 99 ? "99+" : String(total);
+    btn.setAttribute("aria-label", "Notifications, " + total + " unread");
+  }
 
   // ---- The profile card -------------------------------------------------
   function initialOf(s) {
@@ -1350,6 +1479,127 @@
   });
 
   // ---- Membership -------------------------------------------------------
+  // ---- Notifications ----------------------------------------------------
+  //
+  // The one place all six departments are listed together. Clicking a row
+  // marks it read and follows its href — which is the whole point of storing
+  // the link with the notification: "your Microsoft 365 expires" lands on the
+  // upgrade page, not on a list of notifications about it.
+
+  var DEPT_LABEL = {
+    dashboard: "Account",
+    messages: "Messages",
+    connect: "Connect",
+    events: "Events",
+    eduhackai: "EduHackAI",
+    podcast: "Podcast",
+  };
+
+  function whenText(iso) {
+    var then = new Date(iso);
+    if (isNaN(then.getTime())) return "";
+    var mins = Math.floor((Date.now() - then.getTime()) / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return mins + (mins === 1 ? " minute ago" : " minutes ago");
+    var hours = Math.floor(mins / 60);
+    if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago");
+    var days = Math.floor(hours / 24);
+    if (days < 7) return days + (days === 1 ? " day ago" : " days ago");
+    return longDate(then.toISOString().slice(0, 10));
+  }
+
+  function renderNotifications(rows) {
+    var list = document.getElementById("note-list");
+    var markAll = document.getElementById("note-mark-all");
+    if (!list || !markAll) return;
+    list.setAttribute("aria-busy", "false");
+
+    // ⚠ null means the READ FAILED; [] means there is genuinely nothing.
+    // Printing "You're all caught up" after a query that never returned would
+    // report a clean bill of health for something nobody actually looked at —
+    // a mistake this codebase has made before and gated against since.
+    if (rows === null) {
+      list.innerHTML = '<p class="note-empty">Couldn\'t load your notifications just now. '
+        + 'Refresh the page to try again.</p>';
+      markAll.hidden = true;
+      return;
+    }
+
+    if (!rows.length) {
+      list.innerHTML = '<p class="note-empty">Nothing yet. '
+        + 'When something happens — a message, a new event, a reminder about your account — it will show up here.</p>';
+      markAll.hidden = true;
+      return;
+    }
+
+    markAll.hidden = !rows.some(function (r) { return !r.read_at; });
+
+    // Built as markup in one write rather than node by node, so the list does
+    // not reflow once per row. Every interpolated value goes through esc():
+    // titles carry member-supplied names, and bodies carry the first 140
+    // characters of a message somebody else typed.
+    list.innerHTML = rows.map(function (r) {
+      return '<button type="button" class="note' + (r.read_at ? "" : " is-unread") + '"'
+        + ' data-id="' + esc(r.id) + '"'
+        + ' data-href="' + esc(r.href || "") + '"'
+        + ' data-dept="' + esc(r.department) + '">'
+        + '<span>'
+        + '<span class="note-title">' + esc(r.title) + "</span>"
+        + (r.body ? '<span class="note-body">' + esc(r.body) + "</span>" : "")
+        + '<span class="note-when">' + esc(whenText(r.created_at)) + "</span>"
+        + "</span>"
+        + '<span class="note-dept">' + esc(DEPT_LABEL[r.department] || r.department) + "</span>"
+        + "</button>";
+    }).join("");
+  }
+
+  async function loadNotifications() {
+    renderNotifications(await fetchList({ limit: 50 }));
+  }
+
+  // Both listeners are bound at module evaluation time, and an unguarded
+  // getElementById(...).addEventListener on a missing element throws a
+  // TypeError that aborts the rest of this module — leaving a dashboard that
+  // renders but has half its behaviour missing, with nothing in the UI saying
+  // so. Cheap to guard, expensive to diagnose.
+  var noteListEl = document.getElementById("note-list");
+  var noteMarkAllEl = document.getElementById("note-mark-all");
+
+  // Delegated, so rows rendered later by Realtime are live without rebinding.
+  if (noteListEl) noteListEl.addEventListener("click", function (ev) {
+    var row = ev.target.closest(".note");
+    if (!row) return;
+    var id = row.getAttribute("data-id");
+    var href = row.getAttribute("data-href");
+
+    // Paint the read state immediately, then persist. The member has seen it;
+    // making them wait on a round trip to watch the bold come off is worse
+    // than the small chance of the write failing and it returning on reload.
+    row.classList.remove("is-unread");
+    markRead([id]).then(function () { refreshNavBadges(); });
+
+    // Site-relative only. 0044 constrains `href` to a single leading slash in
+    // the database, so this cannot be pointed off-site, but the client should
+    // not be the only thing that believes that.
+    if (href && href.indexOf("/") === 0 && href.indexOf("//") !== 0) {
+      window.location.href = href;
+    }
+  });
+
+  if (noteMarkAllEl) noteMarkAllEl.addEventListener("click", async function () {
+    var btn = this;
+    btn.disabled = true;
+    // Every department, not just the dashboard's own — this tab shows all six,
+    // so "mark all as read" has to mean all of them or the badges will
+    // disagree with what the member just cleared.
+    await Promise.all(Object.keys(DEPT_LABEL).map(function (d) {
+      return markDepartmentRead(d);
+    }));
+    await refreshNavBadges();
+    await loadNotifications();
+    btn.disabled = false;
+  });
+
   async function loadMembership() {
     var res = await supabase.from("subscriptions").select("tier")
       .eq("user_id", session.user.id).maybeSingle();
