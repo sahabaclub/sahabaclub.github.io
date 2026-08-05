@@ -535,6 +535,14 @@
       renderWorkHistory();
     }
 
+    // The welcome email. Fired here because onboarding is the one page every
+    // new member lands on, and deliberately NOT awaited — it must never hold
+    // up the page, and a member whose email fails should still be able to get
+    // on with setting up. The send-once guard lives server-side
+    // (profiles.welcome_email_sent_at, 0040), so a reload costs nothing.
+    supabase.functions.invoke("member-email", { body: { kind: "welcome" } })
+      .catch(function (err) { console.error("welcome email", err); });
+
     // Suggestions are advisory: an empty or missing table must not stop
     // anyone finishing the form, so it falls back to [].
     var tagRows = await loadTagSuggestions();
@@ -657,7 +665,14 @@
     // picture — and a returning EduHackAI participant with no picture is
     // invisible in Connect for exactly the same reason a new member is. Both
     // remaining steps can still be skipped individually.
-    showStatus("ms365-status", "Linked. Sign in to Microsoft 365 with the password you already use.", "ok");
+    // Linking used to send nothing at all, so a returning EduHackAI
+    // participant connected their mailbox and heard silence. member-email
+    // reads the mailbox out of the database itself — nothing about the address
+    // is taken from this page.
+    supabase.functions.invoke("member-email", { body: { kind: "ms365_linked" } })
+      .catch(function (err) { console.error("ms365_linked email", err); });
+
+    showStatus("ms365-status", "Linked. Sign in to Microsoft 365 with the password you already use. We've emailed you the details.", "ok");
     setTimeout(goToProfileStep, 1400);
   });
 
