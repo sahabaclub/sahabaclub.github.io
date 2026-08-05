@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings — Sahaba Club</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="../favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="../apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../styles.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+    if (localStorage.getItem("sc_reduce_motion") === "1") {
+      document.documentElement.classList.add("reduce-motion");
+    }
+  } catch (e) {}
+</script>
+<style>
+  .set-wrap { max-width: 720px; margin: 0 auto; padding: 44px 20px 96px; }
+  .set-head { margin-bottom: 28px; }
+  .set-head h1 { margin: 0 0 8px; font-size: 32px; }
+  .set-head p { margin: 0; color: var(--text-secondary); font-size: 15px; line-height: 1.7; }
+  .set-card {
+    background: var(--glass); border: 1px solid var(--glass-border);
+    border-radius: var(--radius); padding: 22px 24px; margin-bottom: 18px;
+  }
+  .set-card h2 { margin: 0 0 4px; font-size: 18px; }
+  .set-card > p.set-why { margin: 0 0 16px; font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; }
+  .set-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 12px 0; border-top: 1px solid var(--glass-border);
+  }
+  .set-row:first-of-type { border-top: 0; }
+  .set-row-label { flex: 1 1 200px; min-width: 0; }
+  .set-row-label strong { display: block; font-size: 14.5px; }
+  .set-row-label span { display: block; font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; margin-top: 2px; }
+  .set-value { flex: 0 0 auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  .set-btn {
+    border: 1px solid rgba(255,255,255,0.38); background: var(--glass); color: var(--text);
+    border-radius: 999px; padding: 8px 16px; min-height: 40px; cursor: pointer;
+    font-size: 13.5px; font-weight: 600; font-family: inherit;
+  }
+  html.light-mode .set-btn { border-color: rgba(16,22,39,0.5); }
+  .set-btn.is-active { border-color: var(--cyan); background: rgba(34,211,238,0.14); }
+  html.light-mode .set-btn.is-active { border-color: var(--cyan); }
+  .set-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .set-soon {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--text-muted); margin-left: 6px;
+  }
+  .set-static { font-size: 14px; color: var(--text-secondary); word-break: break-all; }
+  .set-msg { margin: 10px 0 0; font-size: 13px; }
+  .set-msg.ok { color: #4ade80; }
+  .set-msg.err { color: #fca5a5; }
+  html.light-mode .set-msg.ok { color: #166534; }
+  html.light-mode .set-msg.err { color: #b91c1c; }
+  @media (max-width: 520px) {
+    .set-row { align-items: flex-start; }
+    .set-value { width: 100%; }
+    .set-btn { flex: 1 1 auto; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a href="../index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="../assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="dashboard.html" class="nav-link member-only">Dashboard</a>
+      <a href="inbox.html" class="nav-link member-only">Messages</a>
+      <a href="connect.html" class="nav-link">Connect</a>
+      <a href="../events.html" class="nav-link">Events</a>
+      <a href="../hackathons.html" class="nav-link">EduHackAI</a>
+      <a href="../podcast.html" class="nav-link">Podcast</a>
+      <a href="admin/index.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
+      <a href="settings.html" class="nav-link member-only">Settings</a>
+    </div>
+  </div>
+</header>
+
+<script src="../header-identity.js"></script>
+
+<main class="set-wrap">
+  <div class="set-head">
+    <h1>Settings</h1>
+    <p>How the club looks to you, and how it reaches you. Your name, bio and photo
+       live on <a class="dash-link" href="profile.html">your profile</a>.</p>
+  </div>
+
+  <!-- Appearance and motion are browser preferences: they are kept in
+       localStorage by script.js, apply before first paint, and never touch the
+       database. Said plainly here because "per device" is the sort of thing
+       people are surprised by later. -->
+  <section class="set-card">
+    <h2>Appearance</h2>
+    <p class="set-why">Saved in this browser, on this device.</p>
+
+    <div class="set-row">
+      <span class="set-row-label"><strong>Theme</strong><span>Dark is the club's default.</span></span>
+      <span class="set-value">
+        <button type="button" class="set-btn" data-theme="dark">Dark</button>
+        <button type="button" class="set-btn" data-theme="light">Light</button>
+      </span>
+    </div>
+
+    <div class="set-row">
+      <span class="set-row-label"><strong>Reduce motion</strong><span>Turns off the moving starfield and the scrolling photo strip.</span></span>
+      <span class="set-value">
+        <button type="button" class="set-btn" id="set-motion-on">On</button>
+        <button type="button" class="set-btn" id="set-motion-off">Off</button>
+      </span>
+    </div>
+  </section>
+
+  <!-- Language.
+       ------------------------------------------------------------
+       Two different things share this word and conflating them would be a lie,
+       so they are two rows.
+
+       The INTERFACE is English only. Arabic is not translated, and this says
+       so rather than offering a switch that produces a half-translated page —
+       the same honesty the drawer has always shown.
+
+       The language you'd RATHER be contacted in is a real, stored preference
+       (profiles.language, already on the onboarding form) and it does
+       something today: it is part of what the newsletter and matching read. -->
+  <section class="set-card">
+    <h2>Language</h2>
+    <p class="set-why">The club is building towards Arabic. Until the interface is
+       actually translated, this page will not pretend otherwise.</p>
+
+    <div class="set-row">
+      <span class="set-row-label"><strong>Interface language</strong><span>What this site is written in.</span></span>
+      <span class="set-value">
+        <button type="button" class="set-btn is-active" data-lang="en">English</button>
+        <button type="button" class="set-btn" data-lang="ar" disabled>العربية <span class="set-soon">soon</span></button>
+      </span>
+    </div>
+
+    <div class="set-row">
+      <span class="set-row-label"><strong>Preferred language</strong><span>What we'll try to use when we write to you, and when matching you to events and coaches.</span></span>
+      <span class="set-value">
+        <select class="set-btn" id="set-language" style="min-height:40px;">
+          <option value="">No preference</option>
+          <option value="English">English</option>
+          <option value="Arabic">Arabic</option>
+          <option value="French">French</option>
+        </select>
+      </span>
+    </div>
+    <p class="set-msg" id="set-language-msg" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="set-card">
+    <h2>Email</h2>
+    <p class="set-why">Everything the club sends goes to your personal address, not your
+       @sahabaclub.com mailbox.</p>
+
+    <div class="set-row">
+      <span class="set-row-label"><strong>Newsletter</strong><span>Club news and events, tailored to the interests on your profile.</span></span>
+      <span class="set-value">
+        <button type="button" class="set-btn" id="set-news-on">On</button>
+        <button type="button" class="set-btn" id="set-news-off">Off</button>
+      </span>
+    </div>
+    <p class="set-msg" id="set-news-msg" role="status" aria-live="polite"></p>
+  </section>
+
+  <section class="set-card">
+    <h2>Account</h2>
+    <div class="set-row">
+      <span class="set-row-label"><strong>Signed in as</strong></span>
+      <span class="set-value"><span class="set-static" id="set-email">—</span></span>
+    </div>
+    <div class="set-row">
+      <span class="set-row-label"><strong>Microsoft 365</strong><span>Your mailbox, sign-in details and how to use it.</span></span>
+      <span class="set-value"><a class="set-btn" href="dashboard.html#ms365">Open</a></span>
+    </div>
+    <!-- Said out loud rather than left for someone to discover. privacy.html
+         makes the same admission; a settings page that quietly lacks a delete
+         button is worse than one that explains why. -->
+    <div class="set-row">
+      <span class="set-row-label"><strong>Deleting your account</strong><span>There's no self-service button for this yet. Email us and a person will do it, properly.</span></span>
+      <span class="set-value"><a class="set-btn" href="mailto:info@sahabaclub.com">Email us</a></span>
+    </div>
+    <div class="set-row">
+      <span class="set-row-label"><strong>Sign out</strong></span>
+      <span class="set-value"><button type="button" class="set-btn" id="set-signout">Sign out</button></span>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+  import { supabase } from "../lib/supabase-client.js";
+  import { getSession, signOut } from "../lib/auth.js";
+
+  var session = await getSession();
+  if (!session) {
+    window.location.href = "../login.html?next=app/settings.html";
+  }
+
+  var emailEl = document.getElementById("set-email");
+  if (session && session.user) emailEl.textContent = session.user.email || "—";
+
+  // ---- Appearance: browser-local, same keys script.js already uses ----
+  function paintTheme() {
+    var light = document.documentElement.classList.contains("light-mode");
+    Array.prototype.forEach.call(document.querySelectorAll("[data-theme]"), function (b) {
+      b.classList.toggle("is-active", (b.getAttribute("data-theme") === "light") === light);
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-theme]"), function (btn) {
+    btn.addEventListener("click", function () {
+      var light = btn.getAttribute("data-theme") === "light";
+      document.documentElement.classList.toggle("light-mode", light);
+      try { localStorage.setItem("sc_light_mode", light ? "1" : "0"); } catch (e) {}
+      paintTheme();
+    });
+  });
+  paintTheme();
+
+  function paintMotion() {
+    var on = document.documentElement.classList.contains("reduce-motion");
+    document.getElementById("set-motion-on").classList.toggle("is-active", on);
+    document.getElementById("set-motion-off").classList.toggle("is-active", !on);
+  }
+  function setMotion(on) {
+    document.documentElement.classList.toggle("reduce-motion", on);
+    try { localStorage.setItem("sc_reduce_motion", on ? "1" : "0"); } catch (e) {}
+    paintMotion();
+  }
+  document.getElementById("set-motion-on").addEventListener("click", function () { setMotion(true); });
+  document.getElementById("set-motion-off").addEventListener("click", function () { setMotion(false); });
+  paintMotion();
+
+  // ---- Stored preferences ----
+  //
+  // `language` and `newsletter_opt_in` are both member-writable columns on
+  // profiles (the onboarding form writes them already), so these are plain
+  // updates rather than an RPC. `.select()` is on the update so a zero-row
+  // result is visible: without it PostgREST reports success and changes
+  // nothing when a column grant is missing, which is the silent failure 0017
+  // was written to fix.
+  var langSel = document.getElementById("set-language");
+  var newsOn = document.getElementById("set-news-on");
+  var newsOff = document.getElementById("set-news-off");
+
+  var profileRes = await supabase
+    .from("profiles")
+    .select("language, newsletter_opt_in")
+    .eq("user_id", session.user.id)
+    .maybeSingle();
+  var profile = profileRes.data || {};
+
+  langSel.value = profile.language || "";
+  paintNews(profile.newsletter_opt_in !== false);
+
+  function paintNews(on) {
+    newsOn.classList.toggle("is-active", on);
+    newsOff.classList.toggle("is-active", !on);
+  }
+
+  function say(id, text, kind) {
+    var el = document.getElementById(id);
+    el.className = "set-msg " + (kind || "");
+    el.textContent = text;
+  }
+
+  langSel.addEventListener("change", async function () {
+    say("set-language-msg", "Saving…", "");
+    var res = await supabase
+      .from("profiles")
+      .update({ language: langSel.value || null })
+      .eq("user_id", session.user.id)
+      .select("user_id");
+    if (res.error || !res.data || !res.data.length) {
+      say("set-language-msg", "Couldn't save that just now.", "err");
+      return;
+    }
+    say("set-language-msg", "Saved.", "ok");
+  });
+
+  async function setNews(on) {
+    newsOn.disabled = newsOff.disabled = true;
+    say("set-news-msg", "Saving…", "");
+    var res = await supabase
+      .from("profiles")
+      .update({ newsletter_opt_in: on })
+      .eq("user_id", session.user.id)
+      .select("user_id");
+    newsOn.disabled = newsOff.disabled = false;
+    if (res.error || !res.data || !res.data.length) {
+      say("set-news-msg", "Couldn't save that just now.", "err");
+      return;
+    }
+    paintNews(on);
+    say("set-news-msg", on ? "You're subscribed." : "You won't get the newsletter.", "ok");
+  }
+  newsOn.addEventListener("click", function () { setNews(true); });
+  newsOff.addEventListener("click", function () { setNews(false); });
+
+  document.getElementById("set-signout").addEventListener("click", async function () {
+    this.disabled = true;
+    await signOut();
+    window.location.href = "../index.html";
+  });
+</script>
+<script src="../script.js"></script>
+</body>
+</html>
