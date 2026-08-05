@@ -740,9 +740,17 @@
     // account with no idea why.
     var mailbox = (res.data && res.data.mailbox) || "your new mailbox";
     if (res.data && res.data.credentialSent === false) {
+      // The email failing is no longer the same thing as the password being
+      // lost. Since 0039 it is saved first and shown on the dashboard, so the
+      // honest message is "look there", not "contact us".
       showStatus("ms365-status",
-        mailbox + " is ready, but we couldn't email you the sign-in details just now. "
-        + "Contact members@sahabaclub.com and we'll send them over. Continuing…", "err");
+        res.data.credentialSaved
+          ? mailbox + " is ready. We couldn't email your sign-in details just now, but they're "
+            + "waiting on your dashboard under Microsoft 365 — you'll land there at the end. "
+            + "Continuing…"
+          : mailbox + " is ready, but we couldn't email you the sign-in details just now. "
+            + "Contact members@sahabaclub.com and we'll send them over. Continuing…",
+        res.data.credentialSaved ? "ok" : "err");
       setTimeout(goToProfileStep, 3200);
       return;
     }

@@ -3358,6 +3358,73 @@ html.light-mode .av-btn { border-color: rgba(16, 22, 39, 0.5); }
    one — light-mode --cyan is #0e7490, which is 4.65:1. */
 html.light-mode .av-btn-go { border-color: var(--cyan); }
 .av-btn-quiet { color: var(--text-secondary); font-weight: 600; }
+/* ---- Microsoft 365 sign-in details (dashboard) -----------------------
+   A label, the value, and the buttons that act on it. Wraps to two lines on a
+   phone rather than shrinking the value, because a password read wrongly is
+   worse than a password read on a second line. */
+.ms-cred {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+html.light-mode .ms-cred { background: rgba(16, 22, 39, 0.03); }
+.ms-cred-label {
+  flex: 0 0 auto;
+  min-width: 130px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.ms-cred-value {
+  flex: 1 1 180px;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  color: var(--text);
+  /* A long mailbox must break rather than push the buttons off the card. */
+  word-break: break-all;
+}
+/* The mask is a row of bullets; letter-spacing stops them reading as one blob. */
+.ms-cred-value.is-masked { letter-spacing: 0.18em; color: var(--text-secondary); }
+.ms-cred-btn {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  background: var(--glass);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 7px 14px;
+  min-height: 36px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+html.light-mode .ms-cred-btn { border-color: rgba(16, 22, 39, 0.5); }
+.ms-cred-btn:hover { border-color: var(--cyan); }
+
+.ms-howto { margin-top: 12px; font-size: 14px; line-height: 1.65; }
+.ms-howto h4 {
+  margin: 16px 0 6px;
+  font-size: 14px;
+  color: var(--text);
+}
+.ms-howto h4:first-child { margin-top: 0; }
+.ms-howto ol, .ms-howto ul { margin: 0; padding-left: 20px; color: var(--text-secondary); }
+.ms-howto li { margin-bottom: 5px; }
+
+@media (max-width: 480px) {
+  .ms-cred-label { flex-basis: 100%; min-width: 0; }
+  .ms-cred-value { flex-basis: 100%; }
+}
+
 /* The plain-photo route. Set apart by a rule and a label rather than by being
    smaller or fainter: it is a real choice, not fine print, and a member who is
    out of drawing tries needs to be able to find it. */
