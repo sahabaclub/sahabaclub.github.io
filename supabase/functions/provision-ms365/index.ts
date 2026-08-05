@@ -205,6 +205,37 @@ Deno.serve(async (req) => {
       throw upsertError;
     }
 
+    // The starter password goes into the vault BEFORE anything tries to email
+    // it, and that order is the whole point. Email was the only copy: when
+    // Resend refused — a missing key, an unverified domain, a bounce — the
+    // password ceased to exist anywhere at all and the member was left holding
+    // a real mailbox they could not open. Now the dashboard can always show it,
+    // and the email is a convenience on top rather than the single channel.
+    //
+    // Failure here is logged and not fatal, for the same reason the email is
+    // not fatal: the mailbox exists either way, and 0021's reset flow can
+    // recover a member who ends up with neither copy. It is logged loudly
+    // because it means the dashboard will have nothing to show.
+    let credentialSaved = false;
+    try {
+      const { error: vaultError } = await admin.from("ms365_credentials").upsert({
+        user_id: user.id,
+        temp_password: result.tempPassword,
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+      if (vaultError) {
+        console.error(
+          `ms365_credentials write failed for ${result.mailbox} — the member will have ` +
+          `no password on their dashboard and will need a reset:`, vaultError,
+        );
+      } else {
+        credentialSaved = true;
+      }
+    } catch (vaultErr) {
+      console.error(`ms365_credentials write threw for ${result.mailbox}:`, vaultErr);
+    }
+
     // functions.invoke() resolves with { error } on a non-2xx — it does not
     // throw — so the result has to be read. A try/catch alone only sees
     // network failures, which is how a 403 from a rotated service-role key, or
@@ -233,8 +264,10 @@ Deno.serve(async (req) => {
 
     // The mailbox is real either way, so this is a success — but the client is
     // told whether the email actually went, so it can say so rather than
-    // implying an email is on its way that never left.
-    return json({ ok: true, mailbox: result.mailbox, credentialSent });
+    // implying an email is on its way that never left. `credentialSaved` lets
+    // it point at the dashboard when the email failed, which is now a genuine
+    // answer rather than an apology.
+    return json({ ok: true, mailbox: result.mailbox, credentialSent, credentialSaved });
   } catch (err) {
     console.error(err);
     return json({ error: String(err) }, 500);

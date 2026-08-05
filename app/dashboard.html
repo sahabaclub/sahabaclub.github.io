@@ -619,6 +619,82 @@
         </div>
         <p id="ms365-upgrade-line" hidden style="margin-top:12px;"><a class="dash-link" href="../membership.html">Keep it beyond the trial &rarr;</a></p>
 
+        <!-- Sign-in details.
+             ------------------------------------------------------------
+             Shown only while a starter password is still in the vault (0039):
+             it is one-use, Microsoft forces a change at first sign-in, and the
+             row stops being readable after 30 days by its own RLS policy. Once
+             it has gone this whole block disappears rather than degrading into
+             a box that says "no password" — the member's real password is
+             theirs and we do not have it, and the reset link below is the
+             honest route for anyone locked out.
+
+             Hidden by default and revealed on demand, because a dashboard gets
+             opened in cafés and on shared screens. -->
+        <div id="ms365-creds" hidden style="margin-top:16px; padding-top:16px; border-top:1px solid var(--glass-border);">
+          <h3 style="margin:0 0 4px; font-size:16px;">Your sign-in details</h3>
+          <p class="dash-note" style="margin:0 0 12px;">
+            Use these once at
+            <a class="dash-link" href="https://www.microsoft365.com" target="_blank" rel="noopener noreferrer">microsoft365.com</a>.
+            Microsoft will ask you to choose your own password straight away &mdash; after that
+            this box disappears and only you know it.
+          </p>
+
+          <div class="ms-cred">
+            <span class="ms-cred-label">Email</span>
+            <code class="ms-cred-value" id="ms365-cred-user"></code>
+            <button type="button" class="ms-cred-btn" data-copy="ms365-cred-user">Copy</button>
+          </div>
+
+          <div class="ms-cred">
+            <span class="ms-cred-label">Temporary password</span>
+            <code class="ms-cred-value is-masked" id="ms365-cred-pass" data-secret=""></code>
+            <button type="button" class="ms-cred-btn" id="ms365-cred-toggle" aria-pressed="false">Show</button>
+            <button type="button" class="ms-cred-btn" data-copy="ms365-cred-pass">Copy</button>
+          </div>
+
+          <p id="ms365-cred-status" role="status" aria-live="polite" style="margin:10px 0 0; font-size:13px;"></p>
+
+          <p style="margin:12px 0 0;">
+            <button type="button" class="dash-link" id="ms365-cred-forget"
+                    style="background:none; border:0; padding:0; cursor:pointer; font:inherit;">
+              I&rsquo;ve signed in &mdash; delete this password &rarr;
+            </button>
+          </p>
+        </div>
+
+        <!-- How to actually use it. Folded away because it is long and most
+             people need it exactly once. -->
+        <details id="ms365-howto" hidden style="margin-top:16px;">
+          <summary style="cursor:pointer; font-weight:600;">How to sign in and what you can use</summary>
+          <div class="ms-howto">
+            <h4>Signing in the first time</h4>
+            <ol>
+              <li>Go to <a class="dash-link" href="https://www.microsoft365.com" target="_blank" rel="noopener noreferrer">microsoft365.com</a> and choose <strong>Sign in</strong>.</li>
+              <li>Enter your <strong>@sahabaclub.com</strong> address above &mdash; not your personal email.</li>
+              <li>Enter the temporary password, then set a password of your own when Microsoft asks. It will not let you continue without doing this.</li>
+              <li>You may be asked to add a phone number or the Microsoft Authenticator app. This is for recovering your own account &mdash; the club cannot see it.</li>
+            </ol>
+
+            <h4>What comes with it</h4>
+            <ul>
+              <li><strong>Email</strong> at your @sahabaclub.com address, in Outlook on the web or the Outlook app.</li>
+              <li><strong>Word, Excel, PowerPoint and OneNote</strong> in the browser, saving straight to the cloud.</li>
+              <li><strong>1&nbsp;TB of OneDrive</strong> storage.</li>
+              <li><strong>Microsoft Teams</strong> for club events and for talking to other members.</li>
+              <li><strong>Forms, Planner, Lists and Sway</strong>, which is what the hackathons run on.</li>
+            </ul>
+
+            <h4>Worth knowing</h4>
+            <ul>
+              <li>On your phone, install <strong>Outlook</strong> and <strong>Teams</strong> and sign in with the same address.</li>
+              <li>Signing in on the web needs nothing installed &mdash; useful on a borrowed machine.</li>
+              <li>The desktop Office apps are not included on this licence. The browser versions do the same work.</li>
+              <li>This is a real mailbox on a real tenant. Treat it as you would a work account: it is how the club will reach you.</li>
+            </ul>
+          </div>
+        </details>
+
         <!-- Forgotten the Microsoft password. This does not reset anything: it
              raises a request for a human. A self-service reset on a real
              tenant mailbox is exactly the hole that was closed in
@@ -1328,6 +1404,11 @@
       mb.hidden = false;
       // Only offered once there is a real mailbox to reset.
       document.getElementById("ms365-reset-wrap").hidden = false;
+      // The instructions are worth having whether or not a starter password is
+      // still around — someone signing in on a new phone next month needs them
+      // just as much as someone doing it for the first time today.
+      document.getElementById("ms365-howto").hidden = false;
+      loadMs365Credential(acct.mailbox);
     }
 
     // Mirrors public.ms365_days_left: only a trial with an end date counts
@@ -1391,6 +1472,92 @@
         : "Your free period has ended. Upgrade to restore access.";
     }
   }
+
+  // ---- The starter password (0039) --------------------------------------
+  //
+  // Read straight from ms365_credentials. There is no filtering to do here and
+  // deliberately none attempted: the RLS policy is `auth.uid() = user_id and
+  // expires_at > now()`, so this query returns the member's own row or nothing
+  // at all, and an expired credential is invisible without any date arithmetic
+  // on this side that could disagree with the database.
+  //
+  // A missing row is the normal, healthy end state — they signed in, changed
+  // the password, and it was deleted. It is not an error and is not reported
+  // as one; the block simply stays hidden.
+  async function loadMs365Credential(mailbox) {
+    var res = await supabase
+      .from("ms365_credentials")
+      .select("temp_password, expires_at")
+      .maybeSingle();
+
+    if (res.error) {
+      // isMissingSchema-shaped failure means 0039 has not been applied. Say
+      // nothing to the member — the mailbox and the instructions are still
+      // useful, and the reset link below still works.
+      console.error("ms365_credentials read failed", res.error);
+      return;
+    }
+    if (!res.data || !res.data.temp_password) return;
+
+    document.getElementById("ms365-cred-user").textContent = mailbox;
+    var passEl = document.getElementById("ms365-cred-pass");
+    // Held on the element, not rendered, until Show is pressed. textContent is
+    // set to a mask of the right length so the box does not resize on reveal.
+    passEl.setAttribute("data-secret", res.data.temp_password);
+    passEl.textContent = "•".repeat(Math.min(24, res.data.temp_password.length));
+    document.getElementById("ms365-creds").hidden = false;
+  }
+
+  var credToggle = document.getElementById("ms365-cred-toggle");
+  credToggle.addEventListener("click", function () {
+    var passEl = document.getElementById("ms365-cred-pass");
+    var secret = passEl.getAttribute("data-secret") || "";
+    var showing = credToggle.getAttribute("aria-pressed") === "true";
+    if (showing) {
+      passEl.textContent = "•".repeat(Math.min(24, secret.length));
+      passEl.classList.add("is-masked");
+      credToggle.textContent = "Show";
+      credToggle.setAttribute("aria-pressed", "false");
+    } else {
+      passEl.textContent = secret;
+      passEl.classList.remove("is-masked");
+      credToggle.textContent = "Hide";
+      credToggle.setAttribute("aria-pressed", "true");
+    }
+  });
+
+  // Copy works whether or not the password is currently revealed — the point
+  // of a copy button is that you do not have to look at it.
+  Array.prototype.forEach.call(document.querySelectorAll("[data-copy]"), function (btn) {
+    btn.addEventListener("click", async function () {
+      var target = document.getElementById(btn.getAttribute("data-copy"));
+      var value = target.getAttribute("data-secret") || target.textContent;
+      var out = document.getElementById("ms365-cred-status");
+      try {
+        await navigator.clipboard.writeText(value);
+        out.textContent = "Copied.";
+      } catch (err) {
+        // Clipboard access is refused in plenty of ordinary situations —
+        // an insecure context, a permissions policy, a browser that wants a
+        // closer user gesture. Revealing the value is the useful fallback.
+        out.textContent = "Couldn't copy automatically — press Show and copy it by hand.";
+      }
+    });
+  });
+
+  document.getElementById("ms365-cred-forget").addEventListener("click", async function () {
+    var btn = this;
+    var out = document.getElementById("ms365-cred-status");
+    btn.disabled = true;
+    out.textContent = "Deleting…";
+    var rpc = await supabase.rpc("forget_my_ms365_password");
+    if (rpc.error) {
+      out.textContent = "Couldn't delete it just now. Try again in a moment.";
+      btn.disabled = false;
+      return;
+    }
+    document.getElementById("ms365-creds").hidden = true;
+  });
 
   // Raises a reset request for staff. Same pair as the onboarding flow: the
   // row is written first and is the durable record, the email to staff is a

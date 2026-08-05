@@ -546,6 +546,29 @@ Deno.serve(async (req) => {
     // network failures, which is how a 403 from a rotated service-role key, or
     // a Resend rejection, used to vanish silently and leave the member with a
     // mailbox whose password existed nowhere but a discarded variable.
+    // Kept in step with index.ts by hand — this twin is not generated. The
+    // starter password is vaulted BEFORE the email is attempted, so a Resend
+    // failure no longer destroys the only copy. See 0039.
+    let credentialSaved = false;
+    try {
+      const { error: vaultError } = await admin.from("ms365_credentials").upsert({
+        user_id: user.id,
+        temp_password: result.tempPassword,
+        created_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+      if (vaultError) {
+        console.error(
+          `ms365_credentials write failed for ${result.mailbox} — the member will have ` +
+          `no password on their dashboard and will need a reset:`, vaultError,
+        );
+      } else {
+        credentialSaved = true;
+      }
+    } catch (vaultErr) {
+      console.error(`ms365_credentials write threw for ${result.mailbox}:`, vaultErr);
+    }
+
     let credentialSent = false;
     try {
       const { error: mailError } = await admin.functions.invoke("send-transactional-email", {
@@ -570,7 +593,7 @@ Deno.serve(async (req) => {
     // The mailbox is real either way, so this is a success — but the client is
     // told whether the email actually went, so it can say so rather than
     // implying an email is on its way that never left.
-    return json({ ok: true, mailbox: result.mailbox, credentialSent });
+    return json({ ok: true, mailbox: result.mailbox, credentialSent, credentialSaved });
   } catch (err) {
     console.error(err);
     return json({ error: String(err) }, 500);
