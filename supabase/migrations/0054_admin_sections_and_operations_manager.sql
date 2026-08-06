@@ -423,8 +423,30 @@ $$;
 -- `admin` keeps working — is_staff() above still admits it — so this is a
 -- relabelling, not a privilege change. Done as an UPDATE over the existing
 -- administrators rather than a hardcoded user id.
-
-update public.profiles set role = 'global_admin' where role = 'admin';
+--
+-- ⚠⚠ DEPLOY THE CLIENT BEFORE RUNNING THIS LINE. It locked Ahmed out of his
+-- own dashboard for real, on 6 Aug, and the lesson is worth more than the
+-- line: **the database and the browser are deployed separately, and a value
+-- the client does not recognise is a lockout.**
+--
+-- lib/admin-guard.js used to test `role === 'admin' || role === 'staff'`. The
+-- moment this UPDATE ran, the live JS stopped recognising the only
+-- administrator — and GitHub Pages was mid-deploy on an older commit, so the
+-- fix was ten-plus minutes away. Rolling the label back was instant and cost
+-- nothing, because 'admin' already grants everything: is_staff() admits both
+-- and has_admin_section() short-circuits on it. The relabel is COSMETIC.
+--
+-- So it is left commented out. Run it by hand, as a one-liner, once
+-- www.sahabaclub.ai/lib/admin-guard.js contains the string 'global_admin':
+--
+--   update public.profiles set role = 'global_admin' where role = 'admin';
+--
+-- Check first, do not assume the deploy landed:
+--   curl -s https://www.sahabaclub.ai/lib/admin-guard.js | grep -c global_admin
+--
+-- ⚠ Nothing else in this migration depends on it. Ghadir's role, the section
+-- permissions and every policy above work exactly the same with Ahmed as
+-- 'admin'.
 
 -- ============================================================
 -- Verification
