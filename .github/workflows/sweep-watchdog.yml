@@ -43,13 +43,42 @@
 name: Notification sweep watchdog
 
 on:
-  schedule:
-    # Every 6 hours. The sweeps run every 15 minutes and the endpoint calls
-    # itself stale after 45, so this catches an outage within a quarter of a
-    # day without generating noise. GitHub's scheduled runs are best-effort and
-    # can be delayed under load, which is fine here: the staleness judgement is
-    # made from the database's own timestamp, not from when this happened to run.
-    - cron: "0 */6 * * *"
+  # ⚠ THE SCHEDULE IS DISABLED ON PURPOSE — 6 Aug 2026.
+  #
+  # It ran once, at 08:30, and failed exactly as designed: SWEEP_HEALTH_TOKEN
+  # is not set on the repository and sweep-health is not deployed, so the
+  # watchdog cannot reach its subject and correctly refuses to report health it
+  # has not measured. But a check that fails every six hours for a known reason
+  # is worse than no check: the failure emails become background noise, and the
+  # day it fails for a REAL reason nobody looks. Alert fatigue is how a
+  # monitored outage goes unnoticed.
+  #
+  # ⚠ RE-ENABLE IT — uncomment the two lines below — as soon as BOTH of these
+  # are true, and not before:
+  #
+  #   1. `supabase secrets set WATCHDOG_TOKEN=<value> --project-ref sobxhcsgtimtiqtvqbag`
+  #      and the SAME value added as the repository secret SWEEP_HEALTH_TOKEN
+  #      (Settings → Secrets and variables → Actions).
+  #   2. `supabase functions deploy sweep-health --project-ref sobxhcsgtimtiqtvqbag`
+  #
+  # Use workflow_dispatch to prove it green ONCE by hand before putting it back
+  # on a schedule.
+  #
+  # ⚠ Until then the notification sweeps are UNWATCHED. They are running —
+  # confirmed 6 Aug, 25 runs in 24 hours — but nothing will now tell you if
+  # they stop. Check by hand:
+  #     select minutes_since_last_run, runs_last_24h
+  #       from public.notification_sweep_health;
+  #
+  # The original cadence, kept for when it returns: every 6 hours. The sweeps
+  # run every 15 minutes and the endpoint calls itself stale after 45, so this
+  # catches an outage within a quarter of a day without generating noise.
+  # GitHub's scheduled runs are best-effort and can be delayed under load,
+  # which is fine here: staleness is judged from the database's own timestamp,
+  # not from when this happened to run.
+  #
+  # schedule:
+  #   - cron: "0 */6 * * *"
   workflow_dispatch:
 
 # Read-only. This workflow clones nothing and writes nothing.
