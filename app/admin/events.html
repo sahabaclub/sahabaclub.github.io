@@ -175,17 +175,108 @@
         </div>
       </div>
 
-      <div class="ad-row-2">
-        <div class="ad-field">
-          <label for="f-image">Image URL</label>
-          <input type="text" id="f-image" placeholder="https://… or assets/events/photo.jpg">
+      <!-- Image. Upload OR paste a URL — both write the same column, and the
+           URL field stays because 34 of the existing events already carry one
+           pointing at the source site. Removing it would orphan them. -->
+      <div class="ad-field">
+        <label for="f-image-file">Event image</label>
+        <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+          <img id="f-image-preview" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--ad-line-strong);background:var(--ad-panel-2);" hidden>
+          <div style="flex:1 1 240px;min-width:0;">
+            <input type="file" id="f-image-file" accept="image/png,image/jpeg,image/webp">
+            <input type="text" id="f-image" placeholder="…or paste a URL" style="margin-top:6px;">
+          </div>
         </div>
-        <div class="ad-field">
-          <label for="f-brand">Special badge</label>
-          <select id="f-brand">
-            <option value="">None</option>
-            <option value="microsoft">Microsoft official training</option>
-          </select>
+        <!-- Filled from IMAGE_SPECS so the advice can never drift from what is
+             actually checked. Ahmed: tell me the best dimensions every time. -->
+        <span class="ad-hint" id="f-image-hint"></span>
+        <span class="ad-hint" id="f-image-msg"></span>
+      </div>
+
+      <div class="ad-field">
+        <label for="f-organizers">Organizers</label>
+        <select id="f-organizers" multiple size="6"></select>
+        <span class="ad-hint">Who ran it — hold Ctrl (or Cmd) to pick several. An event is
+          <strong>ours</strong>, and appears in the Sahaba Club Events Hub, when Sahaba Club is one
+          of them. The first non-Sahaba organizer leads the card.</span>
+      </div>
+
+      <div class="ad-field">
+        <label for="f-brand">Special badge</label>
+        <select id="f-brand">
+          <option value="">None</option>
+          <option value="microsoft">Microsoft official training</option>
+        </select>
+      </div>
+
+      <!-- Featuring. The Mega Events banner is composed in HTML/CSS from these
+           fields plus a logo — it is not a generated image, which is why it
+           stays sharp on every screen and reflows on a phone. -->
+      <label class="ad-check">
+        <input type="checkbox" id="f-featured">
+        <span><strong>Feature in Mega Events.</strong> Puts this event in the rolling banner at the
+        top of the events page. Needs a logo below.</span>
+      </label>
+
+      <div id="f-featured-panel" class="ad-panel" style="margin:10px 0 0;" hidden>
+        <div class="ad-panel-body">
+          <div class="ad-field">
+            <label for="f-flogo-file">Banner logo</label>
+            <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+              <span id="f-flogo-tilebox" style="width:120px;height:52px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#0d1220;border:1px solid var(--ad-line-strong);">
+                <img id="f-flogo-preview" alt="" style="max-width:104px;max-height:40px;object-fit:contain;" hidden>
+              </span>
+              <div style="flex:1 1 240px;min-width:0;">
+                <input type="file" id="f-flogo-file" accept="image/png,image/jpeg,image/webp">
+                <input type="text" id="f-flogo" placeholder="…or paste a URL" style="margin-top:6px;">
+              </div>
+            </div>
+            <span class="ad-hint" id="f-flogo-hint"></span>
+            <span class="ad-hint" id="f-flogo-msg"></span>
+          </div>
+
+          <div class="ad-row-2">
+            <div class="ad-field">
+              <label for="f-ftile">Logo sits on</label>
+              <select id="f-ftile">
+                <option value="dark">Dark tile — for white or light logos</option>
+                <option value="light">Light tile — for black or dark logos</option>
+              </select>
+              <!-- Worth spelling out: this is the setting that makes a logo
+                   vanish entirely if it is wrong, and the preview above
+                   changes with it so the mistake is visible here. -->
+              <span class="ad-hint">Get this wrong and the logo disappears into the tile. The
+                preview above follows this setting — check it before saving.</span>
+            </div>
+            <div class="ad-field">
+              <label for="f-faccent">Accent</label>
+              <select id="f-faccent">
+                <option value="violet">Violet</option>
+                <option value="cyan">Cyan</option>
+                <option value="gold">Gold</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="ad-row-2">
+            <div class="ad-field">
+              <label for="f-fscale">Scale chip <span style="font-weight:400;">(optional)</span></label>
+              <input type="text" id="f-fscale" maxlength="60" placeholder="30,000 attendees">
+              <span class="ad-hint">A figure worth shouting about, shown as a small chip.</span>
+            </div>
+            <div class="ad-field">
+              <label for="f-fsort">Order <span style="font-weight:400;">(optional)</span></label>
+              <input type="number" id="f-fsort" placeholder="1">
+              <span class="ad-hint">Lower shows first. Blank sorts by date.</span>
+            </div>
+          </div>
+
+          <div class="ad-field">
+            <label for="f-fnote">Banner line <span style="font-weight:400;">(optional)</span></label>
+            <input type="text" id="f-fnote" maxlength="300" placeholder="The world's leading AI show — summit on 5 Oct, expo 6–7 Oct.">
+            <span class="ad-hint">One sentence under the title on the banner. The date, venue and
+              city come from the fields above and are not repeated here.</span>
+          </div>
         </div>
       </div>
 
@@ -218,6 +309,7 @@
 
 <script type="module">
   import { supabase } from "../../lib/supabase-client.js";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
     from "../../lib/admin-guard.js";
 
@@ -245,7 +337,120 @@
     desc: document.getElementById("f-desc"),
     premium: document.getElementById("f-premium"),
     published: document.getElementById("f-published"),
+    organizers: document.getElementById("f-organizers"),
+    featured: document.getElementById("f-featured"),
+    flogo: document.getElementById("f-flogo"),
+    ftile: document.getElementById("f-ftile"),
+    faccent: document.getElementById("f-faccent"),
+    fscale: document.getElementById("f-fscale"),
+    fnote: document.getElementById("f-fnote"),
+    fsort: document.getElementById("f-fsort"),
   };
+
+  // ---- Images -----------------------------------------------------------
+  //
+  // The dimension advice is rendered FROM the spec, so the sentence a person
+  // reads and the rule the code applies can never drift apart.
+  document.getElementById("f-image-hint").textContent = describeSpec("eventSquare");
+  document.getElementById("f-flogo-hint").textContent = describeSpec("featuredLogo");
+
+  function setPreview(imgEl, url) {
+    if (url) { imgEl.src = url; imgEl.hidden = false; }
+    else { imgEl.removeAttribute("src"); imgEl.hidden = true; }
+  }
+
+  // One handler for both uploads. `spec` picks the guidance and the checks;
+  // `urlField` is where the resulting public URL lands, so the rest of the
+  // form and the save path never need to know an upload happened.
+  function wireUpload(fileId, urlField, previewEl, msgId, spec) {
+    document.getElementById(fileId).addEventListener("change", async function () {
+      const file = this.files && this.files[0];
+      const msg = document.getElementById(msgId);
+      if (!file) return;
+
+      const bad = rejectionReason(file);
+      if (bad) { msg.textContent = bad; this.value = ""; return; }
+
+      // Advice, not refusal — too small or the wrong shape is the uploader's
+      // judgement to make, and blocking it would leave them with no way
+      // forward. The upload proceeds and the warning stays on screen.
+      const look = await inspect(file, spec);
+      msg.textContent = "Uploading…";
+
+      const res = await uploadEventImage(file, { eventId: F.id.value || null, spec });
+      if (res.error) { msg.textContent = res.error; return; }
+
+      urlField.value = res.url;
+      setPreview(previewEl, res.url);
+      msg.textContent = look.warning
+        ? "Uploaded — but note: " + look.warning
+        : `Uploaded (${look.size ? look.size.width + "×" + look.size.height : "ok"}).`;
+    });
+  }
+
+  wireUpload("f-image-file", F.image, document.getElementById("f-image-preview"), "f-image-msg", "eventSquare");
+  wireUpload("f-flogo-file", F.flogo, document.getElementById("f-flogo-preview"), "f-flogo-msg", "featuredLogo");
+
+  F.image.addEventListener("input", () => setPreview(document.getElementById("f-image-preview"), F.image.value.trim()));
+  F.flogo.addEventListener("input", () => setPreview(document.getElementById("f-flogo-preview"), F.flogo.value.trim()));
+
+  // ---- Featuring ---------------------------------------------------------
+
+  function paintTilePreview() {
+    // The preview background follows the tile setting, so "my logo vanished"
+    // is discovered here rather than on the live banner.
+    document.getElementById("f-flogo-tilebox").style.background =
+      F.ftile.value === "light" ? "#f4f7fc" : "#0d1220";
+  }
+  F.ftile.addEventListener("change", paintTilePreview);
+
+  function paintFeaturedPanel() {
+    document.getElementById("f-featured-panel").hidden = !F.featured.checked;
+  }
+  F.featured.addEventListener("change", paintFeaturedPanel);
+
+  // ---- Organizers --------------------------------------------------------
+
+  let organizerOptions = [];
+
+  async function loadOrganizers() {
+    const { data, error } = await supabase
+      .from("organizers")
+      .select("id, name, category, is_partner")
+      .order("sort_order", { ascending: true });
+    if (error) return;
+    organizerOptions = data || [];
+    F.organizers.innerHTML = organizerOptions
+      .map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)} — ${escapeHtml(o.category)}</option>`)
+      .join("");
+  }
+
+  async function loadEventOrganizers(eventId) {
+    if (!eventId) return [];
+    const { data, error } = await supabase
+      .from("event_organizers")
+      .select("organizer_id, is_lead")
+      .eq("event_id", eventId);
+    return error ? [] : (data || []);
+  }
+
+  // Replace rather than diff: the set is tiny, and a delete-then-insert is far
+  // easier to reason about than working out which links were added or removed.
+  async function saveEventOrganizers(eventId, ids) {
+    await supabase.from("event_organizers").delete().eq("event_id", eventId);
+    if (!ids.length) return null;
+    const sahaba = organizerOptions.find(o => o.category === "Sahaba Club");
+    const rows = ids.map(id => ({
+      event_id: eventId,
+      organizer_id: id,
+      // The lead is the first non-Sahaba organizer, so a partner's logo leads
+      // the card on a co-hosted event. If Sahaba Club is the only organizer it
+      // leads by default.
+      is_lead: sahaba ? (id !== sahaba.id) : true,
+    }));
+    const { error } = await supabase.from("event_organizers").insert(rows);
+    return error;
+  }
 
   async function loadEvents() {
     const { data, error } = await supabase
@@ -335,6 +540,36 @@
     F.desc.value = e ? (e.description || "") : "";
     F.premium.checked = e ? e.tier_required === "premium" : false;
     F.published.checked = e ? e.is_published : true;
+
+    F.featured.checked = e ? !!e.is_featured : false;
+    F.flogo.value = e ? (e.featured_logo_url || "") : "";
+    F.ftile.value = e ? (e.featured_tile || "dark") : "dark";
+    F.faccent.value = e ? (e.featured_accent || "violet") : "violet";
+    F.fscale.value = e ? (e.featured_scale || "") : "";
+    F.fnote.value = e ? (e.featured_note || "") : "";
+    F.fsort.value = e && e.featured_sort !== null && e.featured_sort !== undefined ? e.featured_sort : "";
+
+    // Clear the file inputs and any message from the previous event, or the
+    // editor opens showing somebody else's upload result.
+    document.getElementById("f-image-file").value = "";
+    document.getElementById("f-flogo-file").value = "";
+    document.getElementById("f-image-msg").textContent = "";
+    document.getElementById("f-flogo-msg").textContent = "";
+    setPreview(document.getElementById("f-image-preview"), F.image.value.trim());
+    setPreview(document.getElementById("f-flogo-preview"), F.flogo.value.trim());
+    paintFeaturedPanel();
+    paintTilePreview();
+
+    // Organizers are a separate table, so they load after the row. Cleared
+    // first: leaving the previous event's selection highlighted would be read
+    // as this event's, and saving would then rewrite it.
+    Array.from(F.organizers.options).forEach(o => { o.selected = false; });
+    if (e) {
+      loadEventOrganizers(e.id).then(links => {
+        const picked = new Set(links.map(l => l.organizer_id));
+        Array.from(F.organizers.options).forEach(o => { o.selected = picked.has(o.value); });
+      });
+    }
 
     modal.classList.remove("ad-hidden");
 
@@ -505,18 +740,57 @@
       description: F.desc.value.trim() || null,
       tier_required: F.premium.checked ? "premium" : "all",
       is_published: F.published.checked,
+      is_featured: F.featured.checked,
+      // Cleared when unfeatured, so an event that comes back into the banner
+      // later cannot inherit a logo from a different design.
+      featured_logo_url: F.featured.checked ? (F.flogo.value.trim() || null) : null,
+      featured_tile: F.featured.checked ? F.ftile.value : null,
+      featured_accent: F.featured.checked ? F.faccent.value : null,
+      featured_scale: F.featured.checked ? (F.fscale.value.trim() || null) : null,
+      featured_note: F.featured.checked ? (F.fnote.value.trim() || null) : null,
+      featured_sort: F.featured.checked && F.fsort.value !== "" ? Number(F.fsort.value) : null,
     };
 
-    const id = F.id.value;
-    const { error } = id
-      ? await supabase.from("events").update(payload).eq("id", id)
-      : await supabase.from("events").insert(payload);
-
-    saveBtn.disabled = false;
-    if (error) {
-      showMessage("ad-form-msg", "Couldn't save: " + error.message, "err");
+    // Featuring without a logo produces an empty tile in the banner — the one
+    // thing on that carousel a visitor cannot miss. Refuse rather than ship it.
+    if (payload.is_featured && !payload.featured_logo_url) {
+      saveBtn.disabled = false;
+      showMessage("ad-form-msg",
+        "A featured event needs a banner logo — the Mega Events tile would otherwise be empty.", "err");
       return;
     }
+
+    const id = F.id.value;
+    const saved = id
+      ? await supabase.from("events").update(payload).eq("id", id).select("id").maybeSingle()
+      : await supabase.from("events").insert(payload).select("id").maybeSingle();
+
+    if (saved.error) {
+      saveBtn.disabled = false;
+      // The duplicate guard from 0048 is the one a person will actually hit,
+      // and Postgres phrases it for a DBA. Say what it means.
+      const msg = String(saved.error.message || "");
+      showMessage("ad-form-msg",
+        /events_no_duplicates_idx|duplicate key/i.test(msg)
+          ? "There's already an event with this exact title on this date. Change the title or the date, or edit the existing one."
+          : "Couldn't save: " + msg,
+        "err");
+      return;
+    }
+
+    const eventId = id || (saved.data && saved.data.id);
+    const orgIds = Array.from(F.organizers.selectedOptions).map(o => o.value);
+    const orgError = eventId ? await saveEventOrganizers(eventId, orgIds) : null;
+
+    saveBtn.disabled = false;
+    if (orgError) {
+      // The event IS saved at this point. Saying "couldn't save" would be a
+      // lie that makes somebody re-enter the whole form.
+      showMessage("ad-form-msg",
+        "The event was saved, but its organizers weren't: " + orgError.message, "err");
+      return;
+    }
+
     closeEditor();
     showMessage("ad-msg", id ? "Event updated. It's live now." : "Event created. It's live now.", "ok");
     loadEvents();
@@ -538,7 +812,10 @@
     loadEvents();
   });
 
-  loadEvents();
+  // Organizers first: openEditor() ticks the boxes against options that must
+  // already exist, and a member editing an event a second after page load
+  // would otherwise see an empty list and save it as "no organizers".
+  loadOrganizers().then(loadEvents);
 </script>
 </body>
 </html>

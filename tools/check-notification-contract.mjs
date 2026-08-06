@@ -39,6 +39,8 @@ const CLIENT_FILES = [
   "app/settings.html",
   "script.js",
   "lib/push.js",
+  "lib/event-images.js",
+  "app/admin/events.html",
   "supabase/functions/send-push/index.ts",
   // Server-side, but it reads the same schema by the same bare strings and a
   // typo there fails the same way — silently, in a scheduled job nobody is
