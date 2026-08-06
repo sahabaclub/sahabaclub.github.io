@@ -716,6 +716,16 @@
       return import("./lib/notifications.js").then(function (mod) {
         notifications = mod;
         return mod.refreshNavBadges().then(function () {
+          // Opening a section reads it. Without this the count a member just
+          // clicked on sits there permanently — they went to Events, read the
+          // events, and the 2 never went away.
+          mod.markCurrentSectionRead();
+
+          // Realtime is the fast path; this is the one that catches a tab
+          // which was already open when the notification was created, or came
+          // back from bfcache, or whose socket never connected at all.
+          mod.watchForRefocus();
+
           // Live from here: a message arriving while this page is open
           // increments the badge without a reload.
           mod.subscribeToCounts(session.user.id);
