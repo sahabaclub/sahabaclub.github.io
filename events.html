@@ -214,6 +214,57 @@
   @media (max-width: 720px) {
     .events-section-title { font-size: 22px; }
   }
+
+  /* ---- Jump tags -------------------------------------------------------
+     Plain anchors. scroll-margin-top is the whole trick: without it the
+     sticky header lands on top of the heading you just jumped to, and the
+     section looks like it starts one paragraph in. */
+  .evx-jump {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+    margin: 22px auto 0; max-width: 640px;
+  }
+  .evx-jump a {
+    font-size: 13.5px; font-weight: 600; padding: 8px 16px; border-radius: 999px;
+    color: var(--text-secondary); background: var(--glass);
+    border: 1px solid var(--glass-border); text-decoration: none;
+  }
+  .evx-jump a:hover, .evx-jump a:focus-visible { color: var(--text); border-color: var(--cyan); }
+  #featured-strip, #hub, #recommended, #all-upcoming-heading { scroll-margin-top: 96px; }
+
+  /* ---- Sahaba Club Events Hub strip ------------------------------------ */
+  .evx-hub { max-width: var(--max-width); margin: 0 auto; padding: 56px 20px 0; }
+  .evx-hub-head { text-align: center; margin-bottom: 22px; }
+  .evx-hub-sub { color: var(--text-secondary); font-size: 14.5px; margin: 6px 0 0; }
+  .evx-hub-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+  .evx-hub-card {
+    position: relative; display: flex; flex-direction: column; overflow: hidden;
+    border-radius: var(--radius); background: var(--glass);
+    border: 1px solid var(--glass-border); transition: border-color .2s, transform .2s;
+  }
+  /* The "shiny" Ahmed asked for: a soft gradient wash over the card rather
+     than a glow on the text. It sits under the content and is aria-hidden by
+     virtue of being a pseudo-element, so it adds nothing for a screen reader
+     to read out. */
+  .evx-hub-card::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(150deg, rgba(139,92,246,.20), rgba(34,211,238,.10) 45%, transparent 70%);
+  }
+  .evx-hub-card:hover { border-color: var(--cyan); transform: translateY(-2px); }
+  @media (prefers-reduced-motion: reduce) { .evx-hub-card:hover { transform: none; } }
+  .evx-hub-art { position: relative; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; }
+  .evx-hub-art-fallback {
+    position: relative; width: 100%; aspect-ratio: 1 / 1; display: flex;
+    align-items: center; justify-content: center; font-size: 40px;
+  }
+  .evx-hub-body { position: relative; padding: 13px 14px 15px; }
+  .evx-hub-when { font-size: 12.5px; color: var(--text-muted); margin: 0 0 5px; }
+  .evx-hub-title { font-size: 15px; font-weight: 700; line-height: 1.35; margin: 0; }
+  .evx-hub-title a { color: inherit; text-decoration: none; }
+  .evx-hub-title a:hover { color: var(--cyan); text-decoration: underline; text-underline-offset: 3px; }
+  .evx-hub-org { font-size: 12px; color: var(--text-secondary); margin: 6px 0 0; }
+  .evx-hub-more { text-align: center; margin-top: 24px; }
+
+  .filter-legend-note { font-weight: 400; color: var(--text-muted); }
 </style>
 <script>
   // Apply saved theme before first paint so the page never flashes dark.
@@ -331,14 +382,26 @@
 <main>
 
   <section class="events-hero">
-    <p class="kicker center">Upcoming</p>
-    <h1 class="glow-text">AI Events</h1>
+    <p class="kicker center">Everything, in one place</p>
+    <h1 class="glow-text">AI Events Universe</h1>
     <p class="lead">Hackathons, meetups, and conferences from across the AI universe &mdash; curated by Sahaba Club. Free and paid, in the UAE and beyond.</p>
+
+    <!-- Jump tags. Plain in-page anchors, so they work with no JavaScript,
+         open in a new tab if somebody middle-clicks, and are announced as
+         links rather than as buttons that mysteriously scroll. `scroll-margin-top`
+         on the targets is what stops the sticky header covering the heading
+         they land on. -->
+    <nav class="evx-jump" aria-label="Jump to a section">
+      <a href="#featured-strip">Mega Events</a>
+      <a href="#hub">Sahaba Club Hub</a>
+      <a href="#recommended">For you</a>
+      <a href="#all-upcoming-heading">All events</a>
+    </nav>
   </section>
 
   <!-- Featured banner for the region's landmark AI conferences. Cards are
        injected by events-ui.js from featured-events.js. -->
-  <section class="featured-strip" id="featured-strip" aria-label="Major AI events">
+  <section class="featured-strip" id="featured-strip" aria-label="Major AI events" tabindex="-1">
     <div class="featured-head">
       <p class="kicker center">Mark your calendar</p>
       <h2 class="featured-title">Mega AI Events</h2>
@@ -369,7 +432,25 @@
        the search box rather than buried under it. Filled in only for
        signed-in members with something to learn from; stays empty
        otherwise rather than showing a hollow heading. -->
-  <section class="events-rec-wrap" aria-label="Recommended for you">
+  <!-- Sahaba Club Events Hub — the club's own events and its partners'.
+       Filled by events-ui.js from the organizer join (0048); the whole
+       section removes itself when there is nothing to show, rather than
+       leaving a heading over an empty row. Today that is the usual case:
+       there are no upcoming Sahaba Club events, only past ones, which is
+       exactly what the Discover more button is for. -->
+  <section class="evx-hub" id="hub" aria-labelledby="hub-heading" hidden>
+    <div class="evx-hub-head">
+      <p class="kicker center">Ours, and our partners&rsquo;</p>
+      <h2 class="events-section-title glow-text" id="hub-heading">Sahaba Club Events Hub</h2>
+      <p class="evx-hub-sub" id="hub-sub"></p>
+    </div>
+    <div class="evx-hub-grid" id="hub-strip"></div>
+    <div class="evx-hub-more">
+      <a class="btn btn-glow" href="events-hub.html">Discover more</a>
+    </div>
+  </section>
+
+  <section class="events-rec-wrap" id="recommended" aria-label="Recommended for you">
     <div id="events-recommended"></div>
   </section>
 
@@ -431,6 +512,39 @@
           <button type="button" class="filter-chip is-active" data-price="all">All</button>
           <button type="button" class="filter-chip" data-price="free">Free</button>
           <button type="button" class="filter-chip" data-price="paid">Paid</button>
+        </div>
+      </div>
+
+      <!-- Organizer. The six buckets are fixed (0048 constrains the column to
+           exactly these), so they are written here rather than derived from
+           whatever happens to be in the data: a bucket with no events today
+           should still be a choice that returns nothing, not an option that
+           silently disappears and reappears. -->
+      <div class="filter-group" role="group" aria-label="Organizer">
+        <span class="filter-legend">Organizer</span>
+        <div class="filter-chips" id="filter-organizer">
+          <button type="button" class="filter-chip is-active" data-organizer="all">All</button>
+          <button type="button" class="filter-chip" data-organizer="Sahaba Club">Sahaba Club</button>
+          <button type="button" class="filter-chip" data-organizer="Microsoft">Microsoft</button>
+          <button type="button" class="filter-chip" data-organizer="AWS">AWS</button>
+          <button type="button" class="filter-chip" data-organizer="Google">Google</button>
+          <button type="button" class="filter-chip" data-organizer="Community">Community</button>
+          <button type="button" class="filter-chip" data-organizer="Others">Others</button>
+        </div>
+      </div>
+
+      <!-- Country. Ahmed: "Showing the in-person events only" — so picking any
+           country excludes online events entirely. An online event has no
+           country to be in, which is why 0048 nulled the 14 rows that stored
+           "Online" there: Online is a mode, and `mode` already records it. -->
+      <div class="filter-group" role="group" aria-label="Country">
+        <span class="filter-legend">Country <span class="filter-legend-note">(in-person)</span></span>
+        <div class="filter-chips" id="filter-country">
+          <button type="button" class="filter-chip is-active" data-country="all">Anywhere</button>
+          <button type="button" class="filter-chip" data-country="UAE">UAE</button>
+          <button type="button" class="filter-chip" data-country="Saudi Arabia">Saudi Arabia</button>
+          <button type="button" class="filter-chip" data-country="Egypt">Egypt</button>
+          <button type="button" class="filter-chip" data-country="other">Other</button>
         </div>
       </div>
     </div>
