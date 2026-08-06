@@ -215,8 +215,16 @@ create trigger events_slug_trg
 
 -- Backfill. Numbered in one pass rather than row-by-row, because
 -- next_event_slug() reads a table this statement is still writing.
+-- ⚠ `created_at` is selected in `base` ON PURPOSE, and removing it breaks
+-- this. The first version omitted it and `numbered` said
+-- `order by created_at` — which failed on application with
+-- `42703: column "created_at" does not exist`. A CTE can only see the columns
+-- the CTE before it EXPOSES, not the columns of the table that CTE read from.
+-- The statement is grammatically perfect, so the SQL parse checker passed it;
+-- only a real database catches scope.
 with base as (
   select id,
+         created_at,
          coalesce(public.slugify(title), 'event') || '-' || to_char(coalesce(event_date, current_date), 'YYYY') as stem
     from public.events
    where slug is null
