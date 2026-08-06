@@ -233,6 +233,72 @@ comment on table public.notifications is
   'emit_* functions; read by the owner; marked read through mark_*_read().';
 
 -- ============================================================
+-- 2b. Preferences — declared HERE because §3 reads them
+-- ============================================================
+--
+-- ⚠ THIS BLOCK USED TO LIVE IN §5, BELOW, AND THAT WAS A BUG — the migration
+-- failed on its first real application with:
+--
+--     ERROR: 42P01: relation "public.notification_optouts" does not exist
+--     LINE 263: select 1 from public.notification_optouts o
+--
+-- `should_notify` is `language sql`, and Postgres RESOLVES THE RELATIONS IN A
+-- SQL FUNCTION BODY WHEN THE FUNCTION IS CREATED — unlike plpgsql, where the
+-- body is only parsed and a missing table is not discovered until it runs. So
+-- a SQL function that reads a table declared 200 lines further down cannot be
+-- created at all.
+--
+-- Nothing caught this before it was applied, and nothing here could have:
+-- tools/check-notification-contract.mjs compares names between the client and
+-- the migrations, and the SQL parse checker validates grammar. Neither knows
+-- what exists at any given LINE. Only a real Postgres does, which is why the
+-- whole file is ordered dependency-first now. The one consolation is that the
+-- editor runs a script in a transaction, so the failure rolled back cleanly
+-- and left no partial schema behind.
+--
+-- If you add anything to this file, put it below what it reads.
+
+create table if not exists public.notification_optouts (
+  -- `default auth.uid()` so the client never sends its own id. Without it
+  -- every caller has to fetch the session, remember to include user_id, and
+  -- get it right — and the RLS insert policy below would reject the row
+  -- anyway, so the only thing a client-supplied id can do is be wrong. With
+  -- the default, "switch this off" is a two-column insert and the policy
+  -- still decides whose row it is.
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  -- '*' is the wildcard row in notification_kinds; the foreign key is what
+  -- stops a client writing an opt-out against a kind that does not exist and
+  -- then wondering why it did nothing.
+  kind text not null references public.notification_kinds (kind) on delete cascade,
+  channel text not null check (channel in ('inapp', 'email', 'push')),
+  created_at timestamptz not null default now(),
+  primary key (user_id, kind, channel)
+);
+
+alter table public.notification_optouts enable row level security;
+
+drop policy if exists "optouts: own only" on public.notification_optouts;
+create policy "optouts: own only" on public.notification_optouts
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "optouts: switch off own" on public.notification_optouts;
+create policy "optouts: switch off own" on public.notification_optouts
+  for insert with check (auth.uid() = user_id);
+
+-- Switching a notification back on is deleting the row. No UPDATE policy: the
+-- table has nothing updatable that is not part of its own primary key.
+drop policy if exists "optouts: switch on own" on public.notification_optouts;
+create policy "optouts: switch on own" on public.notification_optouts
+  for delete using (auth.uid() = user_id);
+
+revoke all on public.notification_optouts from anon, authenticated;
+grant select, insert, delete on public.notification_optouts to authenticated;
+
+comment on table public.notification_optouts is
+  'A row means OFF. Absence means ON, so a kind added later is on by default '
+  'for everybody with no backfill. kind = ''*'' silences a whole channel.';
+
+-- ============================================================
 -- 3. Emitting
 -- ============================================================
 --
@@ -426,45 +492,8 @@ create trigger notifications_department_trg
 -- 5. What a member may do: preferences, and marking read
 -- ============================================================
 
-create table if not exists public.notification_optouts (
-  -- `default auth.uid()` so the client never sends its own id. Without it
-  -- every caller has to fetch the session, remember to include user_id, and
-  -- get it right — and the RLS insert policy below would reject the row
-  -- anyway, so the only thing a client-supplied id can do is be wrong. With
-  -- the default, "switch this off" is a two-column insert and the policy
-  -- still decides whose row it is.
-  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
-  -- '*' is the wildcard row in notification_kinds; the foreign key is what
-  -- stops a client writing an opt-out against a kind that does not exist and
-  -- then wondering why it did nothing.
-  kind text not null references public.notification_kinds (kind) on delete cascade,
-  channel text not null check (channel in ('inapp', 'email', 'push')),
-  created_at timestamptz not null default now(),
-  primary key (user_id, kind, channel)
-);
-
-alter table public.notification_optouts enable row level security;
-
-drop policy if exists "optouts: own only" on public.notification_optouts;
-create policy "optouts: own only" on public.notification_optouts
-  for select using (auth.uid() = user_id);
-
-drop policy if exists "optouts: switch off own" on public.notification_optouts;
-create policy "optouts: switch off own" on public.notification_optouts
-  for insert with check (auth.uid() = user_id);
-
--- Switching a notification back on is deleting the row. No UPDATE policy: the
--- table has nothing updatable that is not part of its own primary key.
-drop policy if exists "optouts: switch on own" on public.notification_optouts;
-create policy "optouts: switch on own" on public.notification_optouts
-  for delete using (auth.uid() = user_id);
-
-revoke all on public.notification_optouts from anon, authenticated;
-grant select, insert, delete on public.notification_optouts to authenticated;
-
-comment on table public.notification_optouts is
-  'A row means OFF. Absence means ON, so a kind added later is on by default '
-  'for everybody with no backfill. kind = ''*'' silences a whole channel.';
+-- `notification_optouts` is created in §2b, ABOVE, not here — see the note
+-- there. It has to exist before `should_notify` in §3, which reads it.
 
 -- Marking read is a function rather than a column-level UPDATE grant on
 -- `read_at`. Same reasoning as §1: a grant is a thing to forget, and a member
