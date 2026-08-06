@@ -197,7 +197,7 @@
   import { requireStaff, renderShell } from "../../lib/admin-guard.js";
   import { loadSources, buildModel, renderDashboard, wireTabs } from "./promptarena-admin.js";
 
-  const user = await requireStaff();
+  const user = await requireStaff("promptarena");
   if (user) {
     renderShell(user, "promptarena.html");
     wireTabs();

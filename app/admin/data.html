@@ -14,7 +14,7 @@
      attached. noindex/nofollow is the least of the controls. The real ones,
      all of them in the database:
 
-       1. `requireStaff()` below sends a member away. A courtesy, not a gate.
+       1. `requireStaff("data")` below sends a member away. A courtesy, not a gate.
        2. `marketing_contacts` and `profiles` carry `is_staff()` RLS policies
           (0010, 0001). `contact_link_status` reads auth.users, so it is
           security_invoker = off and carries `is_staff()` INSIDE its own body —

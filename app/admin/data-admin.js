@@ -94,7 +94,7 @@ const PAGE_ROWS = 1000;
 // "is this one reachable?" is not a question worth asking each time.
 const TAB_ORDER = ["fix", "browse", "fields", "import", "export", "history"];
 
-const user = await requireStaff();
+const user = await requireStaff("data");
 if (user) {
   state.user = user;
   renderShell(user, "data.html");

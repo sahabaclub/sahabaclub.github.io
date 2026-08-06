@@ -27,7 +27,7 @@
 // so the only way to know whether this page renders a real dataset correctly is
 // to hand it one. The harness that does so drives these exports directly against
 // the page's own markup. If the rendering lived inside the page's module script
-// behind a `requireStaff()` call, none of it could be exercised without a staff
+// behind a `requireStaff("promptarena")` call, none of it could be exercised without a staff
 // session against production data.
 //
 // ============================================================================

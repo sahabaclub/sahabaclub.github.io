@@ -47,7 +47,7 @@ const state = {
   query: "",
 };
 
-const user = await requireStaff();
+const user = await requireStaff("interest");
 if (user) {
   state.user = user;
   renderShell(user, "interest.html");

@@ -125,7 +125,7 @@ function belowCode(s, value) {
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
-const user = await requireStaff();
+const user = await requireStaff("ai");
 if (user) {
   renderShell(user, "ai.html");
   await load();

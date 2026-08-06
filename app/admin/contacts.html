@@ -139,7 +139,7 @@
   import { requireStaff, renderShell, escapeHtml, showMessage, clearMessage }
     from "../../lib/admin-guard.js";
 
-  const user = await requireStaff();
+  const user = await requireStaff("contacts");
   renderShell(user, "contacts.html");
 
   const modal = document.getElementById("ad-modal-back");

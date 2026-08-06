@@ -87,7 +87,7 @@
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage }
     from "../../lib/admin-guard.js";
 
-  const user = await requireStaff();
+  const user = await requireStaff("members");
   if (!user) throw new Error("not staff");
   renderShell(user, "members.html");
 
