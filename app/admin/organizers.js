@@ -614,7 +614,7 @@ function wire() {
 // ---- Init ---------------------------------------------------------------
 
 (async function init() {
-  user = await requireStaff();
+  user = await requireStaff("organizers");
   if (!user) return;
 
   renderShell(user, "organizers.html");

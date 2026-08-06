@@ -1,0 +1,46 @@
+-- 0053 — two new roles, and NOTHING ELSE
+-- ============================================================
+--
+-- ⚠ THIS MIGRATION IS DELIBERATELY ALMOST EMPTY, AND MUST STAY THAT WAY.
+--
+-- `ALTER TYPE ... ADD VALUE` may run inside a transaction on Postgres 12+, but
+-- the new value CANNOT BE USED in that same transaction — Postgres raises
+-- "unsafe use of new value of enum type". The Supabase SQL editor wraps a
+-- whole script in one transaction, so a migration that added these values and
+-- then wrote `role = 'operations_manager'` anywhere would fail on application.
+--
+-- 0054 does the actual work and must be run as a SEPARATE statement, after
+-- this one has committed.
+--
+-- ---- The roles -------------------------------------------------------------
+--
+-- `global_admin` — everything. Ahmed. Added alongside the existing `admin`
+-- rather than replacing it: `admin` is written into 134 policy references
+-- across 26 migrations via is_staff(), and renaming it would be a rewrite of
+-- the entire authorisation surface to change one label.
+--
+-- `operations_manager` — Ghadir. ⚠ It is NOT a staff role, and that is the
+-- whole design. `is_staff()` is a single universal gate: everything under
+-- app/admin is `is_staff()`-gated, so anyone who satisfies it reaches Members,
+-- Data (2,200 people's contact details), PromptArena and AI services. Making
+-- her staff and hiding menu items would be a lie — the tables would still
+-- answer her. She satisfies is_staff() nowhere, and 0054 grants her exactly
+-- five areas through ADDITIVE policies instead.
+
+alter type public.member_role add value if not exists 'operations_manager' before 'admin';
+alter type public.member_role add value if not exists 'global_admin' after 'admin';
+
+-- ============================================================
+-- Verification
+-- ============================================================
+--
+-- Both labels exist (expect 6: member, coach, staff, operations_manager,
+-- admin, global_admin):
+--
+--   select enumlabel from pg_enum
+--     join pg_type t on t.oid = pg_enum.enumtypid
+--    where t.typname = 'member_role'
+--    order by enumsortorder;
+--
+-- ⚠ THEN STOP AND RUN 0054 AS A SEPARATE STATEMENT. Running them together
+-- fails; that is not a bug in either file.

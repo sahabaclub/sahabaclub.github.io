@@ -14,7 +14,7 @@
      leaderboard. noindex/nofollow is the least of the controls. The real ones
      are:
 
-       1. `requireStaff()` below, which sends a member away. A courtesy.
+       1. `requireStaff("ai")` below, which sends a member away. A courtesy.
        2. Every table and view this page reads has RLS on with a
           `public.is_staff()` policy, and `ai_service_overview` carries
           is_staff() INSIDE its own body because it is security_invoker = off

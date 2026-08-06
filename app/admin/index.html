@@ -82,7 +82,7 @@
   import { supabase } from "../../lib/supabase-client.js";
   import { requireStaff, renderShell, escapeHtml, formatDate } from "../../lib/admin-guard.js";
 
-  const user = await requireStaff();
+  const user = await requireStaff("overview");
   if (user) {
     renderShell(user, "index.html");
     document.getElementById("ad-greeting").textContent =
