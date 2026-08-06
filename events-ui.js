@@ -414,7 +414,12 @@
       image: row.image_url,
       brand: row.brand,
       description: row.description,
-      tierRequired: row.tier_required
+      tierRequired: row.tier_required,
+      // The event's own page (0048). Carried through so a card can link to it.
+      // May be null for a moment on a clone whose database predates 0048 —
+      // buildCard checks before rendering the link rather than producing
+      // event.html?e=null.
+      slug: row.slug
     };
   }
 
@@ -649,7 +654,18 @@
           (when ? '<span class="ev-date">' + escapeHtml(when) + '</span>' : "") +
           (e.time ? '<span class="ev-time">' + escapeHtml(e.time) + '</span>' : "") +
         '</div>' +
-        '<h3 class="ev-title">' + escapeHtml(e.title) + '</h3>' +
+        // The title is the link to the event's own page — the whole card is
+        // not, deliberately: it already contains a favourite button, a
+        // register link and sometimes an attendee face that goes to a member
+        // profile, and nesting those inside an anchor is invalid HTML and
+        // unusable by keyboard. A linked heading is one clear target and
+        // announces as "link, <title>".
+        '<h3 class="ev-title">' +
+          (e.slug
+            ? '<a class="ev-title-link" href="event.html?e=' + encodeURIComponent(e.slug) + '">' +
+              escapeHtml(e.title) + '</a>'
+            : escapeHtml(e.title)) +
+        '</h3>' +
         (where ? '<div class="ev-meta">' + pinIcon + '<span>' + escapeHtml(where) + '</span></div>' : "") +
         chipsHtml(e) +
         '<div class="ev-foot">' + foot.join("") + '</div>' +
