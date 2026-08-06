@@ -30,3 +30,12 @@ supabase/.temp/
 .env.*
 vapid*.txt
 vapid*.json
+
+# Dependencies. Nothing in this repo is built or bundled — the site is served
+# as plain files — so node_modules only ever appears when somebody installs a
+# package to run a script in tools/. It was untracked and UNIGNORED until a
+# 7.2MB copy of `xlsx` landed here by accident, one `git add -A` away from
+# being committed to a public repository. Run tools that need a package from
+# outside the repo, or accept that this line is what stands between you and
+# publishing a dependency tree.
+node_modules/
