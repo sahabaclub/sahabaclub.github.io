@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https: ; connect-src 'self' https://sobxhcsgtimtiqtvqbag.supabase.co wss://sobxhcsgtimtiqtvqbag.supabase.co https://www.google-analytics.com https://region1.google-analytics.com https://esm.sh; frame-src https://www.youtube.com https://www.youtube-nocookie.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sahaba Club Events Hub — Sahaba Club</title>
+<meta name="description" content="Every event run by Sahaba Club and our partners — upcoming and past, with recordings.">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .hub-wrap { max-width: 1080px; margin: 0 auto; padding: 44px 20px 96px; }
+  .hub-hero { text-align: center; margin-bottom: 30px; }
+  .hub-hero h1 { font-size: 38px; margin: 0 0 10px; }
+  .hub-hero p { max-width: 640px; margin: 0 auto; color: var(--text-secondary); font-size: 15.5px; line-height: 1.7; }
+
+  .hub-tabs { display: flex; justify-content: center; gap: 8px; margin: 26px 0 22px; flex-wrap: wrap; }
+  .hub-tab {
+    font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+    padding: 9px 20px; border-radius: 999px; color: var(--text-secondary);
+    background: var(--glass); border: 1px solid var(--glass-border);
+  }
+  /* The active tab is marked by weight and border as well as colour — a tab
+     row distinguished only by hue is unreadable to anyone who cannot see it,
+     and aria-selected carries the same fact to a screen reader. */
+  .hub-tab.is-on { color: var(--text); border-color: var(--cyan); font-weight: 700; }
+  .hub-tab-count { opacity: 0.65; margin-left: 6px; font-weight: 600; }
+
+  .hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; }
+  .hub-card {
+    display: flex; flex-direction: column; overflow: hidden;
+    border-radius: var(--radius); background: var(--glass);
+    border: 1px solid var(--glass-border);
+  }
+  .hub-card:hover { border-color: var(--cyan); }
+  .hub-art { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: rgba(255,255,255,.03); }
+  .hub-art-fallback {
+    width: 100%; aspect-ratio: 1 / 1; display: flex; align-items: center;
+    justify-content: center; font-size: 44px; background: rgba(255,255,255,.03);
+  }
+  .hub-card-body { padding: 14px 15px 16px; display: flex; flex-direction: column; gap: 7px; }
+  .hub-when { font-size: 12.5px; color: var(--text-muted); }
+  .hub-title { font-size: 15.5px; font-weight: 700; line-height: 1.35; margin: 0; }
+  .hub-title a { color: inherit; text-decoration: none; }
+  .hub-title a:hover { color: var(--cyan); text-decoration: underline; text-underline-offset: 3px; }
+  .hub-orgs { font-size: 12.5px; color: var(--text-secondary); }
+  .hub-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+  .hub-badge {
+    font-size: 11.5px; padding: 3px 9px; border-radius: 999px;
+    background: rgba(255,255,255,.05); border: 1px solid var(--glass-border); color: var(--text-secondary);
+  }
+  .hub-badge.is-rec { border-color: var(--cyan); color: var(--text); }
+
+  .hub-empty { padding: 46px 0; text-align: center; color: var(--text-secondary); }
+
+  .hub-section { margin: 56px 0 0; }
+  .hub-section h2 { font-size: 24px; margin: 0 0 6px; text-align: center; }
+  .hub-section > p.hub-sub { text-align: center; color: var(--text-secondary); font-size: 14.5px; margin: 0 0 22px; }
+
+  .hub-partners { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+  .hub-partner {
+    display: flex; gap: 12px; align-items: flex-start; padding: 16px;
+    border-radius: 14px; background: var(--glass); border: 1px solid var(--glass-border);
+  }
+  .hub-partner-logo {
+    flex: 0 0 auto; width: 46px; height: 46px; border-radius: 10px; object-fit: contain;
+    background: #0d1220; padding: 4px;
+  }
+  .hub-partner-initial {
+    flex: 0 0 auto; width: 46px; height: 46px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--glass-border); font-weight: 700; font-size: 17px;
+  }
+  .hub-partner-name { font-size: 15px; font-weight: 700; margin: 0 0 2px; }
+  .hub-partner-name a { color: inherit; text-decoration: none; }
+  .hub-partner-name a:hover { color: var(--cyan); text-decoration: underline; }
+  .hub-partner-meta { font-size: 12.5px; color: var(--text-muted); }
+  .hub-partner-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.55; margin: 6px 0 0; }
+
+  @media (max-width: 620px) {
+    .hub-hero h1 { font-size: 29px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav has-drawer">
+  <div class="nav-inner">
+    <a href="index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="app/dashboard.html" class="nav-link member-only">Dashboard</a>
+      <a href="app/inbox.html" class="nav-link member-only">Messages</a>
+      <a href="app/connect.html" class="nav-link">Connect</a>
+      <a href="events.html" class="nav-link">Events</a>
+      <a href="hackathons.html" class="nav-link">EduHackAI</a>
+      <a href="podcast.html" class="nav-link">Podcast</a>
+      <a href="app/admin/index.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
+      <a href="app/settings.html" class="nav-link member-only">Settings</a>
+      <a href="index.html" class="nav-link">Home</a>
+
+
+
+
+      <a href="login.html" class="btn btn-glow" data-identity-join>Join free</a>
+    </div>
+    <p class="nav-slogan" aria-label="The First AI Universe on the Earth">
+      <span>The First AI Universe</span>
+      <span>on the Earth</span>
+    </p>
+    <div class="nav-compact">
+      <!-- Signed out: the Join CTA, straight to the signup page. Signed in:
+           the member's avatar and name, linking to the dashboard. Which one
+           shows is decided by header-identity.js before the page paints. -->
+      <div class="nav-identity">
+        <a href="login.html" class="btn btn-glow nav-identity-join" data-identity-join>Join the Club</a>
+        <a href="app/dashboard.html" class="nav-identity-me" data-identity-me aria-label="Your dashboard">
+          <span class="nav-identity-avatar" data-identity-avatar aria-hidden="true"></span>
+          <span class="nav-identity-name" data-identity-name></span>
+        </a>
+      </div>
+      <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Runs synchronously, before first paint, so a signed-in member never sees
+     the Join CTA flash before their avatar. See the file for why not a module. -->
+<script src="header-identity.js"></script>
+
+<!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
+<div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
+<nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
+  <div class="mobile-menu-panel">
+    <a class="mobile-menu-item" href="login.html" data-signin-link data-identity-join>Sign in</a>
+    <a class="mobile-menu-item is-primary" href="login.html" data-identity-join>Join the Club</a>
+    <a class="mobile-menu-item" href="index.html">Home</a>
+    <a class="mobile-menu-item member-only" href="app/dashboard.html">Dashboard</a>
+    <a class="mobile-menu-item member-only" href="app/inbox.html">Messages</a>
+    <a class="mobile-menu-item" href="app/connect.html">Connect</a>
+    <a class="mobile-menu-item" href="events.html">Events</a>
+    <a class="mobile-menu-item" href="hackathons.html">EduHackAI</a>
+    <a class="mobile-menu-item" href="podcast.html">Podcast</a>
+    <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="app/admin/index.html">Admin</a>
+
+    <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-settings">
+      <span>Settings</span>
+      <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
+    </button>
+    <div class="mobile-submenu" id="submenu-settings" hidden>
+      <div class="theme-choice-row">
+        <span class="theme-choice-label">Appearance</span>
+        <div class="theme-choice" role="group" aria-label="Appearance">
+          <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+          <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+        </div>
+      </div>
+      <div class="mobile-submenu-langs" role="group" aria-label="Language">
+        <span class="theme-choice-label">Language</span>
+        <button class="mobile-submenu-item is-active" type="button" data-lang="en">English</button>
+        <button class="mobile-submenu-item" type="button" data-lang="ar">
+          العربية <span class="mobile-soon">soon</span>
+        </button>
+      </div>
+      <label class="mobile-switch">
+        <span>Reduce motion</span>
+        <input type="checkbox" id="setting-reduce-motion">
+        <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
+      </label>
+      <p class="mobile-setting-note">Turns off the moving starfield and scrolling photo strip.</p>
+      <a class="mobile-submenu-item member-only" href="app/settings.html">All settings &rarr;</a>
+    </div>
+  </div>
+</nav>
+
+<main class="hub-wrap">
+  <div class="hub-hero">
+    <p class="kicker center">Sahaba Club</p>
+    <h1 class="glow-text">Events Hub</h1>
+    <p>Everything run by Sahaba Club and the partners we build with &mdash; what&rsquo;s coming,
+       and everything we&rsquo;ve already done, recordings and all.</p>
+  </div>
+
+  <div class="hub-tabs" role="tablist" aria-label="Which events">
+    <button type="button" class="hub-tab is-on" id="hub-tab-upcoming" role="tab" aria-selected="true" data-tab="upcoming">
+      Upcoming<span class="hub-tab-count" id="hub-count-upcoming"></span>
+    </button>
+    <button type="button" class="hub-tab" id="hub-tab-past" role="tab" aria-selected="false" data-tab="past">
+      Past<span class="hub-tab-count" id="hub-count-past"></span>
+    </button>
+  </div>
+
+  <div id="hub-list"><p class="hub-empty">Loading&hellip;</p></div>
+
+  <section class="hub-section" id="hub-partners-section" hidden>
+    <h2>Our partners</h2>
+    <p class="hub-sub">The organisations we run events with.</p>
+    <div class="hub-partners" id="hub-partners"></div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-top">
+    <div class="footer-links">
+      <a href="index.html#about">About</a>
+      <a href="events.html">Events</a>
+      <a href="membership.html">Membership</a>
+      <a href="mailto:info@sahabaclub.com">Contact</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+    <div class="footer-social">
+      <a href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="LinkedIn">LinkedIn</a>
+      <a href="https://youtube.com/@sahabaclub" target="_blank" rel="noopener" aria-label="YouTube">YouTube</a>
+      <a href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
+      <a href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
+      <a href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
+    </div>
+  </div>
+  <div class="footer-theme">
+    <span class="footer-theme-label" id="footer-theme-label">Appearance</span>
+    <div class="theme-choice" role="group" aria-labelledby="footer-theme-label">
+      <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+      <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+    </div>
+  </div>
+  <p class="footer-signature">The First AI Universe on the Earth</p>
+  <p class="footer-watermark">Developed by Sahaba Club Technologies</p>
+</footer>
+
+<script type="module">
+  import { supabase } from "./lib/supabase-client.js";
+
+  // ⚠ `var` throughout and every binding declared before the first executing
+  // statement — there is a top-level await below.
+  var listEl = document.getElementById("hub-list");
+  var partnersEl = document.getElementById("hub-partners");
+  var partnersSection = document.getElementById("hub-partners-section");
+  var MONTHS = ["January","February","March","April","May","June",
+                "July","August","September","October","November","December"];
+  var TODAY = new Date().toISOString().slice(0, 10);
+  var buckets = { upcoming: [], past: [] };
+  var current = "upcoming";
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function longDate(iso) {
+    if (!iso) return "";
+    var p = String(iso).split("-");
+    if (p.length < 3) return String(iso);
+    return parseInt(p[2], 10) + " " + MONTHS[parseInt(p[1], 10) - 1] + " " + p[0];
+  }
+
+  function cardHtml(e) {
+    var art = e.image_url
+      ? '<img class="hub-art" src="' + esc(e.image_url) + '" alt="" loading="lazy">'
+      : '<div class="hub-art-fallback" aria-hidden="true">&#128197;</div>';
+
+    var badges = [];
+    if (e.mode) badges.push('<span class="hub-badge">' + esc(e.mode) + "</span>");
+    if (e.price_label) badges.push('<span class="hub-badge">' + esc(e.price_label) + "</span>");
+    // The recording is the reason to open a past event at all, so it is a
+    // badge rather than something you only discover after clicking through.
+    if (e.recording_url) badges.push('<span class="hub-badge is-rec">Recording</span>');
+
+    return '<article class="hub-card">' + art +
+      '<div class="hub-card-body">' +
+        '<p class="hub-when">' + esc(longDate(e.event_date)) + "</p>" +
+        '<h3 class="hub-title"><a href="event.html?e=' + encodeURIComponent(e.slug) + '">' +
+          esc(e.title) + "</a></h3>" +
+        (e.organizerNames.length
+          ? '<p class="hub-orgs">' + esc(e.organizerNames.join(" + ")) + "</p>" : "") +
+        (badges.length ? '<div class="hub-badges">' + badges.join("") + "</div>" : "") +
+      "</div></article>";
+  }
+
+  function paint() {
+    var rows = buckets[current];
+    document.getElementById("hub-count-upcoming").textContent = " (" + buckets.upcoming.length + ")";
+    document.getElementById("hub-count-past").textContent = " (" + buckets.past.length + ")";
+
+    ["upcoming", "past"].forEach(function (t) {
+      var b = document.getElementById("hub-tab-" + t);
+      b.classList.toggle("is-on", t === current);
+      b.setAttribute("aria-selected", t === current ? "true" : "false");
+    });
+
+    if (!rows.length) {
+      listEl.innerHTML = '<p class="hub-empty">' +
+        (current === "upcoming"
+          ? "Nothing scheduled just yet &mdash; the past tab has everything we&rsquo;ve run so far."
+          : "Nothing here yet.") +
+        "</p>";
+      return;
+    }
+    listEl.innerHTML = '<div class="hub-grid">' + rows.map(cardHtml).join("") + "</div>";
+  }
+
+  document.querySelector(".hub-tabs").addEventListener("click", function (ev) {
+    var btn = ev.target.closest("[data-tab]");
+    if (!btn) return;
+    current = btn.getAttribute("data-tab");
+    paint();
+  });
+
+  function partnerHtml(o) {
+    var logo = o.logo_url
+      ? '<img class="hub-partner-logo" src="' + esc(o.logo_url) + '" alt="" loading="lazy">'
+      : '<span class="hub-partner-initial" aria-hidden="true">' + esc((o.name || "?").slice(0, 1)) + "</span>";
+    var name = o.website
+      ? '<a href="' + esc(o.website) + '" target="_blank" rel="noopener">' + esc(o.name) + "</a>"
+      : esc(o.name);
+    var count = o.eventCount
+      ? o.eventCount + (o.eventCount === 1 ? " event" : " events") + " with us"
+      : "";
+    return '<div class="hub-partner">' + logo +
+      "<div>" +
+        '<p class="hub-partner-name">' + name + "</p>" +
+        (count ? '<p class="hub-partner-meta">' + esc(count) + "</p>" : "") +
+        (o.description ? '<p class="hub-partner-desc">' + esc(o.description) + "</p>" : "") +
+      "</div></div>";
+  }
+
+  // ---- Load ---------------------------------------------------------------
+
+  var orgRes = await supabase
+    .from("organizers")
+    .select("id, name, slug, category, logo_url, website, description, is_partner")
+    .order("sort_order", { ascending: true });
+
+  var linkRes = await supabase.from("event_organizers").select("event_id, organizer_id");
+
+  var evRes = await supabase
+    .from("events")
+    .select("id, slug, title, event_date, mode, price_label, image_url, recording_url")
+    .eq("is_published", true)
+    .order("event_date", { ascending: false });
+
+  if (orgRes.error || linkRes.error || evRes.error) {
+    // ⚠ A failed read must never render as "no events". This page's empty
+    // state is a plausible sentence — "nothing scheduled just yet" — and is
+    // exactly the kind somebody believes.
+    listEl.innerHTML = '<p class="hub-empty">Couldn\'t load the events just now. ' +
+      "Refreshing usually sorts it.</p>";
+  } else {
+    var orgById = {};
+    (orgRes.data || []).forEach(function (o) { orgById[o.id] = o; });
+
+    // Which organizers each event has, and how many events each organizer has.
+    var byEvent = {};
+    var eventCount = {};
+    (linkRes.data || []).forEach(function (l) {
+      (byEvent[l.event_id] = byEvent[l.event_id] || []).push(l.organizer_id);
+      eventCount[l.organizer_id] = (eventCount[l.organizer_id] || 0) + 1;
+    });
+
+    // The Hub's rule, from Ahmed: events created by Sahaba Club OR by a
+    // partner. An event with no organizer recorded is NOT ours by default —
+    // 26 of the imported events have none yet, and assuming would fill this
+    // page with other people's conferences.
+    var mine = (evRes.data || []).filter(function (e) {
+      var ids = byEvent[e.id] || [];
+      return ids.some(function (id) {
+        var o = orgById[id];
+        return o && (o.slug === "sahaba-club" || o.is_partner);
+      });
+    }).map(function (e) {
+      e.organizerNames = (byEvent[e.id] || [])
+        .map(function (id) { return orgById[id] && orgById[id].name; })
+        .filter(Boolean);
+      return e;
+    });
+
+    buckets.upcoming = mine.filter(function (e) { return e.event_date >= TODAY; })
+                           .sort(function (a, b) { return a.event_date < b.event_date ? -1 : 1; });
+    buckets.past = mine.filter(function (e) { return e.event_date < TODAY; });
+
+    // Open on whichever tab has something in it. With no upcoming events at
+    // all — which is true today — landing on an empty Upcoming tab makes a
+    // page with seventeen events look broken.
+    if (!buckets.upcoming.length && buckets.past.length) current = "past";
+    paint();
+
+    var partners = (orgRes.data || [])
+      .filter(function (o) { return o.is_partner; })
+      .map(function (o) { o.eventCount = eventCount[o.id] || 0; return o; });
+
+    if (partners.length) {
+      partnersSection.hidden = false;
+      partnersEl.innerHTML = partners.map(partnerHtml).join("");
+    }
+  }
+</script>
+
+<script src="analytics.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
