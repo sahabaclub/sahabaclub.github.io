@@ -46,6 +46,7 @@ const CLIENT_FILES = [
   "app/admin/events.html",
   "app/admin/organizers.js",
   "supabase/functions/send-push/index.ts",
+  "supabase/functions/send-notification-emails/index.ts",
   // Server-side, but it reads the same schema by the same bare strings and a
   // typo there fails the same way — silently, in a scheduled job nobody is
   // watching, which is the exact failure mode the function exists to detect.
