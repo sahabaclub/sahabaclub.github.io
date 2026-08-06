@@ -40,6 +40,9 @@ const CLIENT_FILES = [
   "script.js",
   "lib/push.js",
   "lib/event-images.js",
+  "lib/event-related.js",
+  "event.html",
+  "events-ui.js",
   "app/admin/events.html",
   "supabase/functions/send-push/index.ts",
   // Server-side, but it reads the same schema by the same bare strings and a

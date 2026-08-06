@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https: ; connect-src 'self' https://sobxhcsgtimtiqtvqbag.supabase.co wss://sobxhcsgtimtiqtvqbag.supabase.co https://www.google-analytics.com https://region1.google-analytics.com https://esm.sh; frame-src https://www.youtube.com https://www.youtube-nocookie.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event — Sahaba Club</title>
+
+<!-- ⚠ The title, description and share image below are GENERIC and stay that
+     way when the page is shared. This is a static host: the HTML is identical
+     for every event and the real one is fetched by JavaScript, but WhatsApp,
+     LinkedIn and Slack read the raw HTML and never run it. So a shared link
+     previews as "AI Events — Sahaba Club" whatever event it points at.
+
+     The page itself sets document.title once the event loads, which fixes the
+     browser tab and the reading list — just not the unfurl.
+
+     Fixing the unfurl properly needs either a real server, or a build step
+     that pre-renders one HTML file per event and re-runs on every event
+     change. Ahmed chose slugs over static pages knowing this; it is recorded
+     here so nobody re-discovers it as a bug. -->
+<meta name="description" content="An AI event from Sahaba Club — details, date, venue and how to register.">
+<meta property="og:title" content="AI Events — Sahaba Club">
+<meta property="og:description" content="Hackathons, meetups and conferences from across the AI universe.">
+<meta property="og:image" content="https://www.sahabaclub.ai/assets/icon-512.png">
+<meta property="og:type" content="website">
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+  .evp-wrap { max-width: 1000px; margin: 0 auto; padding: 40px 20px 96px; }
+  .evp-back { display: inline-block; font-size: 14px; color: var(--text-secondary); margin-bottom: 18px; }
+  .evp-back:hover { color: var(--text); }
+
+  .evp-top { display: grid; grid-template-columns: 320px 1fr; gap: 30px; align-items: start; }
+  /* The square image, large. Small on the list, big here — square so the crop
+     is predictable at both sizes and the subject never drifts out of frame. */
+  .evp-art {
+    width: 100%; aspect-ratio: 1 / 1; border-radius: var(--radius);
+    object-fit: cover; background: var(--glass);
+    border: 1px solid var(--glass-border);
+  }
+  .evp-art-fallback {
+    width: 100%; aspect-ratio: 1 / 1; border-radius: var(--radius);
+    background: var(--glass); border: 1px solid var(--glass-border);
+    display: flex; align-items: center; justify-content: center; font-size: 62px;
+  }
+
+  .evp-title { margin: 0 0 10px; font-size: 34px; line-height: 1.2; }
+  .evp-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+  .evp-chip {
+    font-size: 13px; padding: 5px 11px; border-radius: 999px;
+    background: var(--glass); border: 1px solid var(--glass-border); color: var(--text-secondary);
+  }
+  .evp-chip.is-past { border-color: var(--text-muted); }
+  .evp-facts { margin: 0 0 18px; }
+  .evp-fact { display: flex; gap: 10px; padding: 7px 0; font-size: 14.5px; border-top: 1px solid var(--glass-border); }
+  .evp-fact:first-child { border-top: 0; }
+  .evp-fact-k { flex: 0 0 116px; color: var(--text-muted); }
+  .evp-fact-v { flex: 1 1 auto; min-width: 0; }
+
+  .evp-orgs { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 18px; }
+  .evp-org {
+    display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px;
+    border-radius: 999px; background: var(--glass); border: 1px solid var(--glass-border);
+    font-size: 13.5px; color: var(--text);
+  }
+  .evp-org img { width: 26px; height: 26px; border-radius: 50%; object-fit: contain; background: #0d1220; }
+  .evp-org-initial {
+    width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; background: var(--glass-border); font-size: 12px; font-weight: 700;
+  }
+  .evp-ours { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--cyan); }
+
+  .evp-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 0; }
+  .evp-body { margin: 34px 0 0; font-size: 15.5px; line-height: 1.75; color: var(--text-secondary); white-space: pre-wrap; }
+
+  .evp-section { margin: 40px 0 0; }
+  .evp-section h2 { font-size: 20px; margin: 0 0 14px; }
+
+  .evp-share { display: flex; flex-wrap: wrap; gap: 8px; }
+  .evp-share-btn {
+    font-size: 13.5px; font-weight: 600; font-family: inherit; cursor: pointer;
+    padding: 9px 15px; border-radius: 999px; color: var(--text);
+    background: var(--glass); border: 1px solid var(--glass-border);
+  }
+  .evp-share-btn:hover { border-color: var(--cyan); }
+  .evp-share-msg { font-size: 13px; color: var(--text-muted); margin: 10px 0 0; }
+
+  .evp-related { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+  .evp-rel {
+    display: block; padding: 14px; border-radius: 14px;
+    background: var(--glass); border: 1px solid var(--glass-border); color: var(--text);
+  }
+  .evp-rel:hover { border-color: var(--cyan); }
+  .evp-rel-when { font-size: 12.5px; color: var(--text-muted); margin: 0 0 6px; }
+  .evp-rel-title { font-size: 14.5px; font-weight: 600; line-height: 1.35; margin: 0; }
+
+  .evp-state { padding: 60px 0; text-align: center; color: var(--text-secondary); }
+
+  @media (max-width: 760px) {
+    .evp-top { grid-template-columns: 1fr; gap: 20px; }
+    .evp-art, .evp-art-fallback { max-width: 320px; }
+    .evp-title { font-size: 27px; }
+    .evp-fact { flex-direction: column; gap: 2px; }
+    .evp-fact-k { flex: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav has-drawer">
+  <div class="nav-inner">
+    <a href="index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="app/dashboard.html" class="nav-link member-only">Dashboard</a>
+      <a href="app/inbox.html" class="nav-link member-only">Messages</a>
+      <a href="app/connect.html" class="nav-link">Connect</a>
+      <a href="events.html" class="nav-link">Events</a>
+      <a href="hackathons.html" class="nav-link">EduHackAI</a>
+      <a href="podcast.html" class="nav-link">Podcast</a>
+      <a href="app/admin/index.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
+      <a href="app/settings.html" class="nav-link member-only">Settings</a>
+      <a href="index.html" class="nav-link">Home</a>
+
+
+
+
+      <a href="login.html" class="btn btn-glow" data-identity-join>Join free</a>
+    </div>
+    <p class="nav-slogan" aria-label="The First AI Universe on the Earth">
+      <span>The First AI Universe</span>
+      <span>on the Earth</span>
+    </p>
+    <div class="nav-compact">
+      <!-- Signed out: the Join CTA, straight to the signup page. Signed in:
+           the member's avatar and name, linking to the dashboard. Which one
+           shows is decided by header-identity.js before the page paints. -->
+      <div class="nav-identity">
+        <a href="login.html" class="btn btn-glow nav-identity-join" data-identity-join>Join the Club</a>
+        <a href="app/dashboard.html" class="nav-identity-me" data-identity-me aria-label="Your dashboard">
+          <span class="nav-identity-avatar" data-identity-avatar aria-hidden="true"></span>
+          <span class="nav-identity-name" data-identity-name></span>
+        </a>
+      </div>
+      <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Runs synchronously, before first paint, so a signed-in member never sees
+     the Join CTA flash before their avatar. See the file for why not a module. -->
+<script src="header-identity.js"></script>
+
+<!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
+<div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
+<nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
+  <div class="mobile-menu-panel">
+    <a class="mobile-menu-item" href="login.html" data-signin-link data-identity-join>Sign in</a>
+    <a class="mobile-menu-item is-primary" href="login.html" data-identity-join>Join the Club</a>
+    <a class="mobile-menu-item" href="index.html">Home</a>
+    <a class="mobile-menu-item member-only" href="app/dashboard.html">Dashboard</a>
+    <a class="mobile-menu-item member-only" href="app/inbox.html">Messages</a>
+    <a class="mobile-menu-item" href="app/connect.html">Connect</a>
+    <a class="mobile-menu-item" href="events.html">Events</a>
+    <a class="mobile-menu-item" href="hackathons.html">EduHackAI</a>
+    <a class="mobile-menu-item" href="podcast.html">Podcast</a>
+    <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="app/admin/index.html">Admin</a>
+
+    <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-settings">
+      <span>Settings</span>
+      <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
+    </button>
+    <div class="mobile-submenu" id="submenu-settings" hidden>
+      <div class="theme-choice-row">
+        <span class="theme-choice-label">Appearance</span>
+        <div class="theme-choice" role="group" aria-label="Appearance">
+          <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+          <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+        </div>
+      </div>
+      <div class="mobile-submenu-langs" role="group" aria-label="Language">
+        <span class="theme-choice-label">Language</span>
+        <button class="mobile-submenu-item is-active" type="button" data-lang="en">English</button>
+        <button class="mobile-submenu-item" type="button" data-lang="ar">
+          العربية <span class="mobile-soon">soon</span>
+        </button>
+      </div>
+      <label class="mobile-switch">
+        <span>Reduce motion</span>
+        <input type="checkbox" id="setting-reduce-motion">
+        <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
+      </label>
+      <p class="mobile-setting-note">Turns off the moving starfield and scrolling photo strip.</p>
+      <a class="mobile-submenu-item member-only" href="app/settings.html">All settings &rarr;</a>
+    </div>
+  </div>
+</nav>
+
+<main class="evp-wrap">
+  <a class="evp-back" href="events.html">&larr; All events</a>
+  <div id="evp-root">
+    <p class="evp-state">Loading&hellip;</p>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="footer-top">
+    <div class="footer-links">
+      <a href="index.html#about">About</a>
+      <a href="events.html">Events</a>
+      <a href="membership.html">Membership</a>
+      <a href="mailto:info@sahabaclub.com">Contact</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+    <div class="footer-social">
+      <a href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="LinkedIn">LinkedIn</a>
+      <a href="https://youtube.com/@sahabaclub" target="_blank" rel="noopener" aria-label="YouTube">YouTube</a>
+      <a href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
+      <a href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
+      <a href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
+    </div>
+  </div>
+  <div class="footer-theme">
+    <span class="footer-theme-label" id="footer-theme-label">Appearance</span>
+    <div class="theme-choice" role="group" aria-labelledby="footer-theme-label">
+      <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+      <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+    </div>
+  </div>
+  <p class="footer-signature">The First AI Universe on the Earth</p>
+  <p class="footer-watermark">Developed by Sahaba Club Technologies</p>
+</footer>
+
+<script type="module">
+  import { supabase } from "./lib/supabase-client.js";
+  import { relatedEvents } from "./lib/event-related.js";
+
+  // ⚠ `var` throughout, and every binding declared before the first executing
+  // statement. There is a top-level await below, and a `const` after it would
+  // not exist while it ran — the bug that once rendered the admin panel as an
+  // empty database with nothing on screen to explain it.
+  var root = document.getElementById("evp-root");
+  var params = new URLSearchParams(window.location.search);
+  var slug = (params.get("e") || "").trim();
+
+  var COLUMNS =
+    "id, slug, title, description, event_date, starts_at, time_label, duration_minutes, " +
+    "mode, country, location, price_label, tags, register_link, maps_link, image_url, " +
+    "brand, tier_required, is_published, presenter, recording_url";
+
+  var MONTHS = ["January","February","March","April","May","June",
+                "July","August","September","October","November","December"];
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function longDate(iso) {
+    if (!iso) return "";
+    var p = String(iso).split("-");
+    if (p.length < 3) return String(iso);
+    return parseInt(p[2], 10) + " " + MONTHS[parseInt(p[1], 10) - 1] + " " + p[0];
+  }
+
+  function durationText(mins) {
+    if (!mins) return "";
+    if (mins < 60) return mins + " minutes";
+    var h = Math.floor(mins / 60);
+    var m = mins % 60;
+    return h + (h === 1 ? " hour" : " hours") + (m ? " " + m + " min" : "");
+  }
+
+  function state(html) { root.innerHTML = '<p class="evp-state">' + html + "</p>"; }
+
+  function factRow(k, v) {
+    if (!v) return "";
+    return '<div class="evp-fact"><span class="evp-fact-k">' + esc(k) +
+           '</span><span class="evp-fact-v">' + v + "</span></div>";
+  }
+
+  function organizerChip(o) {
+    var logo = o.logo_url
+      ? '<img src="' + esc(o.logo_url) + '" alt="" loading="lazy">'
+      : '<span class="evp-org-initial" aria-hidden="true">' + esc((o.name || "?").slice(0, 1)) + "</span>";
+    var inner = logo + "<span>" + esc(o.name) + "</span>";
+    return o.website
+      ? '<a class="evp-org" href="' + esc(o.website) + '" target="_blank" rel="noopener">' + inner + "</a>"
+      : '<span class="evp-org">' + inner + "</span>";
+  }
+
+  function render(e, organizers, related) {
+    var today = new Date().toISOString().slice(0, 10);
+    var isPast = e.event_date < today;
+    var ours = organizers.some(function (o) { return o.slug === "sahaba-club"; });
+
+    // The tab title is fixable even though the share preview is not — see the
+    // note in <head>. Worth doing: it is what a reading list and a pinned tab
+    // show, and what a screen reader announces on load.
+    document.title = e.title + " — Sahaba Club";
+
+    var art = e.image_url
+      ? '<img class="evp-art" src="' + esc(e.image_url) + '" alt="">'
+      : '<div class="evp-art-fallback" aria-hidden="true">&#128197;</div>';
+
+    var chips = [];
+    chips.push('<span class="evp-chip' + (isPast ? " is-past" : "") + '">' +
+      (isPast ? "Past event" : "Upcoming") + "</span>");
+    if (e.mode) chips.push('<span class="evp-chip">' + esc(e.mode) + "</span>");
+    if (e.price_label) chips.push('<span class="evp-chip">' + esc(e.price_label) + "</span>");
+    if (e.tier_required === "premium") chips.push('<span class="evp-chip">Premium only</span>');
+    (e.tags || []).forEach(function (t) { chips.push('<span class="evp-chip">' + esc(t) + "</span>"); });
+
+    var when = longDate(e.event_date) + (e.time_label ? " &middot; " + esc(e.time_label) : "");
+    var where = e.mode === "Online"
+      ? "Online"
+      : [e.location, e.country].filter(Boolean).map(esc).join(", ");
+    if (e.maps_link && e.mode !== "Online") {
+      where += ' &middot; <a href="' + esc(e.maps_link) + '" target="_blank" rel="noopener">Find it</a>';
+    }
+
+    var facts =
+      factRow("When", when) +
+      factRow("Where", where) +
+      factRow("Presenter", e.presenter ? esc(e.presenter) : "") +
+      factRow("Length", durationText(e.duration_minutes) ? esc(durationText(e.duration_minutes)) : "");
+
+    // The action changes with time. A past event's "Register" button is a lie;
+    // its recording is the useful thing, and 16 of the 17 archived events have
+    // one.
+    var actions = [];
+    if (isPast) {
+      if (e.recording_url) {
+        actions.push('<a class="btn btn-glow" href="' + esc(e.recording_url) +
+          '" target="_blank" rel="noopener">Watch the recording</a>');
+      }
+    } else if (e.register_link) {
+      actions.push('<a class="btn btn-glow" href="' + esc(e.register_link) +
+        '" target="_blank" rel="noopener">Register</a>');
+    }
+
+    var relHtml = related.length
+      ? '<div class="evp-related">' + related.map(function (r) {
+          return '<a class="evp-rel" href="event.html?e=' + encodeURIComponent(r.slug) + '">' +
+                 '<p class="evp-rel-when">' + esc(longDate(r.eventDate)) + "</p>" +
+                 '<p class="evp-rel-title">' + esc(r.title) + "</p></a>";
+        }).join("") + "</div>"
+      : '<p class="evp-share-msg">Nothing closely related yet — browse ' +
+        '<a href="events.html">all events</a>.</p>';
+
+    root.innerHTML =
+      '<div class="evp-top">' +
+        "<div>" + art + "</div>" +
+        "<div>" +
+          '<h1 class="evp-title">' + esc(e.title) + "</h1>" +
+          '<div class="evp-meta">' + chips.join("") + "</div>" +
+          (organizers.length
+            ? '<div class="evp-orgs">' + organizers.map(organizerChip).join("") +
+              (ours ? '<span class="evp-ours">A Sahaba Club event</span>' : "") + "</div>"
+            : "") +
+          '<div class="evp-facts">' + facts + "</div>" +
+          '<div class="evp-actions">' + actions.join("") + "</div>" +
+        "</div>" +
+      "</div>" +
+      (e.description ? '<div class="evp-body">' + esc(e.description) + "</div>" : "") +
+      '<section class="evp-section"><h2>Share or invite a friend</h2>' +
+        '<div class="evp-share" id="evp-share"></div>' +
+        '<p class="evp-share-msg" id="evp-share-msg"></p></section>' +
+      '<section class="evp-section"><h2>You might also like</h2>' + relHtml + "</section>";
+
+    buildShare(e);
+  }
+
+  function buildShare(e) {
+    var url = window.location.origin + "/event.html?e=" + encodeURIComponent(e.slug);
+    var line = e.title + " — " + longDate(e.event_date);
+    var box = document.getElementById("evp-share");
+    var msg = document.getElementById("evp-share-msg");
+
+    var parts = [];
+    parts.push('<button type="button" class="evp-share-btn" data-share="copy">Copy link</button>');
+    // Native share sheet where there is one — on a phone this is the one that
+    // reaches WhatsApp, Telegram, Signal and everything else in one tap.
+    if (navigator.share) {
+      parts.push('<button type="button" class="evp-share-btn" data-share="native">Share&hellip;</button>');
+    }
+    parts.push('<a class="evp-share-btn" target="_blank" rel="noopener" href="https://wa.me/?text=' +
+      encodeURIComponent(line + " " + url) + '">WhatsApp</a>');
+    parts.push('<a class="evp-share-btn" target="_blank" rel="noopener" href="https://www.linkedin.com/sharing/share-offsite/?url=' +
+      encodeURIComponent(url) + '">LinkedIn</a>');
+    parts.push('<a class="evp-share-btn" target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?text=' +
+      encodeURIComponent(line) + "&url=" + encodeURIComponent(url) + '">X</a>');
+    // Invite a friend: a mailto, so it opens whatever mail app they already
+    // use and nobody has to hand us an address. No account, no server, and the
+    // club never learns who was invited — which is the right default for
+    // somebody else's contacts.
+    parts.push('<a class="evp-share-btn" href="mailto:?subject=' +
+      encodeURIComponent(line) + "&body=" +
+      encodeURIComponent("Thought you'd like this:\n\n" + e.title + "\n" + longDate(e.event_date) +
+        "\n\n" + url) + '">Invite by email</a>');
+
+    box.innerHTML = parts.join("");
+
+    box.addEventListener("click", function (ev) {
+      var btn = ev.target.closest("[data-share]");
+      if (!btn) return;
+      var kind = btn.getAttribute("data-share");
+
+      if (kind === "native" && navigator.share) {
+        navigator.share({ title: e.title, text: line, url: url }).catch(function () {});
+        return;
+      }
+      if (kind === "copy") {
+        // clipboard.writeText needs a secure context and can still be refused.
+        // Say so rather than leaving a button that silently does nothing.
+        if (!navigator.clipboard) {
+          msg.textContent = "This browser won't let a page copy for you — the link is in the address bar.";
+          return;
+        }
+        navigator.clipboard.writeText(url).then(
+          function () { msg.textContent = "Link copied."; },
+          function () { msg.textContent = "Couldn't copy — the link is in the address bar."; }
+        );
+      }
+    });
+  }
+
+  // ---- Load ---------------------------------------------------------------
+
+  if (!slug) {
+    state('No event was named in the link. <a href="events.html">Browse all events</a>.');
+  } else {
+    var res = await supabase.from("events").select(COLUMNS).eq("slug", slug).maybeSingle();
+
+    if (res.error) {
+      state("Couldn't load this event just now. Refreshing usually sorts it.");
+    } else if (!res.data) {
+      // A slug that does not resolve is far more likely to be an old shared
+      // link than a typo, so the message says so and offers the list.
+      state('That event isn\'t here — it may have been removed, or the link may be out of date. ' +
+            '<a href="events.html">Browse all events</a>.');
+    } else {
+      var event = res.data;
+
+      // Organizers for THIS event, with their logos.
+      var orgRes = await supabase
+        .from("event_organizers")
+        .select("is_lead, organizers(name, slug, logo_url, website, category)")
+        .eq("event_id", event.id);
+
+      var organizers = (orgRes.data || [])
+        .map(function (r) { return r.organizers; })
+        .filter(Boolean);
+
+      // Everything else, for the related list. Two flat reads and a join here
+      // rather than one nested query: the shapes stay obvious, and a failure
+      // in the related list must never take the event itself down with it.
+      var allRes = await supabase
+        .from("events")
+        .select("id, slug, title, event_date, mode, country, tags, presenter, is_published")
+        .eq("is_published", true);
+
+      var linkRes = await supabase.from("event_organizers").select("event_id, organizer_id");
+
+      var byEvent = {};
+      (linkRes.data || []).forEach(function (l) {
+        (byEvent[l.event_id] = byEvent[l.event_id] || []).push(l.organizer_id);
+      });
+
+      var candidates = (allRes.data || []).map(function (r) {
+        return {
+          id: r.id, slug: r.slug, title: r.title, eventDate: r.event_date,
+          mode: r.mode, country: r.country, tags: r.tags || [],
+          presenter: r.presenter, isPublished: r.is_published,
+          organizerIds: byEvent[r.id] || [],
+        };
+      });
+
+      var subject = {
+        id: event.id, tags: event.tags || [], mode: event.mode, country: event.country,
+        presenter: event.presenter, organizerIds: byEvent[event.id] || [],
+      };
+
+      render(event, organizers,
+        relatedEvents(subject, candidates, new Date().toISOString().slice(0, 10), 3));
+    }
+  }
+</script>
+
+<script src="analytics.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
