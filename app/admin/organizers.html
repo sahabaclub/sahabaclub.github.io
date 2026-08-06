@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https: ; connect-src 'self' https://sobxhcsgtimtiqtvqbag.supabase.co wss://sobxhcsgtimtiqtvqbag.supabase.co https://www.google-analytics.com https://region1.google-analytics.com https://esm.sh; frame-src https://www.youtube.com https://www.youtube-nocookie.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organizers — Sahaba Club Admin</title>
+
+<!-- The people and companies who run the events. Three things worth knowing
+     before changing anything here:
+
+       1. This is the ONLY way an organizer gets a logo or a description.
+          The Events screen can attach an existing organizer to an event, but
+          it cannot create one and cannot fill either field — which is why
+          "Our partners" on the Events Hub rendered as a row of bare names
+          until this page existed.
+       2. `name` and `category` are different things (0048). `name` is who
+          actually ran it — "AI Salone", "Azure Egypt Community". `category`
+          is one of exactly six filter buckets, and many organizers share one.
+          The select below offers those six and nothing else, because a
+          seventh value is refused by a CHECK constraint.
+       3. The gate is in the database, not on this page. `organizers` is
+          public-read and staff-write through RLS (0048), so hiding a button
+          here would gate nothing at all. -->
+<meta name="robots" content="noindex, nofollow">
+
+<link rel="icon" href="../../favicon.ico" sizes="any">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="admin.css">
+<script>
+  try {
+    if (localStorage.getItem("sc_light_mode") === "1") {
+      document.documentElement.classList.add("light-mode");
+    }
+  } catch (e) {}
+</script>
+</head>
+<body class="admin">
+
+<div class="ad-shell">
+  <aside class="ad-side" id="ad-side"></aside>
+
+  <main class="ad-main">
+    <div class="ad-head">
+      <h1>Organizers</h1>
+      <p>Who runs the events, and who shows up in &ldquo;Our partners&rdquo; on the Events Hub.
+         A logo and a sentence are what turn a name on that page into a partner.</p>
+    </div>
+
+    <div id="og-notice"></div>
+
+    <div class="ad-panel">
+      <div class="ad-panel-head">
+        <input type="search" class="ad-search" id="og-q" placeholder="Search name, slug or category&hellip;">
+        <div class="ad-spacer"></div>
+        <span class="ad-cell-dim" id="og-count"></span>
+        <button type="button" class="ad-btn ad-btn-primary" id="og-new">+ New organizer</button>
+      </div>
+      <div class="ad-tablewrap">
+        <table class="ad-table">
+          <thead>
+            <tr>
+              <th>Organizer</th>
+              <th>Category</th>
+              <th>Partner</th>
+              <th>Events</th>
+              <th>Website</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="og-list">
+            <tr><td colspan="6" class="ad-empty">Loading&hellip;</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Editor -->
+<div class="ad-modal-back ad-hidden" id="og-modal-back">
+  <div class="ad-modal">
+    <h2 id="og-modal-title">New organizer</h2>
+    <p class="ad-modal-sub" id="og-modal-sub">Name and category are required. Everything else is optional
+       &mdash; but a partner with no logo is the reason this page exists.</p>
+
+    <form id="og-form" autocomplete="off">
+      <input type="hidden" id="og-id">
+
+      <div class="ad-field">
+        <label for="og-name">Name</label>
+        <input type="text" id="og-name" maxlength="120" placeholder="Azure Egypt Community" required>
+        <span class="ad-hint">Who actually ran the event, as a member should read it. Must be unique.</span>
+      </div>
+
+      <div class="ad-field">
+        <label for="og-slug">Slug</label>
+        <input type="text" id="og-slug" maxlength="120" placeholder="azure-egypt-community">
+        <span class="ad-hint">Filled in from the name while you type, and editable. Lowercase letters,
+          numbers and hyphens.</span>
+        <!-- Only ever shown when the slug of an EXISTING organizer is being
+             changed. Empty the rest of the time, so it reads as a warning
+             rather than as page furniture. -->
+        <span class="ad-hint" id="og-slug-warn"></span>
+      </div>
+
+      <div class="ad-row-2">
+        <div class="ad-field">
+          <label for="og-category">Category</label>
+          <!-- Exactly the six values the CHECK constraint in 0048 allows, and
+               the same six the Events Hub filter offers. The options are built
+               in organizers.js from one list so this select, the validation and
+               the filter cannot drift apart. -->
+          <select id="og-category"></select>
+          <span class="ad-hint">The filter bucket, not the name. Every community group is
+            &ldquo;Community&rdquo;; they are still different organizers.</span>
+        </div>
+        <div class="ad-field">
+          <label for="og-sort">Sort order</label>
+          <input type="number" id="og-sort" step="1" placeholder="100">
+          <span class="ad-hint">Lower comes first in the partners row. Leave blank for 100.</span>
+        </div>
+      </div>
+
+      <div class="ad-field">
+        <label for="og-website">Website</label>
+        <input type="url" id="og-website" placeholder="https://&hellip;">
+        <span class="ad-hint">Must start with http:// or https:// &mdash; the database refuses anything
+          else. Leave blank if they have no site.</span>
+      </div>
+
+      <!-- Logo. Upload OR paste a URL — both write the same column. The URL
+           field stays because some logos already live on the organizer's own
+           site and re-hosting somebody else's mark is not ours to do. -->
+      <div class="ad-field">
+        <label for="og-logo-file">Logo</label>
+        <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+          <span id="og-logo-tile" style="width:120px;height:52px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#0d1220;border:1px solid var(--ad-line-strong);">
+            <img id="og-logo-preview" alt="" style="max-width:104px;max-height:40px;object-fit:contain;" hidden>
+          </span>
+          <div style="flex:1 1 240px;min-width:0;">
+            <input type="file" id="og-logo-file" accept="image/png,image/jpeg,image/webp">
+            <input type="text" id="og-logo" placeholder="&hellip;or paste a URL" style="margin-top:6px;">
+          </div>
+        </div>
+        <!-- Filled from IMAGE_SPECS via describeSpec(), so the advice can never
+             drift from what is actually checked. Ahmed's rule: every time the
+             system asks for a photo it states the best dimensions. -->
+        <span class="ad-hint" id="og-logo-hint"></span>
+        <span class="ad-hint" id="og-logo-msg"></span>
+      </div>
+
+      <div class="ad-field">
+        <label for="og-desc">Description</label>
+        <textarea id="og-desc" maxlength="1000" placeholder="A community of Azure practitioners in Cairo, running monthly meet-ups since 2021."></textarea>
+        <span class="ad-hint">One or two sentences, shown under their name in &ldquo;Our partners&rdquo;.
+          Up to 1000 characters.</span>
+      </div>
+
+      <label class="ad-check">
+        <input type="checkbox" id="og-partner">
+        <span><strong>Show in &ldquo;Our partners&rdquo;.</strong> Not every organizer is a partner
+        &mdash; GITEX runs its own show and is no relationship of ours. Their events still list them
+        either way.</span>
+      </label>
+
+      <div class="ad-modal-actions">
+        <button type="submit" class="ad-btn ad-btn-primary" id="og-save">Save organizer</button>
+        <button type="button" class="ad-btn" id="og-cancel">Cancel</button>
+        <div class="ad-spacer" style="flex:1"></div>
+        <button type="button" class="ad-btn ad-btn-danger ad-hidden" id="og-delete">Delete</button>
+      </div>
+      <div id="og-form-msg"></div>
+    </form>
+  </div>
+</div>
+
+<script type="module" src="organizers.js"></script>
+</body>
+</html>
