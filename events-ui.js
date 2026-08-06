@@ -424,9 +424,11 @@
   }
 
   function loadEventsFromDatabase() {
+    var client = null;
     return import("./lib/supabase-client.js").then(function (mod) {
+      client = mod.supabase;
       var todayIso = new Date().toISOString().slice(0, 10);
-      return mod.supabase
+      return client
         .from("events")
         .select("*")
         .eq("is_published", true)
@@ -435,6 +437,42 @@
     }).then(function (res) {
       if (res.error) throw res.error;
       EVENTS_ALL = (res.data || []).map(fromRow);
+
+      // Organizers, for the Organizer filter and the Hub strip (0048).
+      //
+      // ⚠ Fetched SEPARATELY and allowed to fail on its own. A nested
+      // PostgREST select would make the whole events list depend on the
+      // organizer tables existing — and on a clone whose database predates
+      // 0048 that would turn "no organizers yet" into "no events at all".
+      // Every event still renders if this half comes back empty; it just has
+      // no organizer to filter on.
+      return Promise.all([
+        client.from("organizers").select("id, name, category, is_partner, slug"),
+        client.from("event_organizers").select("event_id, organizer_id")
+      ]).then(function (parts) {
+        var orgRes = parts[0];
+        var linkRes = parts[1];
+        if (orgRes.error || linkRes.error) return;
+
+        var byId = {};
+        (orgRes.data || []).forEach(function (o) { byId[o.id] = o; });
+
+        var byEvent = {};
+        (linkRes.data || []).forEach(function (l) {
+          (byEvent[l.event_id] = byEvent[l.event_id] || []).push(l.organizer_id);
+        });
+
+        EVENTS_ALL.forEach(function (e) {
+          var orgs = (byEvent[e.id] || []).map(function (id) { return byId[id]; }).filter(Boolean);
+          e.organizerNames = orgs.map(function (o) { return o.name; });
+          e.organizerCategories = orgs.map(function (o) { return o.category; });
+          e.isOurs = orgs.some(function (o) { return o.slug === "sahaba-club"; });
+          e.isPartnered = orgs.some(function (o) { return o.is_partner; });
+        });
+      }).catch(function () {
+        // Same reasoning: the public list survives, the filter just has
+        // nothing to offer.
+      });
     });
   }
 
@@ -839,13 +877,40 @@
     jumpToEvent(link.getAttribute("data-rec-jump"));
   });
 
-  var state = { q: "", when: "all", mode: "all", price: "all", tags: [] };
+  var state = { q: "", when: "all", mode: "all", price: "all", organizer: "all", country: "all", tags: [] };
   var filtered = [];
+
+  // The three countries Ahmed named. Anything else in-person is "Other".
+  // Deliberately a list rather than a lookup over whatever is in the data:
+  // the filter offers four fixed choices, and a country nobody has an event
+  // in yet should still be a choice that returns nothing rather than an
+  // option that silently disappears.
+  var NAMED_COUNTRIES = ["UAE", "Saudi Arabia", "Egypt"];
 
   function matches(e) {
     if (state.mode !== "all" && e.mode !== state.mode) return false;
     if (state.price === "free" && /paid/i.test(e.price)) return false;
     if (state.price === "paid" && !/paid/i.test(e.price)) return false;
+
+    if (state.organizer !== "all") {
+      var cats = e.organizerCategories || [];
+      if (cats.indexOf(state.organizer) === -1) return false;
+    }
+
+    // ⚠ "Country (Showing the in-person events only)" — Ahmed's words. An
+    // online event has no country to be in: 0048 nulled the 14 rows that
+    // stored "Online" there, because Online is a mode. So choosing any
+    // country excludes online events entirely rather than quietly matching
+    // them on a blank.
+    if (state.country !== "all") {
+      if (e.mode === "Online") return false;
+      var c = e.country || "";
+      if (state.country === "other") {
+        if (NAMED_COUNTRIES.indexOf(c) !== -1) return false;
+      } else if (c !== state.country) {
+        return false;
+      }
+    }
 
     if (state.when !== "all") {
       var d = new Date(e.date + "T00:00:00");
@@ -882,6 +947,8 @@
       (state.when !== "all" ? 1 : 0) +
       (state.mode !== "all" ? 1 : 0) +
       (state.price !== "all" ? 1 : 0) +
+      (state.organizer !== "all" ? 1 : 0) +
+      (state.country !== "all" ? 1 : 0) +
       state.tags.length +
       (state.q ? 1 : 0);
 
@@ -1130,6 +1197,8 @@
   wireChipGroup("filter-when", "data-when", "when");
   wireChipGroup("filter-mode", "data-mode", "mode");
   wireChipGroup("filter-price", "data-price", "price");
+  wireChipGroup("filter-organizer", "data-organizer", "organizer");
+  wireChipGroup("filter-country", "data-country", "country");
 
   var qInput = document.getElementById("filter-q");
   var clearQBtn = document.getElementById("filter-clear-q");
@@ -1189,7 +1258,7 @@
   function resetAll() {
     state = { q: "", when: "all", mode: "all", price: "all", tags: [] };
     if (qInput) qInput.value = "";
-    ["filter-when", "filter-mode", "filter-price"].forEach(function (id) {
+    ["filter-when", "filter-mode", "filter-price", "filter-organizer", "filter-country"].forEach(function (id) {
       var box = document.getElementById(id);
       if (!box) return;
       Array.prototype.forEach.call(box.querySelectorAll(".filter-chip"), function (b, idx) {
@@ -1242,12 +1311,73 @@
   });
 
   // ---- go ----
+  // ---- Sahaba Club Events Hub strip -------------------------------------
+  //
+  // The four soonest events run by the club or one of its partners, with a
+  // way through to the full hub. Fed by the organizer join loaded above.
+  //
+  // ⚠ The whole SECTION removes itself when there is nothing to show, rather
+  // than leaving a heading over an empty row. Today that is the normal case:
+  // every Sahaba Club event in the database is in the past, and this list only
+  // draws from the upcoming ones the page already loaded. An empty strip under
+  // a confident heading reads as broken; its absence reads as nothing planned,
+  // which is the truth — and the Discover more button on the hub page is where
+  // the seventeen past ones live.
+  function buildHubStrip() {
+    var section = document.getElementById("hub");
+    var strip = document.getElementById("hub-strip");
+    if (!section || !strip) return;
+
+    var mine = EVENTS_ALL.filter(function (e) { return e.isOurs || e.isPartnered; });
+    if (!mine.length) {
+      section.parentNode && section.parentNode.removeChild(section);
+      // The jump tag would otherwise point at a section that no longer exists.
+      var tag = document.querySelector('.evx-jump a[href="#hub"]');
+      if (tag && tag.parentNode) tag.parentNode.removeChild(tag);
+      return;
+    }
+
+    // EVENTS_ALL is already upcoming-only and date-ordered, so the four
+    // soonest are simply the first four.
+    var top = mine.slice(0, 4);
+
+    var sub = document.getElementById("hub-sub");
+    if (sub) {
+      sub.textContent = mine.length > top.length
+        ? "The next " + top.length + " of " + mine.length + " coming up."
+        : (mine.length === 1 ? "One coming up." : "All " + mine.length + " coming up.");
+    }
+
+    strip.innerHTML = top.map(function (e) {
+      var art = e.image
+        ? '<img class="evx-hub-art" src="' + escapeHtml(e.image) + '" alt="" loading="lazy">'
+        : '<div class="evx-hub-art-fallback" aria-hidden="true">&#128197;</div>';
+      var names = (e.organizerNames || []).join(" + ");
+      // The title links to the event's own page, matching the cards below —
+      // not to an anchor on this page, because the hub is about the event
+      // rather than about finding it in the list.
+      return '<article class="evx-hub-card">' + art +
+        '<div class="evx-hub-body">' +
+          '<p class="evx-hub-when">' + escapeHtml(cardDate(e.date) || "") + "</p>" +
+          '<h3 class="evx-hub-title">' +
+            (e.slug
+              ? '<a href="event.html?e=' + encodeURIComponent(e.slug) + '">' + escapeHtml(e.title) + "</a>"
+              : escapeHtml(e.title)) +
+          "</h3>" +
+          (names ? '<p class="evx-hub-org">' + escapeHtml(names) + "</p>" : "") +
+        "</div></article>";
+    }).join("");
+
+    section.hidden = false;
+  }
+
   loadEventsFromDatabase().then(function () {
     if (EVENTS_ALL.length === 0) {
       if (emptyMsg) emptyMsg.classList.remove("hidden");
       return null;
     }
     buildTagChips();
+    buildHubStrip();
     // Draw the public list immediately; the personal layer arrives after and
     // re-renders, so events appear without waiting on a signed-in check.
     renderList();
