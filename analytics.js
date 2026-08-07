@@ -354,23 +354,40 @@
       var copy = document.createElement("div");
       copy.className = "ga-consent-copy";
 
+      // ⚠ Wording only — nothing about the CONSENT BEHAVIOUR changes here.
+      // Analytics still loads only after an explicit accept, still never runs
+      // on the signed-in member pages, and declining still loads nothing.
+      //
+      // Ahmed: "This message should be normal cookies message. The users feel
+      // it is something different, just use the normal used cookies message."
+      // He is right, and the reason is worth writing down: the old copy was
+      // written to be unusually candid — "May we count this visit?", "Say no
+      // and nothing loads" — and candour read as strangeness. People have seen
+      // thousands of cookie banners; one that does not look like the others
+      // makes them stop and wonder what is different about this site, which is
+      // the opposite of what plain language was meant to achieve. The familiar
+      // shape IS the reassuring one here.
+      //
+      // So it now says what every other banner says, and stays true: we do use
+      // cookies, they are for analytics, and both buttons do exactly what they
+      // say. The specifics that were in the old paragraph have not been
+      // deleted — they moved to the privacy page the link points at, which is
+      // where somebody who actually wants them will look.
       var title = document.createElement("p");
       title.className = "ga-consent-title";
-      title.textContent = "May we count this visit?";
+      title.textContent = "We use cookies";
       copy.appendChild(title);
 
       var text = document.createElement("p");
       text.className = "ga-consent-text";
       text.appendChild(document.createTextNode(
-        "We would like to use Google Analytics to see which pages people " +
-        "actually read. It records the page and sets cookies. It never runs " +
-        "on the signed-in member pages, and we never send it your name or " +
-        "email. Say no and nothing loads. "
+        "We use cookies to understand how the site is used and to improve it. " +
+        "You can accept or decline — declining loads nothing. "
       ));
       var link = document.createElement("a");
       link.className = "ga-consent-link";
       link.href = PRIVACY_HREF;
-      link.textContent = "What it records";
+      link.textContent = "Learn more";
       text.appendChild(link);
       copy.appendChild(text);
 
@@ -381,14 +398,14 @@
       yes.type = "button";
       yes.className = "ga-consent-btn";
       yes.setAttribute("data-ga-accept", "");
-      yes.textContent = "Yes, count it";
+      yes.textContent = "Accept";
       yes.addEventListener("click", accept);
 
       var no = document.createElement("button");
       no.type = "button";
       no.className = "ga-consent-btn";
       no.setAttribute("data-ga-decline", "");
-      no.textContent = "No, thank you";
+      no.textContent = "Decline";
       no.addEventListener("click", decline);
 
       // Order in the DOM is order for a keyboard and a screen reader. Yes

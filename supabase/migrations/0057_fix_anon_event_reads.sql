@@ -1,0 +1,88 @@
+-- 0057 — let anonymous visitors read events again
+-- ============================================================
+--
+-- ⚠ PUBLIC OUTAGE, introduced by 0054 and found by Ahmed's members, not by us:
+-- people opening an event link from WhatsApp saw "Couldn't load this event just
+-- now. Refreshing usually sorts it." The page shell rendered; only the data was
+-- missing, which is why it looked like a network blip and not like a
+-- permissions fault.
+--
+-- What the database actually answered for an anonymous request:
+--
+--   GET /rest/v1/events?slug=eq.…
+--   {"code":"42501","message":"permission denied for function has_admin_section"}
+--
+-- ============================================================
+-- Why
+-- ============================================================
+--
+-- 0054 §events added:
+--
+--   create policy "events: section read drafts" on public.events
+--     for select using (public.has_admin_section('events'));
+--
+-- A SELECT policy is evaluated for EVERY select by EVERY role. Permissive
+-- policies OR together, and that is what makes "add, never edit" safe — but the
+-- OR still has to EVALUATE both sides, and evaluating this one calls a function
+-- `anon` has no EXECUTE on. So the whole query aborts before any row is
+-- considered. `anon` was never granted it because nothing anonymous was ever
+-- meant to call it.
+--
+-- The catch is that "additive policies cannot break existing access" is true of
+-- the POLICY LOGIC and false of the FUNCTION CALL inside it. 0054's commit
+-- message leaned on the first half. This is the second half.
+--
+-- ============================================================
+-- Why `organizers` did not break, and why that is not reassuring
+-- ============================================================
+--
+-- `organizers` carries a `for all` section policy that also covers SELECT, and
+-- it kept working for anon throughout. Not because it is written better —
+-- because its public-read policy is `using (true)`, a constant the planner
+-- folds, so the OR short-circuits before reaching the function. `events` public
+-- read is `using (is_published = true)`, a per-row test, so both sides get
+-- evaluated.
+--
+-- That means `organizers` is one query plan away from the same failure. Fixing
+-- this by reordering or rewriting the events policy would leave that trap in
+-- place, so the fix is the grant.
+--
+-- ============================================================
+-- Is it safe to let `anon` call this?
+-- ============================================================
+--
+-- Yes, and it is worth being explicit rather than assuming.
+-- `has_admin_section(text)` is `security definer` and returns a boolean: it
+-- reads the CALLER's own profile and role_permissions and answers "may I reach
+-- this section". For an anonymous caller `auth.uid()` is null, so it returns
+-- false. It returns no rows, no names and no counts, and it cannot be coaxed
+-- into returning true for somebody who is not signed in. The worst an
+-- anonymous caller can do with it directly is ask about themselves and be told
+-- no.
+
+grant execute on function public.has_admin_section(text) to anon, authenticated;
+
+-- ============================================================
+-- Verify
+-- ============================================================
+--
+-- 1. As an ANONYMOUS request — this is the check that was missing, and running
+--    it with a signed-in session proves nothing, because a staff session has
+--    always been able to execute the function:
+--
+--      curl -s "https://sobxhcsgtimtiqtvqbag.supabase.co/rest/v1/events\
+--?select=title,slug&limit=1" \
+--        -H "apikey: <the publishable key>" \
+--        -H "Authorization: Bearer <the publishable key>"
+--
+--    Expect a row. `42501 permission denied for function` means this migration
+--    has not been applied.
+--
+-- 2. In a private window, open an event link and confirm the page renders
+--    rather than showing "Couldn't load this event just now."
+--
+-- 3. A draft must STILL be invisible to anonymous readers — the grant lets the
+--    predicate run, it does not make it true:
+--
+--      select count(*) from public.events where is_published = false;
+--      -- as anon, through PostgREST, this must return 0 rows
