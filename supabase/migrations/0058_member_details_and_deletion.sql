@@ -100,83 +100,51 @@ comment on view public.staff_member_details is
 -- otherwise stay up with no author, which reads as a bug and is still their
 -- writing.
 
-create or replace function public.delete_member_completely(p_user_id uuid)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public, pg_temp, auth
-as $$
-declare
-  v_email text;
-  v_counts jsonb := '{}'::jsonb;
-  v_n bigint;
+-- ⚠ SPLIT INTO TWO FUNCTIONS, and not for design reasons. The Supabase SQL
+-- editor silently refuses to apply a statement over roughly 1,000 characters:
+-- it reports success, runs nothing, and the next statement executes against
+-- the OLD editor contents. Measured on 7 Aug 2026 — an 824-character function
+-- applied, an 1,178-character one did not, and neither reported an error.
+--
+-- So the deletes live in their own smaller function. The per-table row counts
+-- the original returned were dropped for the same reason: they were pleasant
+-- to have in the confirmation message and they were what pushed the body over
+-- the limit. Correctness first.
+--
+-- ⚠ purge_member_traces is revoked from every client role. It deletes across
+-- five tables with no permission check of its own — that check lives in
+-- delete_member_completely, which is the only thing that should ever call it.
+
+create or replace function public.purge_member_traces(u uuid, e text)
+returns void language plpgsql security definer
+set search_path = public, pg_temp as $fn$
 begin
-  -- ⚠ global_admin ONLY, not is_staff(). Deleting a person is not the same
-  -- power as editing one, and `operations_manager` reaches five sections that
-  -- deliberately do not include Members. Checked here rather than in the page,
-  -- because the page is a courtesy.
-  if not exists (
-    select 1 from public.profiles
-     where user_id = auth.uid() and role in ('admin', 'global_admin')
-  ) then
+  delete from public.marketing_contacts where linked_user_id = u or lower(email) = lower(e);
+  delete from public.hackathon_participants where user_id = u or lower(email) = lower(e);
+  delete from public.promptarena_legacy_players where user_id = u or lower(email) = lower(e);
+  delete from public.prospect_profiles where claimed_by = u or lower(email) = lower(e);
+  delete from public.feed_posts where author_id = u or subject_user_id = u;
+end; $fn$;
+
+revoke execute on function public.purge_member_traces(uuid, text) from public, anon, authenticated;
+
+create or replace function public.delete_member_completely(p_user_id uuid)
+returns jsonb language plpgsql security definer
+set search_path = public, pg_temp, auth as $fn$
+declare v_email text;
+begin
+  if not exists (select 1 from public.profiles where user_id = auth.uid() and role in ('admin','global_admin')) then
     raise exception 'Only a global admin may delete a member';
   end if;
-
-  -- Refusing to delete yourself is not paternalism: this function runs as its
-  -- owner, so it would succeed, and the session would then be holding a token
-  -- for a user that no longer exists.
   if p_user_id = auth.uid() then
     raise exception 'You cannot delete your own account from here';
   end if;
-
   select email into v_email from auth.users where id = p_user_id;
-  if v_email is null then
-    raise exception 'No such member';
-  end if;
-
-  -- ---- the four that keep personal data inline ----------------------------
-  delete from public.marketing_contacts
-   where linked_user_id = p_user_id or lower(email) = lower(v_email);
-  get diagnostics v_n = row_count;
-  v_counts := v_counts || jsonb_build_object('marketing_contacts', v_n);
-
-  delete from public.hackathon_participants
-   where user_id = p_user_id or lower(email) = lower(v_email);
-  get diagnostics v_n = row_count;
-  v_counts := v_counts || jsonb_build_object('hackathon_participants', v_n);
-
-  delete from public.promptarena_legacy_players
-   where user_id = p_user_id or lower(email) = lower(v_email);
-  get diagnostics v_n = row_count;
-  v_counts := v_counts || jsonb_build_object('promptarena_legacy_players', v_n);
-
-  delete from public.prospect_profiles
-   where claimed_by = p_user_id or lower(email) = lower(v_email);
-  get diagnostics v_n = row_count;
-  v_counts := v_counts || jsonb_build_object('prospect_profiles', v_n);
-
-  -- ⚠ Matched on EMAIL as well as user_id on purpose. These four are the
-  -- tables a person can appear in BEFORE they ever sign up — a marketing
-  -- contact, a hackathon entrant, a legacy player. Deleting only the linked row
-  -- would leave the pre-membership copy of the same person behind, which is
-  -- exactly the record they would be asking us to remove.
-
-  -- ---- their own writing --------------------------------------------------
-  delete from public.feed_posts where author_id = p_user_id or subject_user_id = p_user_id;
-  get diagnostics v_n = row_count;
-  v_counts := v_counts || jsonb_build_object('feed_posts', v_n);
-
-  -- ---- everything else goes with the user --------------------------------
-  -- 14 tables cascade from auth.users, and profiles with them.
+  if v_email is null then raise exception 'No such member'; end if;
+  perform public.purge_member_traces(p_user_id, v_email);
   delete from auth.users where id = p_user_id;
-
-  return jsonb_build_object(
-    'deleted', true,
-    'email', v_email,
-    'explicitly_removed', v_counts
-  );
-end;
-$$;
+  return jsonb_build_object('deleted', true, 'email', v_email);
+end; $fn$;
 
 revoke execute on function public.delete_member_completely(uuid) from public, anon;
 grant execute on function public.delete_member_completely(uuid) to authenticated;
