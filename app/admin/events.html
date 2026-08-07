@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css">
+<link rel="stylesheet" href="admin.css?v=f0f6f85ac9">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -332,10 +332,10 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js";
-  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js";
+  import { supabase } from "../../lib/supabase-client.js?v=f0f6f85ac9";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=f0f6f85ac9";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js";
+    from "../../lib/admin-guard.js?v=f0f6f85ac9";
 
   const user = await requireStaff("events");
   if (!user) throw new Error("not staff");
@@ -765,7 +765,39 @@
 
     var data = res.data;
     if (res.error || !data) {
-      showMessage("src-msg", "Import failed. Fill the form in manually, or try again.", "err");
+      // ⚠ Say what the server said. This used to be a flat "Import failed. Fill
+      // the form in manually, or try again." — which is the same sentence
+      // whether the importer refused the caller, the AI provider was down, or
+      // the page could not be read. On 7 Aug it said exactly that while the
+      // server was answering 403 {"error":"Staff only"}, and turned a one-line
+      // role bug into a long diagnosis. A message that cannot distinguish a
+      // permissions fault from a transient outage tells the reader to retry
+      // forever.
+      //
+      // functions.invoke() puts the real body on error.context, which has to be
+      // read asynchronously — that is why it is not simply error.message.
+      var detail = "";
+      if (res.error) {
+        detail = res.error.message || String(res.error);
+        try {
+          if (res.error.context && typeof res.error.context.text === "function") {
+            var body = await res.error.context.text();
+            if (body) {
+              try {
+                var parsed = JSON.parse(body);
+                detail = parsed.error || parsed.message || body;
+                // The importer marks upstream hiccups retryable; the caller
+                // deserves to know which kind of failure this was.
+                if (parsed.retryable) detail += " (temporary — try again in a moment)";
+              } catch (e) { detail = body.slice(0, 300); }
+            }
+          }
+        } catch (e) { /* keep error.message */ }
+      } else {
+        detail = "the importer returned nothing";
+      }
+      showMessage("src-msg",
+        "Import failed: " + detail + " — or fill the form in manually.", "err");
       return;
     }
 

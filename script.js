@@ -599,7 +599,7 @@
   ].filter(Boolean);
   if (!links.length) return;
 
-  import("./lib/supabase-client.js").then(function (mod) {
+  import("./lib/supabase-client.js?v=f0f6f85ac9").then(function (mod) {
     if (!mod.isConfigured) return null;
     return mod.supabase.auth.getSession().then(function (res) {
       var session = res.data.session;
@@ -671,7 +671,7 @@
   );
   if (!links.length) return;
 
-  import("./lib/supabase-client.js").then(function (mod) {
+  import("./lib/supabase-client.js?v=f0f6f85ac9").then(function (mod) {
     if (mod.isConfigured) return;
     links.forEach(function (link) {
       link.href = "mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in";
@@ -708,12 +708,12 @@
 
   var notifications = null;
 
-  import("./lib/supabase-client.js")
+  import("./lib/supabase-client.js?v=f0f6f85ac9")
     .then(function (client) {
       // A repo published before its Supabase project exists has no counts to
       // read and no session to read them with.
       if (!client.isConfigured) return null;
-      return import("./lib/auth.js").then(function (auth) {
+      return import("./lib/auth.js?v=f0f6f85ac9").then(function (auth) {
         return auth.getSession();
       });
     })
@@ -723,7 +723,7 @@
       // made to wait on a request that can only ever return nothing.
       if (!session || !session.user) return null;
 
-      return import("./lib/notifications.js").then(function (mod) {
+      return import("./lib/notifications.js?v=f0f6f85ac9").then(function (mod) {
         notifications = mod;
         return mod.refreshNavBadges().then(function () {
           // Opening a section reads it. Without this the count a member just
@@ -748,7 +748,7 @@
           // again after switching it on. It is a no-op when push was never
           // enabled here, and it never prompts: reconcile() returns early
           // unless permission is already granted.
-          return import("./lib/push.js").then(function (push) {
+          return import("./lib/push.js?v=f0f6f85ac9").then(function (push) {
             push.reconcile();
             push.listenForResubscribe();
           }).catch(function () {
