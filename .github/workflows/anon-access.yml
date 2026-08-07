@@ -1,0 +1,80 @@
+# Can a signed-out visitor still use the site?
+# ------------------------------------------------------------
+# Runs tools/check-anon-access.mjs against production as `anon` — the same
+# publishable key every visitor's browser holds — and fails if the public
+# tables have stopped being readable, or the private ones have started.
+#
+# ---- Why this is on a SCHEDULE and not in a pre-commit check -------------
+#
+# On 7 Aug 2026 every signed-out visitor lost the ability to open any event for
+# four hours. The cause was migration 0054, applied by hand in the Supabase SQL
+# editor: an added policy called a function `anon` has no EXECUTE on, so every
+# anonymous read of `events` aborted.
+#
+# There was NO COMMIT and NO DEPLOY. The repository was byte-identical before
+# and after. A check that runs on push could not have caught it, and neither
+# could a check that runs at build time — the site's files were fine. The only
+# thing that changed was the database, and the only way to notice is to ask the
+# database, on a clock.
+#
+# It was found because a member told Ahmed.
+#
+# ---- Why this one is enabled and the sweep watchdog is not ---------------
+#
+# The watchdog next door is disabled because it needs two secrets that are not
+# set, so it would fail every run for a known reason — and alert fatigue is how
+# a monitored outage goes unnoticed.
+#
+# This has no such problem: it needs NO secrets. The publishable key is public
+# by design, ships in lib/supabase-client.js, and is in every visitor's browser
+# already. So a red cross here always means something is actually wrong, which
+# is the only condition under which leaving a schedule on is honest.
+#
+# ⚠ It must NEVER be given the service-role key. The whole point is to see what
+# an anonymous stranger sees; a privileged key would make every check pass and
+# the file would become a lie that reassures.
+
+name: Anonymous visitor access
+
+on:
+  # Hourly. The failure this catches is a hand-applied migration, which happens
+  # during a working session — so an hour bounds the damage to roughly one, and
+  # the last one ran for four. GitHub's scheduled runs are best-effort and can
+  # be delayed under load; that is fine, because the check measures the
+  # database's current state rather than anything about when it ran.
+  schedule:
+    - cron: "17 * * * *"
+  # Every push, too: a change to the checker itself should be proven before it
+  # is trusted, and this costs seconds.
+  push:
+    branches: [main]
+    paths:
+      - "tools/check-anon-access.mjs"
+      - ".github/workflows/anon-access.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: anon-access
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Look at the database as a signed-out visitor
+        run: node tools/check-anon-access.mjs
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::A signed-out visitor does NOT see what they should. The step above lists which tables. If a PUBLIC one is failing, real people cannot use the site right now."
