@@ -40,6 +40,10 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+// The secret pg_cron presents. Set from tools/generate-sender-token.mjs and
+// stored in Supabase Vault under `service_role_key` — the Vault row keeps its
+// original name so 0052 does not need changing; what it HOLDS is now this.
+const SENDER_TOKEN = Deno.env.get("SENDER_TOKEN") ?? "";
 const VAPID_PUBLIC_KEY = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const VAPID_PRIVATE_KEY = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 // Push services want a contact for whoever is sending, so they can get in
@@ -77,8 +81,27 @@ Deno.serve(async (req) => {
 
   // Scheduled job, not a public endpoint. Without this anyone could drain the
   // queue, or simply run it repeatedly to make the club look broken.
+  // ⚠ SENDER_TOKEN, with SUPABASE_SERVICE_ROLE_KEY kept as a fallback.
+  //
+  // This compared the bearer against SERVICE_ROLE_KEY alone and returned 403 to
+  // every scheduled call, because the value Supabase injects here matches none
+  // of the keys the dashboard offers. Established on 7 Aug 2026 by comparing
+  // SHA-256 digests — legacy anon, legacy service_role and the new sb_secret_
+  // key all differ from it — and then confirmed empirically: storing the legacy
+  // service_role key in the Vault and invoking by hand still returned 403.
+  // Redeploying did not refresh it either.
+  //
+  // So the shared secret is now one we generate on purpose
+  // (tools/generate-sender-token.mjs) and hold in exactly two places: this
+  // function's secrets, and the Vault row pg_cron reads.
+  //
+  // The fallback stays so that a deployment where SENDER_TOKEN was never set
+  // behaves as it did before rather than becoming unreachable. Both comparisons
+  // still FAIL CLOSED — an unset token cannot match, because the empty string is
+  // rejected before either comparison runs.
   const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-  if (!SERVICE_ROLE_KEY || bearer !== SERVICE_ROLE_KEY) {
+  const expected = SENDER_TOKEN || SERVICE_ROLE_KEY;
+  if (!expected || bearer !== expected) {
     return json({ error: "Not allowed" }, 403);
   }
 
