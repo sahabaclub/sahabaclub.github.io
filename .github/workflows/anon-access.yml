@@ -67,9 +67,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 22, not 20: the runner warns that 20 is deprecated. The script needs
+      # nothing newer than global fetch (Node 18+), so this is about staying on
+      # a supported runtime rather than about a feature.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Look at the database as a signed-out visitor
         run: node tools/check-anon-access.mjs
