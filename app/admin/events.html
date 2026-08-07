@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=1696b16761">
+<link rel="stylesheet" href="admin.css?v=921779d252">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -332,10 +332,10 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=1696b16761";
-  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=1696b16761";
+  import { supabase } from "../../lib/supabase-client.js?v=921779d252";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=921779d252";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js?v=1696b16761";
+    from "../../lib/admin-guard.js?v=921779d252";
 
   const user = await requireStaff("events");
   if (!user) throw new Error("not staff");

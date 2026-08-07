@@ -530,6 +530,31 @@ html.light-mode .theme-choice-btn.is-active { color: #fff; }
   cursor: pointer;
 }
 .mobile-menu-item:hover, .mobile-menu-item:focus-visible { background: rgba(255, 255, 255, 0.06); }
+
+/* ---- menu icons ---------------------------------------------------------
+   18px, currentColor, no fill — so they inherit hover and the light theme
+   without a second rule for each.
+
+   ⚠ The label span is what makes `justify-content: space-between` above still
+   behave. An item can hold THREE children: icon, label, and the unread badge
+   that lib/notifications.js appends last. Left to space-between those spread
+   across the full width — icon hard left, label adrift in the middle, badge
+   hard right. Letting the label take the slack instead pins the icon beside
+   its text and keeps the badge on the right, with or without a badge present.
+
+   Excludes .nav-badge and .mobile-menu-chevron, which must stay their own
+   size — the chevron is the Settings expander, not a label. */
+.mobile-menu-item .menu-ico {
+  width: 18px; height: 18px; flex-shrink: 0; opacity: 0.8;
+  transition: opacity 0.18s, color 0.18s;
+}
+.mobile-menu-item > span:not(.nav-badge):not(.mobile-menu-chevron) { flex: 1 1 auto; }
+.mobile-menu-item:hover .menu-ico,
+.mobile-menu-item:focus-visible .menu-ico { opacity: 1; color: var(--cyan); }
+/* The gradient pill has a near-black label; a cyan icon on it would vanish. */
+.mobile-menu-item.is-primary .menu-ico { opacity: 1; }
+.mobile-menu-item.is-primary:hover .menu-ico { color: inherit; }
+
 .mobile-menu-item.is-primary {
   background: linear-gradient(90deg, var(--violet), var(--cyan));
   color: #05070d;
