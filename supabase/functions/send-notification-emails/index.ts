@@ -48,6 +48,8 @@ import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+// See the long note beside the check below, and in send-push.
+const SENDER_TOKEN = Deno.env.get("SENDER_TOKEN") ?? "";
 
 // One pass. Small on purpose: this runs every few minutes, so a backlog drains
 // over several passes rather than one invocation trying to mail everybody and
@@ -83,8 +85,18 @@ Deno.serve(async (req) => {
 
   // Scheduled job, not a public endpoint. Without this anyone could drain the
   // queue — or simply run it repeatedly to make the club look like a spammer.
+  // ⚠ SENDER_TOKEN, with SUPABASE_SERVICE_ROLE_KEY kept as a fallback. The
+  // value Supabase injects as SUPABASE_SERVICE_ROLE_KEY matches none of the
+  // keys the dashboard offers, so comparing against it alone returned 403 to
+  // every scheduled call. Proven by digest comparison and then confirmed by
+  // storing the legacy service_role key and still getting 403. Full account in
+  // tools/generate-sender-token.mjs and in send-push.
+  //
+  // Fails closed either way: an unset token cannot match, because the empty
+  // string is rejected before the comparison.
   const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-  if (!SERVICE_ROLE_KEY || bearer !== SERVICE_ROLE_KEY) {
+  const expected = SENDER_TOKEN || SERVICE_ROLE_KEY;
+  if (!expected || bearer !== expected) {
     return json({ error: "Not allowed" }, 403);
   }
   if (!SUPABASE_URL) return json({ error: "not configured" }, 503);
