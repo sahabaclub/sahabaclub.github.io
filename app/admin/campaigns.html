@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css">
+<link rel="stylesheet" href="admin.css?v=f0f6f85ac9">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -291,9 +291,9 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js";
+  import { supabase } from "../../lib/supabase-client.js?v=f0f6f85ac9";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js";
+    from "../../lib/admin-guard.js?v=f0f6f85ac9";
 
   const user = await requireStaff("campaigns");
   renderShell(user, "campaigns.html");

@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="../styles.css?v=f0f6f85ac9">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -475,12 +475,12 @@
 </main>
 
 <script type="module">
-  import { supabase } from "../lib/supabase-client.js";
-  import { getSession, sessionPhotoProviders } from "../lib/auth.js";
+  import { supabase } from "../lib/supabase-client.js?v=f0f6f85ac9";
+  import { getSession, sessionPhotoProviders } from "../lib/auth.js?v=f0f6f85ac9";
   import {
     loadTagSuggestions, suggestionsFor, createTagPicker, saveErrorMessage,
     createAvatarControl,
-  } from "../lib/profile-form.js";
+  } from "../lib/profile-form.js?v=f0f6f85ac9";
 
   var stepMs365 = document.getElementById("step-ms365");
   var stepProfile = document.getElementById("step-profile");
@@ -1105,6 +1105,6 @@
     finishOnboarding("dashboard.html");
   });
 </script>
-<script src="../script.js"></script>
+<script src="../script.js?v=f0f6f85ac9"></script>
 </body>
 </html>

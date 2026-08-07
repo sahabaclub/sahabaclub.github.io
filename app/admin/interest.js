@@ -20,8 +20,8 @@
 // through escapeHtml() on its way into the DOM. Same reasoning as the mail
 // template in send-transactional-email: this is the second place a submitted
 // `<script>` would land.
-import { supabase } from "../../lib/supabase-client.js";
-import { requireStaff, renderShell, escapeHtml } from "../../lib/admin-guard.js";
+import { supabase } from "../../lib/supabase-client.js?v=f0f6f85ac9";
+import { requireStaff, renderShell, escapeHtml } from "../../lib/admin-guard.js?v=f0f6f85ac9";
 
 // ⚠ Every module-level binding is declared HERE, above the first line that
 // runs, with no exceptions and no judgement about which are reachable. See
