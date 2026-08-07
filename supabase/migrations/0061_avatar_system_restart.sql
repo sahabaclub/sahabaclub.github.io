@@ -89,8 +89,23 @@ create table if not exists public.avatar_restart_2026_08 (
   prior_avatar_cycle text,
   prior_avatar_attempts integer,
   recorded_at timestamptz not null default now(),
-  restored_at timestamptz
+  restored_at timestamptz,
+  -- ⚠ The announcement's own bookkeeping, kept HERE rather than in a second
+  -- table because the audience for the mail is exactly this snapshot: the
+  -- members who existed at the moment of the restart. Somebody who signs up
+  -- tomorrow must not be told we redrew an avatar they never had.
+  --
+  -- `announced_at` is stamped only after send-transactional-email returns
+  -- cleanly, so a crash mid-run costs at most one duplicate. `announce_error`
+  -- is the other half: a send that fails leaves a reason behind instead of a
+  -- member who is silently never told.
+  announced_at timestamptz,
+  announce_error text
 );
+
+create index if not exists avatar_restart_2026_08_pending_idx
+  on public.avatar_restart_2026_08 (announced_at)
+  where announced_at is null;
 
 comment on table public.avatar_restart_2026_08 is
   'Point-in-time snapshot taken before the 8 Aug 2026 avatar restart. Exists '
