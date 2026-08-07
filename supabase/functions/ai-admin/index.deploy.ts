@@ -427,14 +427,19 @@ function readError(raw: unknown): string {
 //
 //   { ok: true,  models: [...] }  Google answered. Safe to retire what is missing.
 //   { ok: false, reason: "no-key" }   Not configured. Do not touch Google rows.
+//   { ok: false, reason: "bad-key" }  Google refused the key. Do not touch Google rows.
 //   { ok: false, reason: "unreachable" } Ask failed. Do not touch Google rows.
 //
 // A project with no Google key must still show its OpenAI models, so this is
 // never fatal to the listing.
 interface GoogleModelList {
   ok: boolean;
-  reason?: "no-key" | "unreachable";
+  reason?: "no-key" | "bad-key" | "unreachable";
   models: Array<{ id: string; kind: "text" | "image" | "other"; owned_by: string }>;
+  // Google's own words when it refused. Carried because "invalid", "revoked"
+  // and "restricted to another referrer" are three different fixes and only
+  // the message says which.
+  detail?: string;
 }
 
 async function listGoogleModels(): Promise<GoogleModelList> {
@@ -444,7 +449,23 @@ async function listGoogleModels(): Promise<GoogleModelList> {
       "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
       { headers: { "x-goog-api-key": GOOGLE_KEY } },
     );
-    if (!res.ok) return { ok: false, reason: "unreachable", models: [] };
+    // ⚠ A REFUSED KEY IS NOT AN UNREACHABLE API, and after a rotation that is
+    // the only distinction that matters. Google answers a key it will not
+    // accept with 400 INVALID_ARGUMENT, 401, or 403 PERMISSION_DENIED — it
+    // ANSWERED, so the network is fine and retrying forever changes nothing.
+    // Folding that into "unreachable" produces the worst possible message the
+    // day somebody rotates this key: it points at the network while the panel
+    // goes on showing 42 models that no longer answer to anyone.
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      const refused = res.status === 400 || res.status === 401 || res.status === 403;
+      return {
+        ok: false,
+        reason: refused ? "bad-key" : "unreachable",
+        models: [],
+        detail: body.slice(0, 300),
+      };
+    }
     const raw = await res.json();
     const models = (raw as { models?: Array<{ name?: string; supportedGenerationMethods?: string[] }> })?.models ?? [];
     const mapped = models
@@ -1086,6 +1107,16 @@ async function listModels(admin: ReturnType<typeof createClient>): Promise<Respo
     }
   } else if (google.reason === "no-key") {
     googleNote = "Gemini is not configured — set GEMINI_API_KEY to offer Google models.";
+  } else if (google.reason === "bad-key") {
+    // ⚠ THE MODELS BELOW ARE STALE AND THIS HAS TO SAY SO. Google rows are
+    // deliberately not retired on a failure, so the list still shows every
+    // Gemini model it showed yesterday — which after a botched key rotation is
+    // a panel that looks perfectly healthy and cannot make a single call. The
+    // count is the reassuring thing on screen, so the correction has to sit
+    // next to it.
+    googleNote = "Google REJECTED the GEMINI_API_KEY on this project" +
+      (google.detail ? " (" + google.detail.replace(/\s+/g, " ").slice(0, 160) + ")" : "") +
+      ". Any Gemini model listed below is left over from the last good refresh and will fail if it is called. Set a working key and refresh.";
   } else if (google.reason === "unreachable") {
     // Say it plainly. Silence here reads as "Google has no models", which
     // would send someone to the Google console rather than to the network.
@@ -1551,10 +1582,42 @@ async function runTest(
     }
   }
 
+  // ⚠ WHO MAKES THIS MODEL COMES FROM `ai_models`, NOT FROM THE NAME. That
+  // column is recorded from whichever API actually returned the id, so it is
+  // the only thing that knows `antigravity-preview-05-2026` and `learnlm-*`
+  // are Google's — the name heuristic reads them as OpenAI's and a mis-routed
+  // test asks OpenAI about a Google model, gets 404, and reports "this account
+  // cannot use it": a sentence that sends you to the model list rather than to
+  // the router. The heuristic is the fallback for a model with no row yet.
+  const { data: modelRow } = await admin
+    .from("ai_models")
+    .select("provider")
+    .eq("id", version.model)
+    .maybeSingle();
+  const provider: Provider = modelRow?.provider === "google"
+    ? "google"
+    : modelRow?.provider === "openai"
+    ? "openai"
+    : providerFor(String(version.model));
+
+  // ⚠ Google's models are all recorded `kind = 'text'` because none of them
+  // serve generateContent for images, and 0031's trigger will not let a text
+  // model be saved for an image service — so this should be unreachable. It is
+  // checked anyway: testImage POSTs OpenAI's endpoint unconditionally, and if
+  // that pairing ever does arrive it would spend a real call to say "model not
+  // found" about a model that exists. If the check is not in this file, it is
+  // not made.
+  if (service.kind === "image" && provider === "google") {
+    return json({
+      error: `"${version.model}" is a Google model and this service makes images. ` +
+        "Google's image models are not reachable through the API this project uses, so there is nothing to test. Choose an OpenAI image model.",
+    }, 400);
+  }
+
   const startedAt = Date.now();
   const result = service.kind === "image"
     ? await testImage(service.slug, parts, version.model)
-    : await testText(service.slug, parts, version.model, version.max_output_tokens ?? service.recommended_max_output_tokens ?? 4000);
+    : await testText(service.slug, parts, version.model, version.max_output_tokens ?? service.recommended_max_output_tokens ?? 4000, provider);
 
   const detail = {
     ...result.detail,
@@ -1611,6 +1674,7 @@ async function testText(
   parts: Record<string, unknown>,
   model: string,
   maxOutputTokens: number,
+  provider: Provider,
 ): Promise<TestResult> {
   const probe = PROBES[slug];
   if (!probe) {
@@ -1627,24 +1691,25 @@ async function testText(
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), TEST_TIMEOUT_MS);
 
-  let res: Response;
+  // ⚠ THE TEST NOW ASKS WHOEVER MAKES THE MODEL. This used to POST
+  // api.openai.com unconditionally, which meant the panel could list a Gemini
+  // model, let staff select it, and then prove it against the wrong vendor
+  // with the wrong key — 404 model_not_found for a model that exists and works.
+  // That is the same shape as the image test that green-lit `gpt-image-2` by
+  // calling an endpoint the service never calls: passing one provider's API
+  // says nothing about the other's. `callText` translates the system prompt,
+  // the user turn and the JSON schema into each provider's dialect, so what is
+  // proved here is what the service will send.
+  let result: TextResult;
   try {
-    res = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
+    result = await callText({
+      model,
+      provider,
+      system: instructions,
+      user: probe.input,
+      maxOutputTokens,
+      schema: { name: probe.schemaName, schema: probe.schema },
       signal: abort.signal,
-      headers: {
-        "Authorization": "Bearer " + OPENAI_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        instructions,
-        max_output_tokens: maxOutputTokens,
-        input: [{ role: "user", content: [{ type: "input_text", text: probe.input }] }],
-        text: {
-          format: { type: "json_schema", name: probe.schemaName, strict: true, schema: probe.schema },
-        },
-      }),
     });
   } catch (err) {
     return {
@@ -1659,72 +1724,94 @@ async function testText(
     clearTimeout(timer);
   }
 
-  if (!res.ok) {
-    const body = await res.text();
-    console.error(`ai-admin test ${slug} ${res.status}: ${body.slice(0, 400)}`);
+  if (!result.ok) {
+    console.error(`ai-admin test ${slug} ${result.provider} ${result.status}: ${String(result.error ?? "").slice(0, 400)}`);
     return {
       ok: false,
-      reason: triage(res.status, body, model),
+      reason: triage(result.status, String(result.error ?? ""), model, result.provider),
       composedPrompt: instructions,
-      detail: { http_status: res.status },
+      detail: { http_status: result.status, provider: result.provider },
     };
   }
 
-  const data = await res.json();
-  const usage = {
-    output_tokens: data?.usage?.output_tokens ?? null,
-    reasoning_tokens: data?.usage?.output_tokens_details?.reasoning_tokens ?? null,
-    ceiling: maxOutputTokens,
-  };
+  // Both vendors report what the call cost, in different places and under
+  // different names. Google's `thoughtsTokenCount` is the same idea as
+  // OpenAI's reasoning tokens and matters for the same reason: it comes out of
+  // the same ceiling, so a truncation with a large one here is a ceiling to
+  // raise rather than a prompt to shorten.
+  // deno-lint-ignore no-explicit-any
+  const raw = result.raw as any;
+  const usage = result.provider === "google"
+    ? {
+      output_tokens: raw?.usageMetadata?.candidatesTokenCount ?? null,
+      reasoning_tokens: raw?.usageMetadata?.thoughtsTokenCount ?? null,
+      ceiling: maxOutputTokens,
+    }
+    : {
+      output_tokens: raw?.usage?.output_tokens ?? null,
+      reasoning_tokens: raw?.usage?.output_tokens_details?.reasoning_tokens ?? null,
+      ceiling: maxOutputTokens,
+    };
 
   // ⚠ Checked before parsing, exactly as `promptarena-judge` does: a truncated
-  // response still carries an output_text part, cut off mid-string. Parsing it
-  // could succeed against a half-written object and report a pass.
-  if (data?.status === "incomplete") {
-    const why = data?.incomplete_details?.reason ?? "unknown";
+  // response still carries its text, cut off mid-string. Parsing it could
+  // succeed against a half-written object and report a pass.
+  if (result.stopReason === "filter") {
     return {
       ok: false,
-      reason: why === "content_filter"
-        ? "The model's own filter stopped it partway through. This is not a ceiling problem — look at what the prompt is asking for."
-        : `The model ran out of room before finishing (ceiling ${maxOutputTokens}, of which ${usage.reasoning_tokens ?? "an unreported number of"} tokens went on reasoning). On the gpt-5 family the ceiling is shared with the model's own reasoning, so this is a ceiling to raise, not a prompt to shorten.`,
+      reason: "The model's own safety filter stopped it. This is not a ceiling problem and retrying will not help — look at what the prompt is asking for.",
       composedPrompt: instructions,
-      detail: { usage, incomplete_reason: why },
+      detail: { usage, stop_reason: result.stopReason, provider: result.provider },
     };
   }
 
-  const message = (data?.output ?? []).find((o: { type?: string }) => o.type === "message");
-  const contentParts = message?.content ?? [];
-
-  if (contentParts.some((p: { type?: string }) => p.type === "refusal")) {
-    const refusal = contentParts.find((p: { type?: string }) => p.type === "refusal");
+  if (result.stopReason === "length") {
     return {
       ok: false,
-      reason: "The model declined these instructions: " + String(refusal?.refusal ?? "").slice(0, 300),
+      reason:
+        `The model ran out of room before finishing (ceiling ${maxOutputTokens}, of which ${usage.reasoning_tokens ?? "an unreported number of"} tokens went on reasoning). On the gpt-5 and Gemini thinking families the ceiling is shared with the model's own reasoning, so this is a ceiling to raise, not a prompt to shorten.`,
       composedPrompt: instructions,
-      detail: { usage },
+      detail: { usage, stop_reason: result.stopReason, provider: result.provider },
     };
   }
 
-  const textPart = contentParts.find((p: { type?: string }) => p.type === "output_text");
-  if (!textPart?.text) {
+  if (result.refused) {
+    // OpenAI puts the reason in a `refusal` part; Google says only that safety
+    // stopped it, so there is nothing to quote and the sentence has to stand
+    // on its own.
+    const refusal = (raw?.output ?? [])
+      // deno-lint-ignore no-explicit-any
+      .flatMap((o: any) => o?.content ?? [])
+      // deno-lint-ignore no-explicit-any
+      .find((p: any) => p?.type === "refusal")?.refusal;
+    return {
+      ok: false,
+      reason: "The model declined these instructions" +
+        (refusal ? ": " + String(refusal).slice(0, 300) : "."),
+      composedPrompt: instructions,
+      detail: { usage, provider: result.provider },
+    };
+  }
+
+  if (!result.text) {
     return {
       ok: false,
       reason: "The call succeeded but produced no output at all. Nothing about this prompt can be relied on.",
       composedPrompt: instructions,
-      detail: { usage },
+      detail: { usage, provider: result.provider },
     };
   }
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(textPart.text);
+    parsed = JSON.parse(result.text);
   } catch (err) {
     return {
       ok: false,
       reason: "The output was not valid JSON, so every call made with this prompt would fail: " +
         String(err instanceof Error ? err.message : err),
       composedPrompt: instructions,
-      detail: { usage, raw: String(textPart.text).slice(0, 1000) },
+      detail: { usage, provider: result.provider, raw: String(result.text).slice(0, 1000) },
     };
   }
 
@@ -1742,16 +1829,16 @@ async function testText(
       ok: false,
       reason: `The output was missing required fields (${missing.join(", ")}). The prompt and the schema this service reads no longer agree.`,
       composedPrompt: instructions,
-      detail: { usage, missing },
+      detail: { usage, provider: result.provider, missing },
     };
   }
 
   return {
     ok: true,
-    reason: "One real call, valid JSON, every required field present.",
+    reason: `One real call to ${result.provider === "google" ? "Google" : "OpenAI"}, valid JSON, every required field present.`,
     output: parsed,
     composedPrompt: instructions,
-    detail: { usage },
+    detail: { usage, provider: result.provider },
   };
 }
 
@@ -1901,18 +1988,37 @@ async function testImage(
 
 // One triage for both endpoints. The remedy differs by cause and a generic
 // "something went wrong" sends a staff member to the wrong screen.
-function triage(status: number, detail: string, model: string): string {
-  if (/model_not_found|does not exist|unknown model/i.test(detail)) {
+// ⚠ Names the vendor that actually refused, and the key that actually needs
+// looking at. Telling somebody to check OPENAI_API_KEY because a Gemini call
+// came back 403 is worse than saying nothing: it is a confident instruction to
+// go and stare at a credential that is working fine.
+function triage(status: number, detail: string, model: string, provider: Provider = "openai"): string {
+  const vendor = provider === "google" ? "Google" : "OpenAI";
+  const keyName = provider === "google" ? "GEMINI_API_KEY" : "OPENAI_API_KEY";
+
+  // "is not found for API version v1beta" is Google's phrasing for the same
+  // thing OpenAI calls model_not_found.
+  if (/model_not_found|does not exist|unknown model|not found for API version/i.test(detail)) {
     return `This account cannot use "${model}". Refresh the model list and pick another.`;
   }
   if (/insufficient_quota|billing_hard_limit|exceeded your current quota/i.test(detail)) {
-    return "The OpenAI balance is spent. No amount of retrying will change this one — the account needs credit.";
+    return `The ${vendor} balance is spent. No amount of retrying will change this one — the account needs credit.`;
   }
-  if (status === 401) return "OpenAI rejected our credentials. Check OPENAI_API_KEY in the Edge Function secrets.";
-  if (status === 429) return "OpenAI is rate-limiting us. Wait a moment and test again — this is not a verdict on the prompt.";
-  if (status >= 500) return `OpenAI returned ${status}. That is their side; test again shortly.`;
+  // ⚠ Google answers a key it will not accept with 400 INVALID_ARGUMENT at
+  // least as often as with 401, so the status code alone does not identify a
+  // dead credential — and a 400 otherwise reads as "your prompt or schema is
+  // wrong", which is a long evening spent rewriting a prompt that was never
+  // the problem. The message is what distinguishes them.
+  if (/API key not valid|API_KEY_INVALID|PERMISSION_DENIED|invalid authentication|invalid_api_key/i.test(detail)) {
+    return `${vendor} rejected our credentials. Check ${keyName} in the Edge Function secrets — this says nothing about the prompt.`;
+  }
+  if (status === 401 || status === 403) {
+    return `${vendor} rejected our credentials. Check ${keyName} in the Edge Function secrets.`;
+  }
+  if (status === 429) return `${vendor} is rate-limiting us. Wait a moment and test again — this is not a verdict on the prompt.`;
+  if (status >= 500) return `${vendor} returned ${status}. That is their side; test again shortly.`;
   // A 400 from a structured-output call is very often the prompt or the schema.
-  return `OpenAI refused the request (${status}). ${detail.slice(0, 300)}`;
+  return `${vendor} refused the request (${status}). ${detail.slice(0, 300)}`;
 }
 
 function json(body: unknown, status = 200) {

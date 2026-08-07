@@ -357,14 +357,19 @@ function readError(raw: unknown): string {
 //
 //   { ok: true,  models: [...] }  Google answered. Safe to retire what is missing.
 //   { ok: false, reason: "no-key" }   Not configured. Do not touch Google rows.
+//   { ok: false, reason: "bad-key" }  Google refused the key. Do not touch Google rows.
 //   { ok: false, reason: "unreachable" } Ask failed. Do not touch Google rows.
 //
 // A project with no Google key must still show its OpenAI models, so this is
 // never fatal to the listing.
 export interface GoogleModelList {
   ok: boolean;
-  reason?: "no-key" | "unreachable";
+  reason?: "no-key" | "bad-key" | "unreachable";
   models: Array<{ id: string; kind: "text" | "image" | "other"; owned_by: string }>;
+  // Google's own words when it refused. Carried because "invalid", "revoked"
+  // and "restricted to another referrer" are three different fixes and only
+  // the message says which.
+  detail?: string;
 }
 
 export async function listGoogleModels(): Promise<GoogleModelList> {
@@ -374,7 +379,23 @@ export async function listGoogleModels(): Promise<GoogleModelList> {
       "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
       { headers: { "x-goog-api-key": GOOGLE_KEY } },
     );
-    if (!res.ok) return { ok: false, reason: "unreachable", models: [] };
+    // ⚠ A REFUSED KEY IS NOT AN UNREACHABLE API, and after a rotation that is
+    // the only distinction that matters. Google answers a key it will not
+    // accept with 400 INVALID_ARGUMENT, 401, or 403 PERMISSION_DENIED — it
+    // ANSWERED, so the network is fine and retrying forever changes nothing.
+    // Folding that into "unreachable" produces the worst possible message the
+    // day somebody rotates this key: it points at the network while the panel
+    // goes on showing 42 models that no longer answer to anyone.
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      const refused = res.status === 400 || res.status === 401 || res.status === 403;
+      return {
+        ok: false,
+        reason: refused ? "bad-key" : "unreachable",
+        models: [],
+        detail: body.slice(0, 300),
+      };
+    }
     const raw = await res.json();
     const models = (raw as { models?: Array<{ name?: string; supportedGenerationMethods?: string[] }> })?.models ?? [];
     const mapped = models
