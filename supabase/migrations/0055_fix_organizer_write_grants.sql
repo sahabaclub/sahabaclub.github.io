@@ -1,0 +1,88 @@
+-- 0055 — give `authenticated` the write PRIVILEGES that the organizer
+--        write POLICIES have always assumed
+-- ============================================================
+--
+-- Symptom, hit by Ahmed on 7 Aug saving an event with organizers attached:
+--
+--   The event was saved, but its organizers weren't:
+--   permission denied for table event_organizers
+--
+-- Note the wording. That is a GRANT failure, not an RLS failure. A row blocked
+-- by a policy says "new row violates row-level security policy for table …".
+-- "permission denied for table" is Postgres refusing at the privilege layer,
+-- BEFORE any policy is consulted. The two are easy to confuse and they have
+-- completely different fixes.
+--
+-- ============================================================
+-- What 0048 did, and why it looked right
+-- ============================================================
+--
+-- 0048 created both tables, wrote a public-read policy and a staff-write
+-- policy for each, and then finished with:
+--
+--   revoke all on public.organizers from anon, authenticated;
+--   grant select on public.organizers to anon, authenticated;
+--
+-- The revoke was correct and necessary: Supabase auto-grants ALL on newly
+-- created objects, so `anon` really did start out able to write. Revoking
+-- before granting is the right habit and this project has a memory of it.
+--
+-- The mistake is that the re-grant named `authenticated` alongside `anon` and
+-- gave it `select` only. So `authenticated` was left holding read privileges
+-- and a write POLICY that could never be reached. RLS does not grant anything;
+-- it filters rows for privileges you already hold. A policy without a matching
+-- grant is dead text.
+--
+-- It never surfaced because the 16 organizers and 42 links in the database
+-- were all written by MIGRATIONS (0049, 0050), which run as the table owner
+-- and bypass both layers. The first write attempted through a real session was
+-- Ahmed's, three days later. The admin UI for organizers was equally broken
+-- and equally unnoticed for the same reason.
+--
+-- ============================================================
+-- The fix
+-- ============================================================
+--
+-- Match `events`, which works and has always worked: `authenticated` gets the
+-- write privileges, and the POLICIES decide who may actually use them. On
+-- these two tables that is `is_staff()` (0048) OR `has_admin_section('events')`
+-- / `('organizers')` (0054) — so a plain member gains nothing here. They hold
+-- the privilege and every policy refuses them.
+--
+-- `anon` is deliberately NOT touched. It keeps select and nothing else.
+
+grant insert, update, delete on public.organizers to authenticated;
+grant insert, update, delete on public.event_organizers to authenticated;
+
+-- ============================================================
+-- Verify — run these after applying
+-- ============================================================
+--
+-- 1. Both tables now match `events` for `authenticated`, and `anon` still has
+--    SELECT and nothing else:
+--
+--   select table_name, grantee,
+--          string_agg(privilege_type, ',' order by privilege_type) as privs
+--     from information_schema.role_table_grants
+--    where table_schema = 'public'
+--      and table_name in ('events', 'organizers', 'event_organizers')
+--      and grantee in ('anon', 'authenticated')
+--    group by table_name, grantee
+--    order by table_name, grantee;
+--
+--    Expect `anon` = SELECT on all three (plus REFERENCES/TRIGGER on events,
+--    which are harmless and pre-existing), and `authenticated` to carry
+--    DELETE/INSERT/UPDATE everywhere.
+--
+-- 2. ⚠ THE CHECK THAT ACTUALLY MATTERS, and the one this file exists because
+--    nobody ran: save an event with an organizer attached from app/admin, as a
+--    real signed-in session. A grant query passing proves the privilege is
+--    present; only a real write proves the whole stack agrees.
+--
+-- 3. A plain member must still be refused. The privilege is now held by every
+--    authenticated session, so the policies are doing all the work — which is
+--    exactly the arrangement `events` has always had, but it should be seen to
+--    fail rather than assumed:
+--
+--   -- as a member session, expect: new row violates row-level security policy
+--   insert into public.organizers (name) values ('should not work');
