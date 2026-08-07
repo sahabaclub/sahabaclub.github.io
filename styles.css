@@ -1981,12 +1981,18 @@ html.reduce-motion .mct-eye { animation: none; }
 }
 .filter-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .filter-group-tags { align-items: flex-start; }
+/* When / Format / Price / Organizer / Country.
+   Ahmed: "Just make them clear white color". They were --text-muted, which is
+   the same grey as the secondary copy around them, so the label naming each
+   filter group was quieter than the chips it introduced and the groups ran
+   together. --text is the full-strength foreground and follows the light
+   theme, where "white" would be unreadable. */
 .filter-legend {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text);
   flex-shrink: 0;
 }
 .filter-chips { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -3185,6 +3191,41 @@ html.reduce-motion .pod-play-ring { animation: none; }
 .ev-title-link { color: inherit; text-decoration: none; }
 .ev-title-link:hover { color: var(--cyan); text-decoration: underline; text-underline-offset: 3px; }
 .ev-title-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---- the whole card opens the event -----------------------------------
+   Ahmed: "I want click on the card of the event lead to the event page not
+   only the link."
+
+   Done with a STRETCHED LINK rather than by wrapping the card in an <a>.
+   The card contains a favourite button, a register link and sometimes an
+   attendee face linking to a member profile; an anchor around all of that is
+   invalid HTML and unreachable by keyboard, which is exactly why buildCard()
+   says it does not do it.
+
+   So the title stays the one real link, and its ::after covers the card. The
+   controls are lifted above it, so they keep working and each still announces
+   itself. One anchor, one tab stop, one thing read out.
+
+   Trade-off, accepted knowingly: an overlay swallows text selection, so the
+   card's text can no longer be dragged over. The card is a signpost rather
+   than something anyone copies from, and the event page has the same text
+   selectable. */
+.ev-title-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 14px;
+}
+/* Above the overlay, so they are still clickable. */
+.ev-card .ev-fav,
+.ev-card .ev-register,
+.ev-card .ev-face-link { position: relative; z-index: 2; }
+
+/* The pointer should say "this whole thing is clickable" before it is clicked,
+   and the hover state now belongs to the card rather than the heading alone. */
+.ev-card:has(.ev-title-link) { cursor: pointer; }
+.ev-card:hover .ev-title-link { color: var(--cyan); }
 .ev-meta { display: flex; align-items: flex-start; gap: 6px; font-size: 13.5px; color: var(--text-secondary); margin-bottom: 5px; }
 .ev-meta svg { flex-shrink: 0; margin-top: 2px; opacity: 0.7; }
 

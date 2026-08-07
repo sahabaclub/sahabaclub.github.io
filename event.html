@@ -79,20 +79,66 @@
   }
   .evp-ours { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--cyan); }
 
-  .evp-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 0; }
+  /* Ahmed: "make register button width bigger little bit in the center".
+     The row centres, and the primary action gets a minimum width so it reads
+     as the main thing to do rather than as one chip among several. min-width
+     with a max of 100% rather than a fixed width, so it still fits a narrow
+     phone instead of forcing the row to scroll. */
+  .evp-actions {
+    display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 0;
+    justify-content: center;
+  }
+  .evp-actions > * { min-width: 240px; max-width: 100%; text-align: center; }
   .evp-body { margin: 34px 0 0; font-size: 15.5px; line-height: 1.75; color: var(--text-secondary); white-space: pre-wrap; }
 
   .evp-section { margin: 40px 0 0; }
   .evp-section h2 { font-size: 20px; margin: 0 0 14px; }
 
-  .evp-share { display: flex; flex-wrap: wrap; gap: 8px; }
-  .evp-share-btn {
-    font-size: 13.5px; font-weight: 600; font-family: inherit; cursor: pointer;
-    padding: 9px 15px; border-radius: 999px; color: var(--text);
-    background: var(--glass); border: 1px solid var(--glass-border);
+  /* Round icon buttons in each service's own colour, sitting under the cover.
+     Centred to the cover's width rather than left-aligned, because the cover
+     is the column and a left-aligned row under a centred image looks dropped.
+
+     ⚠ Every button is icon-only, so the accessible name comes entirely from
+     aria-label and the visible affordance entirely from title. Both are set in
+     buildShare(); neither is optional here. */
+  .evp-share {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    justify-content: center; margin: 14px 0 0;
   }
-  .evp-share-btn:hover { border-color: var(--cyan); }
-  .evp-share-msg { font-size: 13px; color: var(--text-muted); margin: 10px 0 0; }
+  .evp-share-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 44px; height: 44px; padding: 0; cursor: pointer;
+    border-radius: 50%; border: 1px solid transparent;
+    color: #fff; font-family: inherit;
+    transition: transform .15s, filter .15s, border-color .15s;
+  }
+  /* 44px is the smallest comfortable touch target, and the glyph sits at 20 so
+     there is a ring of colour around it rather than an icon filling a disc. */
+  .evp-share-btn svg { width: 20px; height: 20px; display: block; }
+  .evp-share-btn:hover { transform: translateY(-2px); filter: brightness(1.08); }
+  .evp-share-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) {
+    .evp-share-btn:hover { transform: none; }
+  }
+
+  /* Official brand colours. X is the awkward one: its mark is black, which
+     vanishes on this background, so it keeps black with a visible rim rather
+     than being recoloured into something that is no longer the logo. */
+  .evp-share-whatsapp { background: #25D366; }
+  .evp-share-linkedin { background: #0A66C2; }
+  .evp-share-x        { background: #000; border-color: rgba(255,255,255,.35); }
+  .evp-share-email    { background: linear-gradient(135deg, #8b5cf6, #22d3ee); }
+  /* Copy and the native sheet are ours, not a brand — glass, so the coloured
+     marks beside them are clearly the third-party ones. */
+  .evp-share-copy,
+  .evp-share-native {
+    background: var(--glass); border-color: var(--glass-border); color: var(--text);
+  }
+  .evp-share-copy:hover,
+  .evp-share-native:hover { border-color: var(--cyan); }
+  html.light-mode .evp-share-x { border-color: rgba(0,0,0,.2); }
+
+  .evp-share-msg { font-size: 13px; color: var(--text-muted); margin: 10px 0 0; text-align: center; }
 
   .evp-related { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
   /* The padding moves off the card and onto the body, so the picture can run
@@ -394,7 +440,15 @@
 
     root.innerHTML =
       '<div class="evp-top">' +
-        "<div>" + art + "</div>" +
+        // Ahmed: "keep it junt under the cover image". Share sat below the
+        // description, which on a long event page put it a scroll away from
+        // the thing being shared. It now hangs off the cover in the same
+        // column, so it is in view at the moment somebody decides to send it
+        // on.
+        "<div>" + art +
+          '<div class="evp-share" id="evp-share"></div>' +
+          '<p class="evp-share-msg" id="evp-share-msg"></p>' +
+        "</div>" +
         "<div>" +
           '<h1 class="evp-title">' + esc(e.title) + "</h1>" +
           '<div class="evp-meta">' + chips.join("") + "</div>" +
@@ -407,9 +461,6 @@
         "</div>" +
       "</div>" +
       (e.description ? '<div class="evp-body">' + esc(e.description) + "</div>" : "") +
-      '<section class="evp-section"><h2>Share or invite a friend</h2>' +
-        '<div class="evp-share" id="evp-share"></div>' +
-        '<p class="evp-share-msg" id="evp-share-msg"></p></section>' +
       '<section class="evp-section"><h2>You might also like</h2>' + relHtml + "</section>";
 
     buildShare(e);
@@ -421,27 +472,60 @@
     var box = document.getElementById("evp-share");
     var msg = document.getElementById("evp-share-msg");
 
+    // ---- brand marks ----------------------------------------------------
+    // Each service's own logo, drawn inline as a path rather than loaded from
+    // its CDN. Three reasons, in order of how much they matter: the page's CSP
+    // allows images from `self` and data: only, so a remote badge would simply
+    // not load; a request to a social network's server on page view tells that
+    // network who is reading this page before anyone has clicked anything; and
+    // an inline path stays sharp at any size and recolours with the button.
+    //
+    // The glyphs are the official marks. `currentColor` lets one path serve
+    // both the coloured circle and any future flat treatment.
+    var MARKS = {
+      whatsapp: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884a9.82 9.82 0 0 1 6.988 2.896 9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.885-9.885 9.885M20.52 3.449C18.24 1.245 15.24 0 12.045 0 5.463 0 .104 5.359.101 11.943c0 2.096.547 4.142 1.588 5.945L0 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.585 0 11.946-5.359 11.949-11.945a11.87 11.87 0 0 0-3.421-8.4"/></svg>',
+      linkedin: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>',
+      x: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>',
+      email: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4.5" width="20" height="15" rx="2.5"/><path d="m3 7 8.4 6a1 1 0 0 0 1.2 0L21 7"/></svg>',
+      copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+      native: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>'
+    };
+
+    // ⚠ Icon-only, so the label is the ONLY thing a screen reader gets and the
+    // only thing a tooltip shows. aria-label AND title on every one: without
+    // aria-label the button announces as "button"; without title a sighted
+    // person has to guess a logo they may not recognise.
+    function shareBtn(kind, brandKey, label, href) {
+      var mark = MARKS[brandKey];
+      var attrs = 'class="evp-share-btn evp-share-' + brandKey + '" aria-label="' +
+        esc(label) + '" title="' + esc(label) + '"';
+      return href
+        ? '<a ' + attrs + ' target="_blank" rel="noopener" href="' + href + '">' + mark + "</a>"
+        : '<button type="button" ' + attrs + ' data-share="' + kind + '">' + mark + "</button>";
+    }
+
     var parts = [];
-    parts.push('<button type="button" class="evp-share-btn" data-share="copy">Copy link</button>');
+    parts.push(shareBtn("copy", "copy", "Copy link", null));
     // Native share sheet where there is one — on a phone this is the one that
     // reaches WhatsApp, Telegram, Signal and everything else in one tap.
     if (navigator.share) {
-      parts.push('<button type="button" class="evp-share-btn" data-share="native">Share&hellip;</button>');
+      parts.push(shareBtn("native", "native", "Share…", null));
     }
-    parts.push('<a class="evp-share-btn" target="_blank" rel="noopener" href="https://wa.me/?text=' +
-      encodeURIComponent(line + " " + url) + '">WhatsApp</a>');
-    parts.push('<a class="evp-share-btn" target="_blank" rel="noopener" href="https://www.linkedin.com/sharing/share-offsite/?url=' +
-      encodeURIComponent(url) + '">LinkedIn</a>');
-    parts.push('<a class="evp-share-btn" target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?text=' +
-      encodeURIComponent(line) + "&url=" + encodeURIComponent(url) + '">X</a>');
+    parts.push(shareBtn(null, "whatsapp", "Share on WhatsApp",
+      "https://wa.me/?text=" + encodeURIComponent(line + " " + url)));
+    parts.push(shareBtn(null, "linkedin", "Share on LinkedIn",
+      "https://www.linkedin.com/sharing/share-offsite/?url=" + encodeURIComponent(url)));
+    parts.push(shareBtn(null, "x", "Share on X",
+      "https://twitter.com/intent/tweet?text=" + encodeURIComponent(line) +
+      "&url=" + encodeURIComponent(url)));
     // Invite a friend: a mailto, so it opens whatever mail app they already
     // use and nobody has to hand us an address. No account, no server, and the
     // club never learns who was invited — which is the right default for
     // somebody else's contacts.
-    parts.push('<a class="evp-share-btn" href="mailto:?subject=' +
-      encodeURIComponent(line) + "&body=" +
-      encodeURIComponent("Thought you'd like this:\n\n" + e.title + "\n" + longDate(e.event_date) +
-        "\n\n" + url) + '">Invite by email</a>');
+    parts.push(shareBtn(null, "email", "Invite a friend by email",
+      "mailto:?subject=" + encodeURIComponent(line) + "&body=" +
+      encodeURIComponent("Thought you'd like this:\n\n" + e.title + "\n" +
+        longDate(e.event_date) + "\n\n" + url)));
 
     box.innerHTML = parts.join("");
 
