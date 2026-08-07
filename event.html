@@ -429,6 +429,28 @@
     // The action changes with time. A past event's "Register" button is a lie;
     // its recording is the useful thing, and 16 of the 17 archived events have
     // one.
+    // ⚠ Registering is for members. Ahmed: "the registration is open to
+    // everyone, we need it only for members."
+    //
+    // The events LIST has gated this since it was built; this page never did,
+    // so the same event offered a members-only action on one screen and an
+    // open one on the other — and the event page is the one that gets shared,
+    // so it is the one strangers actually land on.
+    //
+    // `sc-signed-out` is set on <html> by header-identity.js BEFORE first
+    // paint, which is why it is read instead of asking Supabase here: an async
+    // session lookup would show every member the guest control for as long as
+    // the round trip takes. Reading the class means this and the header cannot
+    // disagree.
+    //
+    // Neither class set means "not known yet". That falls through to the
+    // MEMBER control, which is the safe direction: the worst case is a guest
+    // clicking through to the organiser's public ticket page, whereas the
+    // reverse would tell a paid-up member to go and join.
+    function isGuest() {
+      return document.documentElement.classList.contains("sc-signed-out");
+    }
+
     var actions = [];
     if (isPast) {
       if (e.recording_url) {
@@ -436,8 +458,18 @@
           '" target="_blank" rel="noopener">Watch the recording</a>');
       }
     } else if (e.register_link) {
-      actions.push('<a class="btn btn-glow" href="' + esc(e.register_link) +
-        '" target="_blank" rel="noopener">Register</a>');
+      if (isGuest()) {
+        // A link, not a disabled button — the same reasoning buildCard() gives:
+        // a disabled button is either unreachable by keyboard or reachable and
+        // inert, and both are worse than a control that goes somewhere and
+        // says where. `next` brings them back to this event once they are in.
+        actions.push('<a class="btn btn-glow" href="login.html?next=' +
+          encodeURIComponent("event.html?e=" + e.slug) +
+          '">Join free to register</a>');
+      } else {
+        actions.push('<a class="btn btn-glow" href="' + esc(e.register_link) +
+          '" target="_blank" rel="noopener">Register</a>');
+      }
     }
 
     var relHtml = related.length
