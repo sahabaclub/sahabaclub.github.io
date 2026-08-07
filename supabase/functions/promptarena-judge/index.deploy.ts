@@ -1212,7 +1212,7 @@ async function identify(admin: ReturnType<typeof createClient>, req: Request): P
     .select("role")
     .eq("user_id", userData.user.id)
     .maybeSingle();
-  if (profile?.role === "staff" || profile?.role === "admin") {
+  if (profile?.role === "staff" || profile?.role === "admin" || profile?.role === "global_admin") {
     return { kind: "staff", userId: userData.user.id };
   }
   return { kind: "member", userId: userData.user.id };

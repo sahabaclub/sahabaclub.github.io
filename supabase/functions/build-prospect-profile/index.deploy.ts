@@ -473,7 +473,7 @@ Deno.serve(async (req) => {
         .select("role")
         .eq("user_id", userData.user.id)
         .maybeSingle();
-      if (callerProfile?.role !== "staff" && callerProfile?.role !== "admin") {
+      if (callerProfile?.role !== "staff" && callerProfile?.role !== "admin" && callerProfile?.role !== "global_admin") {
         console.error(`non-staff user ${userData.user.id} attempted build-prospect-profile`);
         return fail(new ProfileError("not_allowed", 403, "Not allowed"));
       }

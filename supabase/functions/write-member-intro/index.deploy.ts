@@ -579,7 +579,7 @@ Deno.serve(async (req) => {
           .eq("user_id", callerUserId)
           .maybeSingle();
         callerIsPrivileged = !!callerProfile &&
-          (callerProfile.role === "admin" || callerProfile.role === "staff");
+          (callerProfile.role === "admin" || callerProfile.role === "staff" || callerProfile.role === "global_admin");
 
         if (callerUserId !== userId && !callerIsPrivileged) {
           return fail(new IntroError("not_allowed", 403, "You can only write your own introduction"));

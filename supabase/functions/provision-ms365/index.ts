@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
         .select("role")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (diagProfile?.role !== "staff" && diagProfile?.role !== "admin") {
+      if (diagProfile?.role !== "staff" && diagProfile?.role !== "admin" && diagProfile?.role !== "global_admin") {
         return json({ error: "Not allowed" }, 403);
       }
       try {
@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
         .select("role")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (prof?.role !== "staff" && prof?.role !== "admin") {
+      if (prof?.role !== "staff" && prof?.role !== "admin" && prof?.role !== "global_admin") {
         console.error(`non-staff user ${user.id} attempted action=reset`);
         return json({ error: "Not allowed" }, 403);
       }
