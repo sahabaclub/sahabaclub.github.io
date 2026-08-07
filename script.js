@@ -599,34 +599,36 @@
   ].filter(Boolean);
   if (!links.length) return;
 
-  import("./lib/supabase-client.js?v=f0f6f85ac9").then(function (mod) {
+  // ⚠ ASKS WHETHER YOU HAVE ANY ADMIN SECTION — it does NOT compare role names.
+  //
+  // This used to be a list of literals, and it was wrong twice in two days.
+  // First it read `role === "admin"` alone, so 0054's rename hid the link from
+  // Ahmed. That was fixed by adding `global_admin`… and the link then stayed
+  // hidden from Ghadir, because `operations_manager` was not in the list
+  // either. She could do nothing about it from her side; the menu simply never
+  // showed her the door to a section she genuinely had.
+  //
+  // A hardcoded list has to be revisited every time a role is added or
+  // renamed, and nothing makes anyone revisit it — the failure is silent and
+  // looks like a permissions problem to the person affected.
+  //
+  // `my_admin_sections()` is the SAME source of truth lib/admin-guard.js uses
+  // to build the admin menu, so the link and the page it opens can no longer
+  // disagree. A new role that is granted a section gets the link with no change
+  // here; a role granted nothing never sees it.
+  import("./lib/supabase-client.js?v=1696b16761").then(function (mod) {
     if (!mod.isConfigured) return null;
     return mod.supabase.auth.getSession().then(function (res) {
-      var session = res.data.session;
-      if (!session) return null;
-      return mod.supabase
-        .from("profiles")
-        .select("role")
-        .eq("user_id", session.user.id)
-        .maybeSingle();
+      if (!res.data.session) return null;
+      return mod.supabase.rpc("my_admin_sections");
     });
   }).then(function (res) {
-    if (!res || !res.data) return;
-    // ⚠ `global_admin` must be here. 0054 renamed Ahmed's role from `admin`,
-    // and this line still read `=== "admin"` afterwards — so the Admin link
-    // vanished from the public menu for the only person who has it, while
-    // /app/admin itself worked fine because lib/admin-guard.js HAD been
-    // updated. A role rename has to sweep every role comparison in the client,
-    // not just the obvious one. tools/check-role-labels.mjs now enforces that.
-    if (
-      res.data.role === "admin" ||
-      res.data.role === "global_admin" ||
-      res.data.role === "staff"
-    ) {
-      links.forEach(function (l) { l.classList.remove("admin-hidden"); });
-    }
+    if (!res || res.error || !Array.isArray(res.data) || !res.data.length) return;
+    links.forEach(function (l) { l.classList.remove("admin-hidden"); });
   }).catch(function () {
-    // Offline, or Supabase not configured — leave the link hidden.
+    // Offline, or Supabase not configured — leave the link hidden. Hiding is
+    // the right way to fail HERE, unlike in the admin menu: this is a doorway
+    // on a public page, and every page behind it guards itself anyway.
   });
 })();
 
@@ -671,7 +673,7 @@
   );
   if (!links.length) return;
 
-  import("./lib/supabase-client.js?v=f0f6f85ac9").then(function (mod) {
+  import("./lib/supabase-client.js?v=1696b16761").then(function (mod) {
     if (mod.isConfigured) return;
     links.forEach(function (link) {
       link.href = "mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in";
@@ -708,12 +710,12 @@
 
   var notifications = null;
 
-  import("./lib/supabase-client.js?v=f0f6f85ac9")
+  import("./lib/supabase-client.js?v=1696b16761")
     .then(function (client) {
       // A repo published before its Supabase project exists has no counts to
       // read and no session to read them with.
       if (!client.isConfigured) return null;
-      return import("./lib/auth.js?v=f0f6f85ac9").then(function (auth) {
+      return import("./lib/auth.js?v=1696b16761").then(function (auth) {
         return auth.getSession();
       });
     })
@@ -723,7 +725,7 @@
       // made to wait on a request that can only ever return nothing.
       if (!session || !session.user) return null;
 
-      return import("./lib/notifications.js?v=f0f6f85ac9").then(function (mod) {
+      return import("./lib/notifications.js?v=1696b16761").then(function (mod) {
         notifications = mod;
         return mod.refreshNavBadges().then(function () {
           // Opening a section reads it. Without this the count a member just
@@ -748,7 +750,7 @@
           // again after switching it on. It is a no-op when push was never
           // enabled here, and it never prompts: reconcile() returns early
           // unless permission is already granted.
-          return import("./lib/push.js?v=f0f6f85ac9").then(function (push) {
+          return import("./lib/push.js?v=1696b16761").then(function (push) {
             push.reconcile();
             push.listenForResubscribe();
           }).catch(function () {
