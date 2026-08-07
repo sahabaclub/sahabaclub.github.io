@@ -145,6 +145,93 @@ console.log("\nstop reasons, normalised across providers");
   }
 }
 
+// ============================================================
+// Listing failures: a refused key vs an unreachable API
+// ============================================================
+//
+// ⚠ THIS IS THE CHECK THAT MATTERS ON A ROTATION DAY, and it is testable only
+// because the three outcomes are distinguishable in the first place.
+//
+// ai-admin deliberately does NOT retire Google rows when a listing fails —
+// right, because a network blip would otherwise make every configured Gemini
+// model vanish from the panel. The cost of that choice is that a DEAD key
+// leaves the panel showing all 42 models exactly as it showed them yesterday.
+// The note beside the count is then the only thing standing between staff and
+// a model that cannot be called, so the note has to be right: "Google could
+// not be reached" sends somebody to check the network, and the network is
+// fine. Google answered. It said no.
+//
+// The module reads its keys at load, so this imports a SECOND instance with a
+// key present — a query string defeats Node's module cache — and stubs fetch
+// per case.
+{
+  console.log("");
+  console.log("google listing failures");
+
+  globalThis.Deno = { env: { get: (n) => (n === "GEMINI_API_KEY" ? "a-key" : "") } };
+  const keyed = await import(
+    new URL("../supabase/functions/_shared/ai-provider.ts", import.meta.url).href + "?withkey"
+  );
+
+  const realFetch = globalThis.fetch;
+  const stub = (impl) => { globalThis.fetch = impl; };
+
+  const respond = (status, body) => () =>
+    Promise.resolve({
+      ok: status >= 200 && status < 300,
+      status,
+      text: () => Promise.resolve(typeof body === "string" ? body : JSON.stringify(body)),
+      json: () => Promise.resolve(typeof body === "string" ? JSON.parse(body) : body),
+    });
+
+  // Google's real refusals. 400 INVALID_ARGUMENT is the one that would
+  // otherwise be read as "your request was malformed" — it is not, the request
+  // is fixed and known good; the only variable in it is the key.
+  const invalid = { error: { code: 400, message: "API key not valid. Please pass a valid API key.", status: "INVALID_ARGUMENT" } };
+  const denied = { error: { code: 403, message: "Permission denied", status: "PERMISSION_DENIED" } };
+
+  for (const [label, status, body, want] of [
+    ["400 invalid key -> bad-key", 400, invalid, "bad-key"],
+    ["401 -> bad-key", 401, { error: { message: "Unauthorized" } }, "bad-key"],
+    ["403 permission denied -> bad-key", 403, denied, "bad-key"],
+    // ⚠ Not the key. Retrying a 429 or a 503 is exactly the right move, and
+    // calling either "bad-key" would send somebody to rotate a working
+    // credential in the middle of an outage.
+    ["429 rate limit -> unreachable", 429, { error: { message: "Resource exhausted" } }, "unreachable"],
+    ["500 -> unreachable", 500, { error: { message: "Internal" } }, "unreachable"],
+  ]) {
+    stub(respond(status, body));
+    const got = await keyed.listGoogleModels();
+    check(label, { ok: got.ok, reason: got.reason, models: got.models.length }, { ok: false, reason: want, models: 0 });
+  }
+
+  stub(() => Promise.reject(new Error("dns")));
+  const thrown = await keyed.listGoogleModels();
+  check("network throw -> unreachable", { ok: thrown.ok, reason: thrown.reason }, { ok: false, reason: "unreachable" });
+
+  // The message Google sent is carried through, because "invalid" and
+  // "revoked" and "restricted to another referrer" are three different fixes.
+  stub(respond(400, invalid));
+  const detailed = await keyed.listGoogleModels();
+  check("carries Google's own words", /API key not valid/.test(detailed.detail || ""), true);
+
+  // And the success path still works, since everything above changed the
+  // failure branch it shares.
+  stub(respond(200, {
+    models: [
+      { name: "models/gemini-2.5-pro", supportedGenerationMethods: ["generateContent"] },
+      { name: "models/imagen-4", supportedGenerationMethods: ["predict"] },
+      { name: "models/text-embedding-004", supportedGenerationMethods: ["embedContent"] },
+    ],
+  }));
+  const good = await keyed.listGoogleModels();
+  check("200 keeps only generateContent", good.models.map((m) => m.id), ["gemini-2.5-pro"]);
+  check("  and calls it text", good.models[0]?.kind, "text");
+  check("  and reports ok", good.ok, true);
+
+  globalThis.fetch = realFetch;
+}
+
 console.log("");
 if (failed) { console.log(`${failed} check(s) failed`); process.exit(1); }
 console.log("ai-provider logic is sound.");
