@@ -25,9 +25,16 @@
 // FLAGS: a string comparison against "admin" (=== or !==, either quote style)
 // on a line that does not also mention `global_admin`.
 //
+// ⚠ THE FIRST VERSION OF THIS FILE SKIPPED `supabase/functions/**`, on the
+// reasoning that "server code reads roles from the database and is not part of
+// this class of bug". That was wrong, and wrong in the most expensive way: it
+// was written down as a justification, so it read like a decision rather than
+// an assumption. Eleven Edge Functions hardcode the same literals, and every
+// one of them refused the global admin — including import-event, which is how
+// Ahmed found it ("Adding new event from link is failing!"). An exclusion is
+// only as good as the claim behind it, and this one was never tested.
+//
 // DOES NOT FLAG:
-//   - `supabase/functions/**` — server code, which reads roles from the
-//     database and is not part of this class of bug.
 //   - `supabase/migrations/**` — SQL, where 'admin' is data, not a comparison.
 //   - anything inside a // or /* */ comment, including the notes above.
 //   - `.claude/worktrees/**` and `node_modules/**`.
@@ -40,8 +47,10 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 
 const ROOT = process.cwd();
-const SKIP_DIRS = new Set(["node_modules", ".git", ".claude", "supabase"]);
-const EXTS = [".js", ".html", ".mjs"];
+// `migrations` is SQL — 'admin' there is data, not a comparison. `functions`
+// is deliberately NOT skipped; see the note above about why it once was.
+const SKIP_DIRS = new Set(["node_modules", ".git", ".claude", "migrations", "seed"]);
+const EXTS = [".js", ".html", ".mjs", ".ts"];
 
 // The label that must accompany "admin" wherever it is compared.
 const PARTNER = "global_admin";

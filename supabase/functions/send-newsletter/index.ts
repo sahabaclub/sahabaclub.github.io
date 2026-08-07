@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
       .select("role")
       .eq("user_id", userData.user.id)
       .maybeSingle();
-    if (!callerProfile || callerProfile.role !== "admin") {
+    if (!callerProfile || callerProfile.role !== "admin" && callerProfile.role !== "global_admin") {
       return json({ error: "Admins only" }, 403);
     }
 

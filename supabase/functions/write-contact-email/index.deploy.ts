@@ -581,7 +581,7 @@ Deno.serve(async (req) => {
       .select("role")
       .eq("user_id", userData.user.id)
       .maybeSingle();
-    if (!callerProfile || (callerProfile.role !== "admin" && callerProfile.role !== "staff")) {
+    if (!callerProfile || (callerProfile.role !== "admin" && callerProfile.role !== "staff" && callerProfile.role !== "global_admin")) {
       return fail(new EmailError("not_allowed", 403, "Club staff only"));
     }
 

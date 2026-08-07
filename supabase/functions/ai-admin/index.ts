@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
       .select("role")
       .eq("user_id", userData.user.id)
       .maybeSingle();
-    if (!callerProfile || (callerProfile.role !== "admin" && callerProfile.role !== "staff")) {
+    if (!callerProfile || (callerProfile.role !== "admin" && callerProfile.role !== "staff" && callerProfile.role !== "global_admin")) {
       console.error(`user ${userData.user.id} attempted to reach ai-admin`);
       return json({ error: "Club staff only" }, 403);
     }
