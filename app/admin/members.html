@@ -75,7 +75,55 @@
   <div class="ad-modal">
     <h2 id="ad-modal-title">Member</h2>
     <p class="ad-modal-sub" id="ad-modal-sub"></p>
+
+    <h3 style="font-size:15px;margin:18px 0 4px;">Account</h3>
+    <div id="ad-account"></div>
+
+    <h3 style="font-size:15px;margin:22px 0 4px;">Profile</h3>
     <div id="ad-detail"></div>
+
+    <h3 style="font-size:15px;margin:22px 0 8px;">Edit</h3>
+    <div id="ad-edit-fields"></div>
+    <div class="ad-modal-actions" style="justify-content:flex-start;margin-top:10px;">
+      <button type="button" class="ad-btn ad-btn-primary" id="d-save">Save changes</button>
+      <span class="ad-hint" id="ad-edit-msg"></span>
+    </div>
+
+    <!-- ⚠ Deletion is irreversible, reaches Microsoft, and removes this
+         person's side of other members' conversations. It is fenced off rather
+         than sitting next to Save: a distinct heading, its own colour, an
+         explicit Microsoft choice with NO default, and a confirmation phrase
+         that is the member's own email — which cannot be typed from muscle
+         memory the way "DELETE" can. -->
+    <h3 style="font-size:15px;margin:26px 0 6px;color:#f87171;">Delete this member</h3>
+    <p class="ad-hint" style="margin:0 0 12px;">
+      Erases the profile, messages, registrations, notifications, PromptArena entries,
+      marketing-contact records and anything else carrying their name or email.
+      Their side of conversations disappears from the other person's inbox too.
+      <strong>This cannot be undone.</strong>
+    </p>
+
+    <div class="ad-field">
+      <label for="d-ms365-mode">Their Microsoft 365 account</label>
+      <select id="d-ms365-mode">
+        <option value="">Choose what to do…</option>
+        <option value="block">Block sign-in and free the licence (reversible)</option>
+        <option value="delete">Delete the account (Microsoft keeps it 30 days, then it is gone)</option>
+      </select>
+      <span class="ad-hint">Members with no mailbox are unaffected either way — but the
+        choice is still required, so it is never made by accident.</span>
+    </div>
+
+    <div class="ad-field">
+      <label for="d-confirm" id="d-confirm-label">Type the member's email to confirm</label>
+      <input id="d-confirm" type="text" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="ad-modal-actions" style="justify-content:flex-start;">
+      <button type="button" class="ad-btn ad-btn-danger" id="d-delete">Delete permanently</button>
+      <span class="ad-hint" id="ad-danger-msg"></span>
+    </div>
+
     <div class="ad-modal-actions">
       <button type="button" class="ad-btn" id="d-close">Close</button>
     </div>
@@ -92,17 +140,35 @@
   renderShell(user, "members.html");
 
   let members = [];
+  // Which member the detail modal is currently showing. Assigning to an
+  // undeclared name is a ReferenceError in a module — modules are strict mode —
+  // so this is not optional tidiness.
+  let editingId = null;
+  // ⚠ Declared HERE, above every handler that touches it. It used to sit below
+  // them: harmless in practice, because a handler only runs after the module
+  // has finished evaluating, but it is exactly the shape tools/check-dead-zone
+  // exists to catch — and that tool does NOT scan inline <script type="module">
+  // in HTML, so this file gets no warning if it is ever made genuinely wrong.
+  const modal = document.getElementById("ad-modal-back");
 
   async function load() {
     // Three separate reads joined in the browser. Supabase can join related
     // tables in one query, but only where a foreign key links them — these
     // all hang off auth.users rather than each other, so it's cleaner to
     // fetch and stitch than to fight the query builder.
-    const [{ data: profiles, error: pErr }, { data: subs }, { data: ms365 }] = await Promise.all([
-      supabase.from("profiles").select("*").order("created_at", { ascending: false }),
-      supabase.from("subscriptions").select("user_id, tier, status, renews_at"),
-      supabase.from("ms365_accounts").select("user_id, mailbox, status, license_expires_at"),
-    ]);
+    const [{ data: profiles, error: pErr }, { data: subs }, { data: ms365 }, { data: details }] =
+      await Promise.all([
+        supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+        supabase.from("subscriptions").select("user_id, tier, status, renews_at"),
+        supabase.from("ms365_accounts").select("user_id, mailbox, status, license_expires_at"),
+        // The registration email. It lives in auth.users, which PostgREST does
+        // not expose and RLS cannot reach — so no amount of selecting from
+        // `profiles` will ever produce it. staff_member_details (0058) is a
+        // security definer view that joins the two and carries is_staff()
+        // inside its own body.
+        supabase.from("staff_member_details")
+          .select("user_id, email, email_confirmed_at, last_sign_in_at, signed_up_at"),
+      ]);
 
     if (pErr) {
       showMessage("ad-msg", "Couldn't load members: " + pErr.message, "err");
@@ -111,11 +177,16 @@
 
     const subBy = {}; (subs || []).forEach(s => { subBy[s.user_id] = s; });
     const msBy = {}; (ms365 || []).forEach(m => { msBy[m.user_id] = m; });
+    // Missing rather than empty if 0058 has not been applied — every screen
+    // then behaves exactly as before, with no email shown and no error, rather
+    // than the page failing to load over a column it can live without.
+    const detBy = {}; (details || []).forEach(d => { detBy[d.user_id] = d; });
 
     members = (profiles || []).map(p => ({
       ...p,
       tier: (subBy[p.user_id] || {}).tier || "standard",
       ms365: msBy[p.user_id] || null,
+      detail: detBy[p.user_id] || null,
     }));
 
     renderStats();
@@ -233,17 +304,151 @@
         : '<span class="ad-cell-dim">—</span>') +
       row("Microsoft 365", m.ms365
         ? escapeHtml(m.ms365.mailbox) + " · " + escapeHtml(m.ms365.status)
-        : '<span class="ad-cell-dim">not issued yet</span>') +
-      // Being explicit about why there's no edit button here, so nobody
-      // wastes time looking for one.
-      '<div class="ad-msg info" style="margin-top:16px;">Tier and role can\'t be changed from ' +
-      "here yet — those are locked at the database level and need the server functions " +
-      "deploying. For now they're changed from the Supabase dashboard.</div>";
+        : '<span class="ad-cell-dim">not issued yet</span>');
 
+    // ---- who they actually are -------------------------------------------
+    const d = m.detail;
+    const dim = '<span class="ad-cell-dim">—</span>';
+    document.getElementById("ad-account").innerHTML = d
+      ? row("Registration email", '<strong>' + escapeHtml(d.email) + "</strong>") +
+        row("Email confirmed", d.email_confirmed_at
+          ? '<span class="ad-pill ok">' + formatDate(d.email_confirmed_at) + "</span>"
+          : '<span class="ad-pill warn">not confirmed</span>') +
+        row("Last signed in", d.last_sign_in_at ? formatDate(d.last_sign_in_at) : '<span class="ad-cell-dim">never</span>') +
+        row("Signed up", formatDate(d.signed_up_at)) +
+        row("Sign-in method", m.signup_method ? escapeHtml(m.signup_method) : dim)
+      : '<div class="ad-msg info">The account details need migration 0058 applying. ' +
+        "Until then the registration email cannot be read from the browser at all — " +
+        "it lives in auth.users, which PostgREST does not expose.</div>";
+
+    // ---- editable fields --------------------------------------------------
+    // Only fields that are safely a matter of record. Deliberately NOT here:
+    // the email (changing it would break their sign-in and is Supabase Auth's
+    // job), and the tier (that belongs to the subscription, not the profile,
+    // and changing it here would silently disagree with what they have paid).
+    const F = [
+      ["full_name", "Full name", "text"],
+      ["headline", "Headline", "text"],
+      ["company", "Company", "text"],
+      ["position", "Position", "text"],
+      ["city", "City", "text"],
+      ["country", "Country", "text"],
+    ];
+    document.getElementById("ad-edit-fields").innerHTML = F.map(([k, label, type]) =>
+      '<div class="ad-field"><label for="e-' + k + '">' + label + "</label>" +
+      '<input id="e-' + k + '" type="' + type + '" value="' + escapeHtml(m[k] || "") + '"></div>'
+    ).join("") +
+    '<div class="ad-field"><label for="e-role">Role</label><select id="e-role">' +
+      ["member", "coach", "staff", "operations_manager", "admin", "global_admin"]
+        .map(r => '<option value="' + r + '"' + (m.role === r ? " selected" : "") + ">" + r + "</option>")
+        .join("") +
+    "</select></div>";
+
+    editingId = userId;
+    document.getElementById("ad-edit-msg").textContent = "";
+    document.getElementById("ad-danger-msg").textContent = "";
+    document.getElementById("d-confirm").value = "";
+    document.getElementById("d-ms365-mode").value = "";
+    // The confirmation phrase is their email, so it cannot be typed by muscle
+    // memory the way "DELETE" can.
+    document.getElementById("d-confirm-label").textContent = d
+      ? 'Type ' + d.email + ' to confirm'
+      : "Type the member's email to confirm";
     document.getElementById("ad-modal-back").classList.remove("ad-hidden");
   }
 
-  const modal = document.getElementById("ad-modal-back");
+  // ---- save edits --------------------------------------------------------
+  document.getElementById("d-save").addEventListener("click", async () => {
+    if (!editingId) return;
+    const btn = document.getElementById("d-save");
+    const msg = document.getElementById("ad-edit-msg");
+    const val = id => document.getElementById(id).value.trim();
+
+    const patch = {
+      full_name: val("e-full_name") || null,
+      headline: val("e-headline") || null,
+      company: val("e-company") || null,
+      position: val("e-position") || null,
+      city: val("e-city") || null,
+      country: val("e-country") || null,
+      role: document.getElementById("e-role").value,
+    };
+
+    btn.disabled = true;
+    msg.textContent = "Saving…";
+    const { error } = await supabase.from("profiles").update(patch).eq("user_id", editingId);
+    btn.disabled = false;
+
+    if (error) {
+      // ⚠ Say what the database said. A refusal here is almost always a policy
+      // — most likely trying to set a role the caller is not allowed to grant —
+      // and "couldn't save" would send someone looking in the wrong place.
+      msg.textContent = "Couldn't save: " + error.message;
+      msg.className = "ad-hint err";
+      return;
+    }
+    msg.textContent = "Saved.";
+    msg.className = "ad-hint ok";
+    await load();
+  });
+
+  // ---- delete -------------------------------------------------------------
+  document.getElementById("d-delete").addEventListener("click", async () => {
+    if (!editingId) return;
+    const m = members.find(x => x.user_id === editingId);
+    const msg = document.getElementById("ad-danger-msg");
+    const mode = document.getElementById("d-ms365-mode").value;
+    const typed = document.getElementById("d-confirm").value.trim().toLowerCase();
+    const email = (m && m.detail && m.detail.email || "").toLowerCase();
+
+    msg.className = "ad-hint err";
+    if (!mode) { msg.textContent = "Choose what to do with their Microsoft 365 account first."; return; }
+    if (!email) { msg.textContent = "Their email could not be read, so this cannot be confirmed. Apply 0058 first."; return; }
+    if (typed !== email) { msg.textContent = "The email does not match."; return; }
+
+    const btn = document.getElementById("d-delete");
+    btn.disabled = true;
+
+    // ⚠ MICROSOFT FIRST, ALWAYS. ms365_accounts is what says which mailbox is
+    // theirs and it goes with the database cascade — so doing it the other way
+    // round leaves a mailbox in the tenant that nothing can trace back to a
+    // person. If this step fails, STOP: a half-delete that has already removed
+    // the database side is unrecoverable, whereas stopping here leaves
+    // everything as it was.
+    msg.className = "ad-hint";
+    msg.textContent = "Microsoft 365…";
+    const off = await supabase.functions.invoke("provision-ms365", {
+      body: { action: "offboard", targetUserId: editingId, mode: mode },
+    });
+    if (off.error) {
+      let detail = off.error.message;
+      try { if (off.error.context) detail = await off.error.context.text(); } catch (e) {}
+      msg.className = "ad-hint err";
+      msg.textContent = "Microsoft 365 step failed, so nothing was deleted: " + detail;
+      btn.disabled = false;
+      return;
+    }
+
+    msg.textContent = "Erasing…";
+    const { data, error } = await supabase.rpc("delete_member_completely", { p_user_id: editingId });
+    btn.disabled = false;
+
+    if (error) {
+      msg.className = "ad-hint err";
+      // The Microsoft step has already run at this point, so say so — the
+      // mailbox is blocked or gone even though the member still exists.
+      msg.textContent = "The Microsoft 365 step succeeded but the erase failed: " +
+        error.message + " — the mailbox has already been " + mode + "ed.";
+      return;
+    }
+
+    modal.classList.add("ad-hidden");
+    showMessage("ad-msg",
+      "Deleted " + (data && data.email ? data.email : "the member") +
+      ". Microsoft 365: " + (off.data && off.data.did ? off.data.did : "n/a") + ".", "ok");
+    await load();
+  });
+
   document.getElementById("d-close").addEventListener("click", () => modal.classList.add("ad-hidden"));
   modal.addEventListener("click", (ev) => { if (ev.target === modal) modal.classList.add("ad-hidden"); });
   document.addEventListener("keydown", (ev) => {

@@ -20,9 +20,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import {
   deleteAccount,
+  disableAccount,
+  findUserIdByMailbox,
   graphDiagnostics,
   isUsableMailboxName,
   provisionMailbox,
+  removeAllLicenses,
   resetMailboxPassword,
 } from "../_shared/graph.ts";
 
@@ -49,9 +52,88 @@ Deno.serve(async (req) => {
     }
     const user = userData.user;
 
-    const { action, mailbox: existingMailbox, fullName: requestedName } = await req.json();
-    if (action !== "create" && action !== "reset" && action !== "diagnose") {
-      return json({ error: "action must be 'create', 'reset' or 'diagnose'" }, 400);
+    const {
+      action,
+      mailbox: existingMailbox,
+      fullName: requestedName,
+      targetUserId,
+      mode,
+    } = await req.json();
+    if (
+      action !== "create" && action !== "reset" &&
+      action !== "diagnose" && action !== "offboard"
+    ) {
+      return json({ error: "action must be 'create', 'reset', 'diagnose' or 'offboard'" }, 400);
+    }
+
+    // ---- action = "offboard" : GLOBAL ADMIN ONLY -------------------------
+    //
+    // Ahmed: "Once I delete a member, any Microsoft 365 account should deleted
+    // also". This is the Microsoft half; the database half is
+    // public.delete_member_completely() in 0058.
+    //
+    // ⚠ THIS RUNS FIRST, BEFORE the database delete, and the order is not
+    // interchangeable. `ms365_accounts` is what says which mailbox belongs to
+    // this member, and it goes with the cascade — so after the database half
+    // there is nothing left to look the address up from, and the mailbox
+    // becomes an orphan in the tenant that nobody can trace back to a person.
+    //
+    // Two modes, because Ahmed asked to be given the choice each time:
+    //
+    //   block  — sign-in disabled, every licence removed. The account and its
+    //            mail still exist in the tenant, and this is reversible from
+    //            the Microsoft admin centre.
+    //   delete — the user is deleted in Entra. Microsoft keeps it recoverable
+    //            for 30 days and then the mailbox and its contents are gone.
+    //
+    // Neither is the default. The dialog makes the caller pick.
+    if (action === "offboard") {
+      const { data: actor } = await admin
+        .from("profiles").select("role").eq("user_id", user.id).maybeSingle();
+      // Deliberately stricter than the rest of this function: `staff` may
+      // provision and reset, but only a global admin may take an account away.
+      if (actor?.role !== "admin" && actor?.role !== "global_admin") {
+        return json({ error: "Only a global admin may offboard a member" }, 403);
+      }
+      if (mode !== "block" && mode !== "delete") {
+        return json({ error: "mode must be 'block' or 'delete'" }, 400);
+      }
+      if (!targetUserId) return json({ error: "targetUserId is required" }, 400);
+      if (targetUserId === user.id) {
+        return json({ error: "You cannot offboard your own account" }, 400);
+      }
+
+      const { data: acct } = await admin
+        .from("ms365_accounts").select("mailbox").eq("user_id", targetUserId).maybeSingle();
+
+      // No mailbox on record is a SUCCESS, not a failure. Most members have
+      // never provisioned one, and the delete flow calls this unconditionally
+      // so it cannot be skipped by accident.
+      if (!acct?.mailbox) {
+        return json({ ok: true, mailbox: null, did: "nothing", reason: "no Microsoft 365 account on record" });
+      }
+
+      const graphId = await findUserIdByMailbox(acct.mailbox);
+      if (!graphId) {
+        // On record here, absent from the tenant — already removed by hand.
+        // Say so plainly rather than failing: the member still needs deleting.
+        return json({ ok: true, mailbox: acct.mailbox, did: "nothing", reason: "not found in the tenant" });
+      }
+
+      if (mode === "delete") {
+        await deleteAccount(graphId);
+      } else {
+        // Licences first. Disabling an account does NOT release its seat, and
+        // a blocked-but-licensed account keeps a licence Ahmed is paying for
+        // out of circulation indefinitely.
+        await removeAllLicenses(graphId);
+        await disableAccount(graphId);
+      }
+
+      // The ms365_* rows are left alone: the caller deletes the member next,
+      // and the cascade takes them. Clearing them here would leave a window
+      // where the mailbox is gone and the record still claims it exists.
+      return json({ ok: true, mailbox: acct.mailbox, did: mode });
     }
 
     // ---- action = "diagnose" : STAFF ONLY, read-only ----
