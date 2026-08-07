@@ -336,6 +336,17 @@
         </button>
       </div>
       <p class="onb-note">A PDF, a plain-text file, or a photo or screenshot of your CV all work &mdash; up to 8&nbsp;MB. On LinkedIn: open your profile, choose <em>More &rarr; Save to PDF</em>, then upload that file here. Word documents need saving as PDF first.</p>
+      <!-- ⚠ A second skip, on the CHOICE screen. There was already one at the
+           bottom of the form below, but it is only reachable after committing
+           to "Upload" or "Fill it in myself" — so this screen, which is where
+           step 2 actually opens, was the one place in the whole flow with no
+           way forward except to start work. Step 1 offers a skip in the same
+           position, which is why this looked like an oversight rather than a
+           decision. Same handler as the other one; nothing new to keep in
+           step. -->
+      <p style="margin:16px 0 0; font-size:13px;">
+        <button type="button" class="onb-back" id="skip-profile-choice" style="margin:0;">Skip for now &rarr;</button>
+      </p>
     </div>
 
     <div class="onb-hidden" id="upload-panel" style="margin-bottom:18px;">
@@ -789,6 +800,10 @@
   // a form right now may still be one tap from a photo, and the picture is what
   // Connect actually gates on.
   document.getElementById("skip-profile").addEventListener("click", goToPhotoStep);
+  // The same skip, on the choice screen above the form. Deliberately the SAME
+  // handler rather than a copy — two skips that could drift apart would be
+  // worse than one that is hard to reach.
+  document.getElementById("skip-profile-choice").addEventListener("click", goToPhotoStep);
 
   document.getElementById("btn-create-mailbox").addEventListener("click", function () {
     callProvision("create");
