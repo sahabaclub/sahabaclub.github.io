@@ -1036,34 +1036,64 @@ async function testImage(
     prompt = String(parts.image_brief ?? "") + " Theme: Cloud Native Night Dubai, Cloud, Networking.";
   }
 
-  // ⚠ /v1/images/generations, not /v1/images/edits, and the difference is
-  // worth being honest about. The avatar functions send a source photograph
-  // and there is no member photograph to borrow for a test — using one would
-  // be a straightforward breach of the promise that no real photographs live
-  // on this platform. So the test proves the model accepts this prompt and
-  // this account can call it, which is what a prompt edit puts at risk; it
-  // does not prove the likeness transfer, which a prompt edit cannot break.
-  const payload: Record<string, unknown> = {
-    model,
-    prompt,
-    size: "1024x1024",
-    n: 1,
-  };
-  // The production calls ask for `quality: high`. A test asks for the cheapest
-  // thing that still proves the prompt is accepted — but only where the
-  // parameter exists, because the older image families reject the value.
-  if (/^gpt-image/.test(model)) payload.quality = "low";
-
+  // ⚠ THE TEST NOW CALLS THE ENDPOINT THE SERVICE ACTUALLY CALLS.
+  //
+  // It used to POST /v1/images/generations while generate-avatar and
+  // refresh-avatars POST /v1/images/edits. That gap is not theoretical: on
+  // 7 Aug `gpt-image-2` was activated with test_status 'passed' and every
+  // avatar generation failed immediately afterwards, because passing
+  // `generations` says nothing about whether a model serves `edits`. A test
+  // that green-lights a model the service cannot use is worse than no test —
+  // it is the reason the change was trusted.
+  //
+  // The original comment gave a real reason for the difference: the avatar
+  // functions send a source photograph, and there is no member photograph to
+  // borrow — using one would breach the promise that no real photographs live
+  // on this platform. That constraint still holds and is not being relaxed.
+  //
+  // The answer is a SYNTHETIC base image. The club's own logo is a real PNG,
+  // served publicly, and is nobody's face. It proves the model accepts this
+  // endpoint, this prompt and this account — which is what a model change puts
+  // at risk. It still does not prove the likeness transfer, which no test
+  // without a face could.
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), TEST_TIMEOUT_MS);
 
+  let baseImage: Blob;
+  try {
+    const logo = await fetch("https://www.sahabaclub.ai/assets/logo.png", { signal: abort.signal });
+    if (!logo.ok) throw new Error("logo fetch " + logo.status);
+    baseImage = await logo.blob();
+  } catch (err) {
+    clearTimeout(timer);
+    return {
+      ok: false,
+      reason: "The test could not fetch its base image, so the model was never asked. This is a problem with the test, not with the prompt — try again shortly.",
+      composedPrompt: prompt,
+      detail: { error: String(err instanceof Error ? err.message : err) },
+    };
+  }
+
+  const form = new FormData();
+  form.append("model", model);
+  form.append("prompt", prompt);
+  form.append("size", "1024x1024");
+  form.append("n", "1");
+  // Production asks for `quality: high`. A test asks for the cheapest thing
+  // that still proves the call is accepted — and only where the parameter
+  // exists, because the older image families reject the value.
+  if (/^gpt-image/.test(model)) form.append("quality", "low");
+  form.append("image", baseImage, "base.png");
+
   let res: Response;
   try {
-    res = await fetch("https://api.openai.com/v1/images/generations", {
+    res = await fetch("https://api.openai.com/v1/images/edits", {
       method: "POST",
       signal: abort.signal,
-      headers: { "Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      // ⚠ No Content-Type. fetch sets it with the multipart boundary, and
+      // setting it by hand produces a body the API cannot parse.
+      headers: { "Authorization": "Bearer " + OPENAI_API_KEY },
+      body: form,
     });
   } catch (err) {
     return {
