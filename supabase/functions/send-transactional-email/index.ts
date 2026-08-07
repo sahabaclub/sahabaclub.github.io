@@ -25,7 +25,8 @@ type TemplateName =
   | "ms365_linked"
   | "ms365_reset_request"
   | "hackathon_interest"
-  | "notification";
+  | "notification"
+  | "avatar_restart";
 
 // Every link in a member-facing email points at the live site. Relative URLs
 // are meaningless in an inbox, and a hard-coded host that drifts is how a
@@ -235,6 +236,103 @@ function renderTemplate(template: TemplateName, data: Record<string, unknown>) {
            have a profile picture, and <a href="${SITE}/hackathons.html">EduHackAI round 5</a>
            is open.</p>
         <p>— Sahaba Club</p>
+      `,
+    };
+  }
+
+  // "avatar_restart" — the 8 Aug 2026 announcement.
+  //
+  // ⚠ ONE TEMPLATE, TWO TRUTHS. Ahmed asked that this go to every member, and
+  // the headline sentence he wrote is "we generated a new avatar for you".
+  // That is true only for the members whose picture the redraw could actually
+  // reach — 0061 calls them group A. For everyone else (a linked Google or
+  // Microsoft picture, or no picture at all) nothing was drawn, because
+  // refresh-avatars will not follow a URL out of a member-writable column and
+  // hands them an initials tile instead, which is not an avatar.
+  //
+  // Sending them all the same sentence would mean telling a member to go and
+  // admire a picture that does not exist. So `redrawn` picks the middle
+  // paragraph and everything else stays identical: one announcement, no
+  // recipient told something untrue about their own account.
+  if (template === "avatar_restart") {
+    const who = String(data.fullName ?? "").trim();
+    const first = who ? esc(who.split(/\s+/)[0]) : "";
+    const redrawn = data.redrawn === true;
+
+    // Inline styles only, and a table for the button. Every mail client worth
+    // worrying about strips <style> blocks, and half of them drop background
+    // colours on <div>. This renders the same in Outlook as in Gmail.
+    const button = (href: string, label: string) => `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0">
+        <tr><td style="border-radius:10px;background:#5b3df5">
+          <a href="${href}" style="display:inline-block;padding:13px 26px;font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none">${label}</a>
+        </td></tr>
+      </table>`;
+
+    return {
+      subject: redrawn
+        ? "Your new avatar is ready ✨"
+        : "The avatar system just got an upgrade ✨",
+      html: `
+        <div style="margin:0;padding:24px 12px;background:#f4f3fb">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1c1b29">
+
+          <tr><td style="padding:30px 32px 26px;background:#12102b">
+            <div style="font-size:19px;font-weight:700;color:#ffffff;letter-spacing:.2px">Sahaba Club</div>
+            <div style="font-size:12px;color:#a9a3d6;margin-top:5px">The First AI Universe on the Earth</div>
+          </td></tr>
+
+          <tr><td style="padding:34px 32px 8px">
+            <h1 style="margin:0 0 16px;font-size:25px;line-height:1.25;font-weight:700">
+              ${redrawn ? "We redrew your avatar 🎨" : "Our avatar studio got an upgrade 🎨"}
+            </h1>
+            <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#3d3a55">
+              ${first ? `Hi ${first},` : "Hi,"} we've been busy rebuilding how the club makes profile
+              pictures — new artwork, a new prompt, and a much better eye for detail.
+            </p>
+
+            ${
+        redrawn
+          ? `<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#3d3a55">
+                   <strong>Your new avatar is already waiting for you.</strong> We've generated a fresh
+                   one on the new system — go and see what it made of you.
+                 </p>`
+          : `<p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:#3d3a55">
+                   <strong>Your picture is untouched</strong> — we only redrew avatars the studio could
+                   work from, and yours wasn't one of them. But the new system is right there waiting,
+                   and it takes about a minute to try.
+                 </p>`
+      }
+
+            <p style="margin:0 0 4px;font-size:16px;line-height:1.6;color:#3d3a55">
+              And because a new system deserves a fair go: <strong>we've reset everyone's avatar
+              allowance back to full.</strong> Three fresh tries, on the house.
+            </p>
+
+            ${button(`${SITE}/app/dashboard.html#profile`, redrawn ? "See your new avatar" : "Try the new avatar system")}
+
+            <p style="margin:0 0 22px;font-size:15px;line-height:1.6;color:#3d3a55">
+              Don't love it? Generate another, pick an older one from your gallery, or keep a real
+              photograph instead — it's your face, your call, and all of it lives on
+              <a href="${SITE}/app/dashboard.html#profile" style="color:#5b3df5">your profile</a>.
+            </p>
+
+            <p style="margin:0 0 6px;font-size:16px;line-height:1.6;color:#3d3a55">
+              We hope you enjoy the journey in the Sahaba Club AI Universe 🚀
+            </p>
+            <p style="margin:0 0 26px;font-size:16px;line-height:1.6;color:#3d3a55">— Sahaba Club</p>
+          </td></tr>
+
+          <tr><td style="padding:20px 32px 28px;border-top:1px solid #eceaf6">
+            <p style="margin:0;font-size:13px;line-height:1.6;color:#6f6b8d">
+              <a href="${SITE}" style="color:#5b3df5;text-decoration:none">www.sahabaclub.ai</a>
+              &nbsp;·&nbsp;
+              <a href="${SITE}/app/settings.html" style="color:#6f6b8d">Email preferences</a>
+            </p>
+          </td></tr>
+
+        </table>
+        </div>
       `,
     };
   }
