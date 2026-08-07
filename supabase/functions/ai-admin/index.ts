@@ -98,6 +98,7 @@
 //   OPENAI_API_KEY
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { listGoogleModels } from "../_shared/ai-provider.ts";
 import {
   AVATAR_ART_DEFAULTS,
   buildPrompt,
@@ -291,22 +292,70 @@ async function listModels(admin: ReturnType<typeof createClient>): Promise<Respo
   // told us about, so anything still carrying an older stamp is by definition
   // absent from this listing. One predicate, no quoting, and it cannot be
   // defeated by a model id containing a comma or a quote.
+  // ⚠ Scoped to OpenAI. Before Gemini existed this predicate was global, and
+  // leaving it that way would retire every Google model on any refresh — the
+  // OpenAI upsert stamps only OpenAI ids, so Gemini rows would always carry an
+  // older timestamp and always look absent. Google is retired separately
+  // below, and only when Google actually answered.
   const { error: goneErr } = await admin
     .from("ai_models")
     .update({ available: false })
     .lt("refreshed_at", now)
-    .eq("available", true);
+    .eq("available", true)
+    .eq("provider", "openai");
   if (goneErr) console.error("ai_models retire: " + goneErr.message);
+
+  // ---- Gemini ------------------------------------------------------------
+  //
+  // Failure here must not cost the OpenAI listing: a project with no Google key
+  // is the normal case, and a Google outage is not a reason to show an error
+  // page for a panel that is mostly about OpenAI.
+  const google = await listGoogleModels();
+  let googleNote = "";
+  if (google.ok && google.models.length) {
+    const gRows = google.models.map((m) => ({
+      id: m.id,
+      kind: m.kind,
+      owned_by: m.owned_by,
+      provider: "google",
+      released_at: null,
+      available: true,
+      refreshed_at: now,
+    }));
+    const { error: gErr } = await admin.from("ai_models").upsert(gRows, { onConflict: "id" });
+    if (gErr) {
+      console.error("ai_models google upsert: " + gErr.message);
+      googleNote = "Gemini models could not be saved: " + gErr.message;
+    } else {
+      // Only now is it safe to retire Google rows — we have a fresh answer to
+      // compare against.
+      const { error: gGone } = await admin
+        .from("ai_models")
+        .update({ available: false })
+        .lt("refreshed_at", now)
+        .eq("available", true)
+        .eq("provider", "google");
+      if (gGone) console.error("ai_models google retire: " + gGone.message);
+      googleNote = google.models.length + " Gemini models available.";
+    }
+  } else if (google.reason === "no-key") {
+    googleNote = "Gemini is not configured — set GEMINI_API_KEY to offer Google models.";
+  } else if (google.reason === "unreachable") {
+    // Say it plainly. Silence here reads as "Google has no models", which
+    // would send someone to the Google console rather than to the network.
+    googleNote = "Google could not be reached, so Gemini models were left as they were.";
+  }
 
   const { data: stored } = await admin
     .from("ai_models")
-    .select("id, kind, owned_by, released_at, available")
+    .select("id, kind, owned_by, released_at, available, provider, input_per_1m, output_per_1m, price_per_image, price_updated_at, price_source")
     .order("kind", { ascending: true })
     .order("id", { ascending: true });
 
   return json({
     ok: true,
     refreshed_at: now,
+    google_note: googleNote,
     models: stored ?? [],
     counts: {
       text: rows.filter((r) => r.kind === "text").length,
