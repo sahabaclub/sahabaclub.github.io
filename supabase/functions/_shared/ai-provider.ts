@@ -47,14 +47,25 @@ const GOOGLE_KEY =
 
 export type Provider = "openai" | "google";
 
-// A model id decides its own provider. Nothing else has to know.
+// ⚠ A HEURISTIC, and it is wrong on its own. Use it only as a fallback.
 //
-// ⚠ Deliberately a PREFIX test on the id rather than a lookup in ai_models.
-// This runs inside functions that must work when the database is unreachable,
-// and a text model called gemini-* is a Google model whatever any table says.
-// The table's `provider` column is for the PANEL; this is for the call.
+// The first version tested for `gemini*` and nothing else, on the assumption
+// that Google's models are called Gemini. The very first live listing disproved
+// it: of the 42 models Google returned for this project, several are named
+// `antigravity-preview-05-2026`, `deep-research-pro-preview-12-2025` and
+// `learnlm-*`. Under a gemini-only test every one of those routes to OpenAI,
+// which answers 404 model_not_found — a message that sends you to check the
+// model list rather than the router.
+//
+// So `ai_models.provider` — which ai-admin now records from the horse's mouth,
+// because it knows WHICH API returned each id — is the real answer, and callers
+// should pass it. This exists for the case where a caller has only a string:
+// it is right for everything named gemini/gemma/learnlm and wrong-but-safe
+// otherwise, since defaulting to OpenAI fails loudly rather than silently.
+const GOOGLE_FAMILIES = /^(models\/)?(gemini|gemma|learnlm|aqa|imagen|veo|antigravity|deep-research)/i;
+
 export function providerFor(model: string): Provider {
-  return /^(gemini|models\/gemini)/i.test(model) ? "google" : "openai";
+  return GOOGLE_FAMILIES.test(model) ? "google" : "openai";
 }
 
 export function keyFor(provider: Provider): string {
@@ -122,6 +133,11 @@ export interface TextRequest {
   system: string;
   user: string;
   maxOutputTokens: number;
+  // ⚠ Pass this whenever it is known — it comes from ai_models.provider, which
+  // ai-admin records from whichever API actually returned the id. The
+  // heuristic above is only for callers holding nothing but a string, and it
+  // cannot be right for a model family nobody has seen yet.
+  provider?: Provider;
   // Optional strict-JSON contract. `name` is required by OpenAI and ignored by
   // Google, which is why it is carried rather than derived.
   schema?: { name: string; schema: unknown };
@@ -143,7 +159,9 @@ export interface TextResult {
 }
 
 export async function callText(req: TextRequest): Promise<TextResult> {
-  const provider = providerFor(req.model);
+  // An explicit provider always wins. The heuristic is the fallback, not the
+  // rule — see the note on providerFor.
+  const provider = req.provider ?? providerFor(req.model);
   const key = keyFor(provider);
   if (!key) {
     return {
@@ -257,22 +275,36 @@ function readError(raw: unknown): string {
 // ai-admin refreshes `ai_models` on every panel load. This gives it the Google
 // half in the same shape, so the panel does not need to know there are two.
 //
-// ⚠ Returns [] rather than throwing when the key is missing. A project with no
-// Google key must still show its OpenAI models — the list is a convenience,
-// and half a list beats an error page.
-export async function listGoogleModels(): Promise<
-  Array<{ id: string; kind: "text" | "image" | "other"; owned_by: string }>
-> {
-  if (!GOOGLE_KEY) return [];
+// ⚠ NEVER THROWS, and the three outcomes are deliberately distinguishable.
+//
+// The caller retires any model it did not just see. That is right when Google
+// answered and genuinely dropped a model, and WRONG when Google was briefly
+// unreachable — the second case would mark every Gemini model unavailable
+// because of a network blip, and staff would find their configured model gone.
+//
+//   { ok: true,  models: [...] }  Google answered. Safe to retire what is missing.
+//   { ok: false, reason: "no-key" }   Not configured. Do not touch Google rows.
+//   { ok: false, reason: "unreachable" } Ask failed. Do not touch Google rows.
+//
+// A project with no Google key must still show its OpenAI models, so this is
+// never fatal to the listing.
+export interface GoogleModelList {
+  ok: boolean;
+  reason?: "no-key" | "unreachable";
+  models: Array<{ id: string; kind: "text" | "image" | "other"; owned_by: string }>;
+}
+
+export async function listGoogleModels(): Promise<GoogleModelList> {
+  if (!GOOGLE_KEY) return { ok: false, reason: "no-key", models: [] };
   try {
     const res = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models",
+      "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
       { headers: { "x-goog-api-key": GOOGLE_KEY } },
     );
-    if (!res.ok) return [];
+    if (!res.ok) return { ok: false, reason: "unreachable", models: [] };
     const raw = await res.json();
     const models = (raw as { models?: Array<{ name?: string; supportedGenerationMethods?: string[] }> })?.models ?? [];
-    return models
+    const mapped = models
       .filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
       .map((m) => ({
         id: String(m.name ?? "").replace(/^models\//, ""),
@@ -283,7 +315,8 @@ export async function listGoogleModels(): Promise<
         owned_by: "google",
       }))
       .filter((m) => m.id.length > 0);
+    return { ok: true, models: mapped };
   } catch {
-    return [];
+    return { ok: false, reason: "unreachable", models: [] };
   }
 }

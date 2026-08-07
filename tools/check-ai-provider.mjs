@@ -43,6 +43,24 @@ check("models/gemini-2.0-flash -> google", mod.providerFor("models/gemini-2.0-fl
 // Case matters: a model list can return either.
 check("GEMINI-2.5-PRO -> google", mod.providerFor("GEMINI-2.5-PRO"), "google");
 
+// ⚠ These are REAL ids from the first live listing of this project's Google
+// account, and every one of them routed to OpenAI under the original
+// gemini-only test. They are the reason the heuristic was widened and the
+// reason an explicit provider now overrides it.
+check("deep-research-pro-preview-12-2025 -> google", mod.providerFor("deep-research-pro-preview-12-2025"), "google");
+check("antigravity-preview-05-2026 -> google", mod.providerFor("antigravity-preview-05-2026"), "google");
+check("learnlm-2.0-flash -> google", mod.providerFor("learnlm-2.0-flash"), "google");
+check("gemma-3-27b-it -> google", mod.providerFor("gemma-3-27b-it"), "google");
+// An OpenAI id that merely contains the word must NOT be dragged across.
+check("gpt-4o-deep-research -> openai", mod.providerFor("gpt-4o-deep-research"), "openai");
+
+console.log("\nan explicit provider overrides the heuristic");
+const forced = await mod.callText({
+  model: "some-unknown-future-model", provider: "google",
+  system: "s", user: "u", maxOutputTokens: 10,
+});
+check("routed to google despite the name", /GEMINI_API_KEY/.test(forced.error || ""), true);
+
 console.log("\nkeys absent -> callText refuses rather than posting");
 const noKey = await mod.callText({ model: "gemini-2.5-pro", system: "s", user: "u", maxOutputTokens: 10 });
 check("google without a key is not ok", noKey.ok, false);
