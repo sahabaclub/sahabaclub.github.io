@@ -141,10 +141,26 @@ for (const rel of MEMBER_PAGES) {
   if (!/class="nav has-drawer"/.test(src)) {
     src = src.replace(/<header class="nav">/, '<header class="nav has-drawer">');
   }
-  if (!/id="nav-toggle"/.test(src)) {
-    // After </div> closing .nav-actions, before </div> closing .nav-inner.
-    src = src.replace(/(\n\s*<\/div>\s*\n\s*<\/div>\s*\n<\/header>)/, "\n" + TOGGLE + "$1");
-  }
+  // ⚠ The toggle must be a SIBLING of .nav-actions, not a child of it.
+  //
+  // The first version inserted before the pair of closing divs, which put the
+  // button INSIDE .nav-actions — and `.nav.has-drawer .nav-actions` is
+  // `display: none`, so the hamburger was hidden along with the links it was
+  // meant to replace. The page ended up with no menu at all, which is worse
+  // than the header it was fixing.
+  //
+  // Any existing toggle is removed first, so a misplaced one from that version
+  // is relocated rather than left where it is and skipped.
+  src = src.replace(
+    /\n\s*<button class="nav-toggle"[\s\S]*?<\/button>\n?/,
+    "\n"
+  );
+  // Group 1 is the </div> closing .nav-actions; group 2 closes .nav-inner and
+  // the header. The button goes between them.
+  src = src.replace(
+    /(\n\s*<\/div>)(\s*\n\s*<\/div>\s*\n<\/header>)/,
+    "$1\n" + TOGGLE + "$2"
+  );
   if (!/id="mobile-menu"/.test(src)) {
     src = src.replace(/<\/header>/, "</header>\n\n" + drawerFor());
   }
