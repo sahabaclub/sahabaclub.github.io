@@ -48,7 +48,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=1696b16761">
+<link rel="stylesheet" href="styles.css?v=921779d252">
 <style>
   .evp-wrap { max-width: 1000px; margin: 0 auto; padding: 40px 20px 96px; }
   .evp-back { display: inline-block; font-size: 14px; color: var(--text-secondary); margin-bottom: 18px; }
@@ -249,22 +249,22 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=1696b16761"></script>
+<script src="header-identity.js?v=921779d252"></script>
 
 <!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
 <nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
   <div class="mobile-menu-panel">
-    <a class="mobile-menu-item" href="login.html" data-signin-link data-identity-join>Sign in</a>
-    <a class="mobile-menu-item is-primary" href="login.html" data-identity-join>Join the Club</a>
+    <a class="mobile-menu-item" href="login.html" data-signin-link data-identity-join><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5M15 12H3"/></svg><span>Sign in</span></a>
+    <a class="mobile-menu-item is-primary" href="login.html" data-identity-join><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5M15 12H3"/></svg><span>Join the Club</span></a>
     <a class="mobile-menu-item" href="index.html">Home</a>
-    <a class="mobile-menu-item member-only" href="app/dashboard.html">Dashboard</a>
-    <a class="mobile-menu-item member-only" href="app/inbox.html">Messages</a>
-    <a class="mobile-menu-item" href="app/connect.html">Connect</a>
-    <a class="mobile-menu-item" href="events.html">Events</a>
-    <a class="mobile-menu-item" href="hackathons.html">EduHackAI</a>
-    <a class="mobile-menu-item" href="podcast.html">Podcast</a>
-    <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="app/admin/index.html">Admin</a>
+    <a class="mobile-menu-item member-only" href="app/dashboard.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></svg><span>Dashboard</span></a>
+    <a class="mobile-menu-item member-only" href="app/inbox.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.5 9.5 0 0 1-2.9-.4L4 21l1.4-4a8.1 8.1 0 0 1-1.4-4.5A8.4 8.4 0 0 1 12.6 3 8.4 8.4 0 0 1 21 11.5z"/></svg><span>Messages</span></a>
+    <a class="mobile-menu-item" href="app/connect.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="17" r="2.2"/><circle cx="19" cy="17" r="2.2"/><path d="M10.4 6.7 6.4 14.9M13.6 6.7l4 8.2M7.2 17h9.6"/></svg><span>Connect</span></a>
+    <a class="mobile-menu-item" href="events.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.4"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Events</span></a>
+    <a class="mobile-menu-item" href="hackathons.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 2.5 8.5 12 13l9.5-4.5L12 4z"/><path d="M6.5 10.8V15c0 1.6 2.5 2.9 5.5 2.9s5.5-1.3 5.5-2.9v-4.2"/><circle cx="12" cy="8.5" r="1"/></svg><span>EduHackAI</span></a>
+    <a class="mobile-menu-item" href="podcast.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v1M8 8v8M12 5v14M16 8v8M20 12v1"/></svg><span>Podcast</span></a>
+    <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="app/admin/index.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg><span>Admin</span></a>
 
     <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-settings">
       <span>Settings</span>
@@ -332,8 +332,8 @@
 </footer>
 
 <script type="module">
-  import { supabase } from "./lib/supabase-client.js?v=1696b16761";
-  import { relatedEvents } from "./lib/event-related.js?v=1696b16761";
+  import { supabase } from "./lib/supabase-client.js?v=921779d252";
+  import { relatedEvents } from "./lib/event-related.js?v=921779d252";
 
   // ⚠ `var` throughout, and every binding declared before the first executing
   // statement. There is a top-level await below, and a `const` after it would
@@ -694,7 +694,7 @@
   }
 </script>
 
-<script src="analytics.js?v=1696b16761"></script>
-<script src="script.js?v=1696b16761"></script>
+<script src="analytics.js?v=921779d252"></script>
+<script src="script.js?v=921779d252"></script>
 </body>
 </html>
