@@ -199,6 +199,30 @@
         <span class="ad-hint">Who ran it — hold Ctrl (or Cmd) to pick several. An event is
           <strong>ours</strong>, and appears in the Sahaba Club Events Hub, when Sahaba Club is one
           of them. The first non-Sahaba organizer leads the card.</span>
+
+        <!-- Adding an organizer without leaving the event form. Before this,
+             meeting a new organiser meant abandoning a half-filled event, going
+             to the Organizers screen, and starting again — so the honest thing
+             (naming the real host) cost more than the lazy one (leaving it
+             blank). 13 upcoming events have no organizer; that is the reason. -->
+        <div class="ad-inline-add">
+          <button type="button" class="ad-btn ad-btn-sm" id="f-org-new-toggle">+ New organizer</button>
+          <div id="f-org-new" hidden>
+            <input type="text" id="f-org-new-name" placeholder="Name, e.g. The AI Collective"
+                   autocomplete="off" maxlength="120">
+            <select id="f-org-new-category">
+              <option value="Community">Community</option>
+              <option value="Sahaba Club">Sahaba Club</option>
+              <option value="Microsoft">Microsoft</option>
+              <option value="AWS">AWS</option>
+              <option value="Google">Google</option>
+              <option value="Others">Others</option>
+            </select>
+            <button type="button" class="ad-btn ad-btn-sm ad-btn-primary" id="f-org-new-save">Add</button>
+            <button type="button" class="ad-btn ad-btn-sm" id="f-org-new-cancel">Cancel</button>
+          </div>
+          <span class="ad-hint" id="f-org-new-msg"></span>
+        </div>
       </div>
 
       <div class="ad-field">
@@ -420,10 +444,101 @@
       .order("sort_order", { ascending: true });
     if (error) return;
     organizerOptions = data || [];
+    // Repainting the list throws the selection away, and this now runs while
+    // the admin is part-way through a form — so carry it across.
+    const wasSelected = new Set(Array.from(F.organizers.selectedOptions).map(o => o.value));
     F.organizers.innerHTML = organizerOptions
       .map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.name)} — ${escapeHtml(o.category)}</option>`)
       .join("");
+    Array.from(F.organizers.options).forEach(o => { o.selected = wasSelected.has(o.value); });
   }
+
+  // ---- Adding an organizer without leaving the form ----------------------
+  //
+  // Ahmed, on an event whose host was not in the list: "in event editing or
+  // adding we should have control to add new organizer if not exist".
+  //
+  // The new organizer is created and SELECTED, but nothing is attached to the
+  // event until the form is saved — the same rule the rest of this screen
+  // follows. Creating it immediately is deliberate all the same: an organizer
+  // is shared across events, so it cannot wait on this one being valid.
+  (function wireInlineOrganizer() {
+    const toggle = document.getElementById("f-org-new-toggle");
+    const panel = document.getElementById("f-org-new");
+    const nameEl = document.getElementById("f-org-new-name");
+    const catEl = document.getElementById("f-org-new-category");
+    const saveBtn = document.getElementById("f-org-new-save");
+    const cancelBtn = document.getElementById("f-org-new-cancel");
+    const msg = document.getElementById("f-org-new-msg");
+
+    function say(text, kind) {
+      msg.textContent = text || "";
+      msg.className = "ad-hint" + (kind ? " " + kind : "");
+    }
+    function close() {
+      panel.hidden = true;
+      toggle.hidden = false;
+      nameEl.value = "";
+      say("");
+    }
+
+    toggle.addEventListener("click", function () {
+      panel.hidden = false;
+      toggle.hidden = true;
+      nameEl.focus();
+    });
+    cancelBtn.addEventListener("click", close);
+
+    // Enter should add, not submit the whole event form behind it.
+    nameEl.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); saveBtn.click(); }
+    });
+
+    saveBtn.addEventListener("click", async function () {
+      const name = nameEl.value.trim();
+      if (!name) { say("Give the organizer a name.", "err"); nameEl.focus(); return; }
+
+      // Match the list case-insensitively before inserting. "The AI Collective"
+      // and "the ai collective" are one organizer, and a near-duplicate here
+      // quietly splits an organizer's events in two on the public pages.
+      const existing = organizerOptions.find(
+        o => (o.name || "").trim().toLowerCase() === name.toLowerCase()
+      );
+      if (existing) {
+        Array.from(F.organizers.options).forEach(o => {
+          if (o.value === existing.id) o.selected = true;
+        });
+        say("Already in the list — selected it instead.", "");
+        close();
+        return;
+      }
+
+      saveBtn.disabled = true;
+      say("Adding…", "");
+      const { data, error } = await supabase
+        .from("organizers")
+        .insert({ name: name, category: catEl.value })
+        .select("id, name, category")
+        .maybeSingle();
+      saveBtn.disabled = false;
+
+      // ⚠ Report the real message. The importer on this same screen swallowed
+      // its error into "Import failed", and that turned a one-line role bug
+      // into a diagnosis. A refusal here would most likely be a grant or a
+      // policy, and neither is guessable from "couldn't add".
+      if (error || !data) {
+        say("Couldn't add it: " + ((error && error.message) || "no row came back"), "err");
+        return;
+      }
+
+      await loadOrganizers();
+      Array.from(F.organizers.options).forEach(o => {
+        if (o.value === data.id) o.selected = true;
+      });
+      close();
+      say("Added " + data.name + " and selected it. Save the event to attach it.", "ok");
+    });
+  })();
 
   async function loadEventOrganizers(eventId) {
     if (!eventId) return [];
