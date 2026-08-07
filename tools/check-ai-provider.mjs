@@ -99,6 +99,52 @@ if (!g) {
   check("required preserved", g.required, ["verdict", "score"]);
 }
 
+// ---- stop-reason normalisation -------------------------------------------
+//
+// The reason this is tested rather than eyeballed: promptarena-challenge treats
+// length / filter / refusal as THREE different outcomes, and is right to —
+// raising the ceiling fixes one and is pointless for the others. Collapsing
+// them makes the retry logic wrong in the expensive direction, and no test of
+// the happy path would notice.
+//
+// Bodies below are the real response shapes, trimmed.
+console.log("\nstop reasons, normalised across providers");
+{
+  const cases = [
+    ["openai length",
+      { status: "incomplete", incomplete_details: { reason: "max_output_tokens" }, output: [] },
+      "openai", { stopReason: "length", truncated: true, refused: false }],
+    ["openai content filter",
+      { status: "incomplete", incomplete_details: { reason: "content_filter" }, output: [] },
+      "openai", { stopReason: "filter", truncated: true, refused: false }],
+    ["openai refusal part",
+      { status: "completed", output: [{ content: [{ type: "refusal", refusal: "no" }] }] },
+      "openai", { stopReason: "stop", truncated: false, refused: true }],
+    ["openai normal",
+      { status: "completed", output: [{ content: [{ type: "output_text", text: "hi" }] }] },
+      "openai", { stopReason: "stop", truncated: false, refused: false }],
+    ["google MAX_TOKENS",
+      { candidates: [{ finishReason: "MAX_TOKENS", content: { parts: [{ text: "par" }] } }] },
+      "google", { stopReason: "length", truncated: true, refused: false }],
+    ["google SAFETY, nothing written",
+      { candidates: [{ finishReason: "SAFETY", content: { parts: [] } }] },
+      "google", { stopReason: "filter", truncated: false, refused: true }],
+    ["google RECITATION is a filter, not length",
+      { candidates: [{ finishReason: "RECITATION", content: { parts: [{ text: "x" }] } }] },
+      "google", { stopReason: "filter", truncated: false, refused: false }],
+    ["google prompt blocked before generation",
+      { promptFeedback: { blockReason: "SAFETY" } },
+      "google", { stopReason: "filter", truncated: false, refused: true }],
+    ["google normal",
+      { candidates: [{ finishReason: "STOP", content: { parts: [{ text: "hi" }] } }] },
+      "google", { stopReason: "stop", truncated: false, refused: false }],
+  ];
+  for (const [label, body, provider, want] of cases) {
+    const got = mod.__testables.normalise(body, provider);
+    check(label, { stopReason: got.stopReason, truncated: !!got.truncated, refused: !!got.refused }, want);
+  }
+}
+
 console.log("");
 if (failed) { console.log(`${failed} check(s) failed`); process.exit(1); }
 console.log("ai-provider logic is sound.");

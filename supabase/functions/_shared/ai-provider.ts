@@ -121,12 +121,72 @@ function toGeminiSchema(node: unknown): unknown {
   return out;
 }
 
+// Read a provider's body into the four things every caller needs. Shared by
+// both call paths AND by the tests, so what is checked is what runs — a
+// transcription of this logic could pass while the shipped version was wrong.
+export function normalise(
+  raw: unknown,
+  provider: Provider,
+): { text: string; stopReason: "stop" | "length" | "filter" | "other"; truncated: boolean; refused: boolean } {
+  if (provider === "openai") {
+    let text = "";
+    let refused = false;
+    const output = (raw as { output?: unknown[] })?.output ?? [];
+    for (const item of output as Array<{ content?: Array<{ type?: string; text?: string }> }>) {
+      for (const part of item?.content ?? []) {
+        if (part?.type === "refusal") refused = true;
+        else if (part?.text) text += part.text;
+      }
+    }
+    const r = raw as { status?: string; incomplete_details?: { reason?: string } };
+    let stopReason: "stop" | "length" | "filter" | "other" = "stop";
+    if (r?.status === "incomplete") {
+      const reason = r.incomplete_details?.reason;
+      stopReason = reason === "content_filter" ? "filter"
+        : reason === "max_output_tokens" ? "length"
+        : "other";
+    }
+    return { text, stopReason, truncated: r?.status === "incomplete", refused };
+  }
+
+  const cand = (raw as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> })
+    ?.candidates?.[0];
+  let text = "";
+  for (const part of cand?.content?.parts ?? []) if (part?.text) text += part.text;
+
+  // ⚠ RECITATION belongs with SAFETY, not with length: the model stopped
+  // because the answer was reproducing training data, and retrying at a bigger
+  // ceiling produces the same stop while spending money.
+  //
+  // ⚠ A missing candidate is a FILTER, not an empty answer. Google drops the
+  // candidate entirely when a prompt is blocked before generation, leaving only
+  // promptFeedback.blockReason. Reporting that as "stop with no text" sends the
+  // caller looking for a parsing bug.
+  const blocked = (raw as { promptFeedback?: { blockReason?: string } })?.promptFeedback?.blockReason;
+  const finish = cand?.finishReason;
+  let gStop: "stop" | "length" | "filter" | "other";
+  if (!cand && blocked) gStop = "filter";
+  else if (finish === "MAX_TOKENS") gStop = "length";
+  else if (finish === "SAFETY" || finish === "RECITATION" || finish === "PROHIBITED_CONTENT") gStop = "filter";
+  else if (finish === "STOP" || finish === undefined) gStop = "stop";
+  else gStop = "other";
+
+  return {
+    text,
+    stopReason: gStop,
+    truncated: gStop === "length",
+    // Google has no separate refusal part: a filter stop with nothing written
+    // IS the refusal.
+    refused: gStop === "filter" && text.length === 0,
+  };
+}
+
 // ⚠ Exported for tools/check-ai-provider.mjs only. toGeminiSchema is the most
 // likely thing in this file to be quietly wrong — Google answers a bad schema
 // with a 400 that reads like a model error — and it is not reachable from
 // callText() without a network call and a key. Testing a transcription of it
 // would pass while the shipped version was broken.
-export const __testables = { toGeminiSchema };
+export const __testables = { toGeminiSchema, normalise };
 
 export interface TextRequest {
   model: string;
@@ -156,6 +216,27 @@ export interface TextResult {
   // signal this differently and every caller wants to know, because the fix is
   // to retry with a larger one rather than to treat it as a bad answer.
   truncated?: boolean;
+
+  // ⚠ Why it stopped, normalised — and the distinction is not cosmetic.
+  // promptarena-challenge already treats these three as different outcomes and
+  // is right to: raising the ceiling fixes "length" and does nothing for the
+  // other two, so collapsing them would make the retry logic wrong.
+  //
+  //   "length"  ran out of room. Retry bigger.
+  //   "filter"  the provider's safety system stopped it. Retrying is pointless.
+  //   "stop"    finished normally.
+  //   "other"   something new. Treated as not-retryable, because guessing
+  //             wrong in the retryable direction spends money in a loop.
+  //
+  //   OpenAI  status:"incomplete" + incomplete_details.reason
+  //           ("max_output_tokens" | "content_filter")
+  //   Google  candidates[0].finishReason
+  //           ("MAX_TOKENS" | "SAFETY" | "RECITATION" | "STOP")
+  stopReason?: "stop" | "length" | "filter" | "other";
+
+  // The model declined the instructions outright. OpenAI emits a `refusal`
+  // content part; Google signals it through finishReason SAFETY with no text.
+  refused?: boolean;
 }
 
 export async function callText(req: TextRequest): Promise<TextResult> {
@@ -204,15 +285,10 @@ async function callOpenAI(req: TextRequest, key: string): Promise<TextResult> {
 
   // output[] holds reasoning items as well as the message; only the message
   // carries text, so this collects rather than indexing [0].
-  let text = "";
-  const output = (raw as { output?: unknown[] })?.output ?? [];
-  for (const item of output as Array<{ content?: Array<{ text?: string }> }>) {
-    for (const part of item?.content ?? []) if (part?.text) text += part.text;
-  }
-  const status = (raw as { status?: string })?.status;
+  const n = normalise(raw, "openai");
   return {
-    ok: true, text, provider: "openai", status: res.status, raw,
-    truncated: status === "incomplete",
+    ok: true, text: n.text, provider: "openai", status: res.status, raw,
+    truncated: n.truncated, stopReason: n.stopReason, refused: n.refused,
   };
 }
 
@@ -250,13 +326,10 @@ async function callGoogle(req: TextRequest, key: string): Promise<TextResult> {
     };
   }
 
-  const cand = (raw as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> })
-    ?.candidates?.[0];
-  let text = "";
-  for (const part of cand?.content?.parts ?? []) if (part?.text) text += part.text;
+  const n = normalise(raw, "google");
   return {
-    ok: true, text, provider: "google", status: res.status, raw,
-    truncated: cand?.finishReason === "MAX_TOKENS",
+    ok: true, text: n.text, provider: "google", status: res.status, raw,
+    truncated: n.truncated, stopReason: n.stopReason, refused: n.refused,
   };
 }
 
