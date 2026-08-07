@@ -508,8 +508,12 @@
         Array.from(F.organizers.options).forEach(o => {
           if (o.value === existing.id) o.selected = true;
         });
-        say("Already in the list — selected it instead.", "");
+        // ⚠ close() clears the message, so it has to run BEFORE the message is
+        // set, not after. Written the other way round first, and the browser
+        // check caught it: the duplicate was matched and selected correctly and
+        // then said nothing at all, which reads as "the button did nothing".
         close();
+        say("Already in the list — selected it instead.", "");
         return;
       }
 
