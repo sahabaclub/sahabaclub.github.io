@@ -18,6 +18,23 @@
 // `tools/promptarena-dashboard/0030_promptarena_admin_views.proposed.sql`.
 //
 // ============================================================================
+// Which roles count as "not a competitor"
+// ============================================================================
+//
+// A `function` declaration, not a `const` arrow: declarations hoist, so this is
+// callable from anywhere in the module regardless of where it sits. A `const`
+// here would sit in the temporal dead zone for any call above it — the exact
+// trap tools/check-dead-zone.mjs exists to catch.
+//
+// ⚠ `global_admin` belongs in this list. 0054 renamed Ahmed's role and three
+// separate role comparisons in the client were left reading `=== "admin"`,
+// which quietly hid the Admin link from the only person who has it. Three
+// copies of the same list is how that happened, so there is now one.
+function isStaffRole(role) {
+  return role === "staff" || role === "admin" || role === "global_admin";
+}
+
+// ============================================================================
 // Why this file exists separately from the page
 // ============================================================================
 //
@@ -515,7 +532,7 @@ export function buildModel(sources) {
   // reasoning the legacy half applies to the account that produced 53 of one
   // event's 256 submissions: kept and flagged, never silently deleted.
   live.staffPlayerCount = Array.from(live.players.values())
-    .filter(p => p.role === "staff" || p.role === "admin").length;
+    .filter(p => isStaffRole(p.role)).length;
 
   model.live = live;
 
@@ -1250,7 +1267,7 @@ function renderPlayers(model, opts) {
   const live = model.live;
   const showStaff = opts && opts.includeStaff;
   const list = Array.from(live.players.values())
-    .filter(p => showStaff || !(p.role === "staff" || p.role === "admin"))
+    .filter(p => showStaff || !isStaffRole(p.role))
     .filter(p => p.judged > 0)
     .sort((a, b) => (b.sum / b.judged) - (a.sum / a.judged))
     .slice(0, 50);
@@ -1268,7 +1285,7 @@ function renderPlayers(model, opts) {
     return "<tr>" +
       '<td class="ad-num">' + (i + 1) + "</td>" +
       '<td class="ad-cell-strong">' + escapeHtml(p.name || "(no profile name)") +
-        (p.role === "staff" || p.role === "admin" ? ' <span class="ad-pill role-' + escapeHtml(p.role) + '">' + escapeHtml(p.role) + "</span>" : "") +
+        (isStaffRole(p.role) ? ' <span class="ad-pill role-' + escapeHtml(p.role) + '">' + escapeHtml(p.role) + "</span>" : "") +
         (p.optedIn ? "" : ' <span class="ad-pill muted" title="They have not opted into the public leaderboard. This is the staff view; the member-facing leaderboard shows only people who said yes.">hidden publicly</span>') + "</td>" +
       '<td class="ad-num">' + dec(p.sum / p.judged, 2) + "</td>" +
       '<td class="ad-num">' + num(p.challenges.size) + "</td>" +

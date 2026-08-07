@@ -612,7 +612,17 @@
     });
   }).then(function (res) {
     if (!res || !res.data) return;
-    if (res.data.role === "admin" || res.data.role === "staff") {
+    // ⚠ `global_admin` must be here. 0054 renamed Ahmed's role from `admin`,
+    // and this line still read `=== "admin"` afterwards — so the Admin link
+    // vanished from the public menu for the only person who has it, while
+    // /app/admin itself worked fine because lib/admin-guard.js HAD been
+    // updated. A role rename has to sweep every role comparison in the client,
+    // not just the obvious one. tools/check-role-labels.mjs now enforces that.
+    if (
+      res.data.role === "admin" ||
+      res.data.role === "global_admin" ||
+      res.data.role === "staff"
+    ) {
       links.forEach(function (l) { l.classList.remove("admin-hidden"); });
     }
   }).catch(function () {
