@@ -333,3 +333,20 @@ export async function disableAccount(userId: string) {
 export async function deleteAccount(userId: string) {
   await graphFetch(`/users/${userId}`, { method: "DELETE" });
 }
+
+// The three helpers above all take a GRAPH object id. Everywhere else in this
+// project a member's mailbox is stored as an address, so offboarding needs the
+// step between.
+//
+// ⚠ Returns null rather than throwing when there is no such user. Offboarding
+// must succeed when the mailbox is ALREADY gone — someone deleted it by hand in
+// the Microsoft admin centre, or a previous attempt got that far and failed
+// later. Treating "not there" as an error would make the member undeletable and
+// send whoever is cleaning up back to the tenant to check by eye.
+export async function findUserIdByMailbox(mailbox: string): Promise<string | null> {
+  const m = odata(mailbox);
+  const res = await graphFetch(
+    `/users?$filter=userPrincipalName eq '${m}' or mail eq '${m}'&$select=id&$top=1`,
+  );
+  return res.value?.[0]?.id ?? null;
+}
