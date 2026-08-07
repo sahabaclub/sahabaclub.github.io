@@ -3217,8 +3217,14 @@ html.reduce-motion .pod-play-ring { animation: none; }
   z-index: 1;
   border-radius: 14px;
 }
-/* Above the overlay, so they are still clickable. */
-.ev-card .ev-fav,
+/* Above the overlay, so they are still clickable.
+   ⚠ `.ev-fav` gets z-index ONLY. It is already `position: absolute; top: 11px;
+   right: 11px`, and the first version of this rule set `position: relative` on
+   it along with the others — which dropped the button out of the card's corner
+   and into the flow, moving it hundreds of pixels down the page. z-index works
+   on any positioned element, and this one already is one; only the static
+   children need relative adding. */
+.ev-card .ev-fav { z-index: 2; }
 .ev-card .ev-register,
 .ev-card .ev-face-link { position: relative; z-index: 2; }
 
