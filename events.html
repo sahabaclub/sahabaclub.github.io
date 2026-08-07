@@ -235,12 +235,29 @@
   .evx-hub { max-width: var(--max-width); margin: 0 auto; padding: 56px 20px 0; }
   .evx-hub-head { text-align: center; margin-bottom: 22px; }
   .evx-hub-sub { color: var(--text-secondary); font-size: 14.5px; margin: 6px 0 0; }
-  .evx-hub-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; }
+  /* ⚠ Flex, not `grid-template-columns: repeat(auto-fit, minmax(210px, 1fr))`.
+     auto-fit gives every column an equal share of the row, so with two events
+     each card grew to roughly double width and the strip looked like a
+     different component. Ahmed: "if we have 2 or 3 don't make the card bigger,
+     same size just center in the area."
+
+     A card is therefore always a quarter of the row minus the three gaps —
+     exactly its width when there are four — and the row centres whatever is
+     left over. min-width keeps it readable once the row wraps on a phone. */
+  .evx-hub-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; }
   .evx-hub-card {
     position: relative; display: flex; flex-direction: column; overflow: hidden;
     border-radius: var(--radius); background: var(--glass);
     border: 1px solid var(--glass-border); transition: border-color .2s, transform .2s;
+    flex: 0 1 calc((100% - 48px) / 4);
+    max-width: calc((100% - 48px) / 4);
+    min-width: 210px;
   }
+  /* The whole card is an <a> now, so it must not inherit link styling. */
+  .evx-hub-card-link { color: inherit; text-decoration: none; }
+  .evx-hub-card-link:hover .evx-hub-title,
+  .evx-hub-card-link:focus-visible .evx-hub-title { color: var(--cyan); }
+  .evx-hub-card-link:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
   /* The "shiny" Ahmed asked for: a soft gradient wash over the card rather
      than a glow on the text. It sits under the content and is aria-hidden by
      virtue of being a pseudo-element, so it adds nothing for a screen reader
@@ -251,7 +268,18 @@
   }
   .evx-hub-card:hover { border-color: var(--cyan); transform: translateY(-2px); }
   @media (prefers-reduced-motion: reduce) { .evx-hub-card:hover { transform: none; } }
-  .evx-hub-art { position: relative; width: 100%; aspect-ratio: 1 / 1; object-fit: cover; }
+  /* ⚠ `contain`, not `cover`. Cover fills the square by cropping, and these
+     are event banners — wide images whose whole point is the wordmark across
+     the middle. Cropping them to a square cut "AWS Summit" down to "WS SUMMI"
+     and sliced the Ignite card in half. Ahmed: "Make sure adding any image to
+     the frame to be fit to the frame."
+
+     contain shows the entire image and letterboxes the remainder, so the tinted
+     panel behind it needs to look deliberate rather than like a gap. */
+  .evx-hub-art {
+    position: relative; width: 100%; aspect-ratio: 1 / 1;
+    object-fit: contain; background: rgba(255, 255, 255, .04);
+  }
   .evx-hub-art-fallback {
     position: relative; width: 100%; aspect-ratio: 1 / 1; display: flex;
     align-items: center; justify-content: center; font-size: 40px;
@@ -549,10 +577,15 @@
       </div>
     </div>
 
-    <div class="filter-group filter-group-tags" role="group" aria-label="Topics">
-      <span class="filter-legend">Topics</span>
-      <div class="filter-chips" id="filter-tags"></div>
-    </div>
+    <!-- The Topics filter was removed at Ahmed's request. The markup goes
+         rather than being hidden, so nobody has to work out later whether a
+         `display:none` block is disabled or broken.
+
+         The JS is deliberately left in place: buildTagChips() opens with
+         `if (!tagsWrap) return;` and the tag branch of the filter only runs
+         when `state.tags` is non-empty, which nothing can now make true. So
+         this is a clean no-op, the search box still matches on tags, and
+         restoring the filter is putting the markup back. -->
 
     <div class="filter-panel-foot">
       <button type="button" class="filter-reset-sheet" id="filter-reset-sheet">Reset</button>

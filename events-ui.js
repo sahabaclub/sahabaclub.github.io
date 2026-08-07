@@ -36,10 +36,13 @@
     return new Date(a.sortDate) - new Date(b.sortDate);
   });
 
-  if (!live.length) {
-    if (strip) strip.parentNode.removeChild(strip);
-    return;
-  }
+  // ⚠ Do NOT remove the strip and return when the hardcoded list is empty.
+  // It used to, and that was correct while FEATURED_EVENTS was the only
+  // source — but the `sc:featured-db` listener below is registered further
+  // down, so returning here would mean that once every hardcoded edition has
+  // passed, an event featured from the admin panel could never appear. Hide
+  // it instead; the listener unhides it if the database has anything.
+  if (!live.length && strip) strip.hidden = true;
 
   var pin = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.4"/></svg>';
   // Points down, because the card now takes you to the same event further
@@ -216,15 +219,93 @@
   // Two passes: the second is a visual duplicate that makes the wrap
   // invisible. It's hidden from assistive tech and taken out of the tab
   // order so the list is only announced once.
-  [0, 1].forEach(function (pass) {
-    live.forEach(function (f) {
-      var card = buildFeatured(f);
-      if (pass === 1) {
-        card.setAttribute("aria-hidden", "true");
-        card.setAttribute("tabindex", "-1");
-      }
-      track.appendChild(card);
+  function fillTrack(list) {
+    track.innerHTML = "";
+    [0, 1].forEach(function (pass) {
+      list.forEach(function (f) {
+        var card = buildFeatured(f);
+        if (pass === 1) {
+          card.setAttribute("aria-hidden", "true");
+          card.setAttribute("tabindex", "-1");
+        }
+        track.appendChild(card);
+      });
     });
+  }
+
+  fillTrack(live);
+
+  // ---- events featured from the admin panel ------------------------------
+  //
+  // Ahmed: "I am adding events and feature them to the mega events but nothing
+  // changed! How to control the mega events?"
+  //
+  // Because until now this banner was ONLY the hardcoded FEATURED_EVENTS list
+  // above. `is_featured` and the whole `featured_*` column family (0048) were
+  // written by the admin form and read by nothing — the tick did what it said
+  // in the database and had no effect anywhere a visitor could see.
+  //
+  // The two sources are merged rather than one replacing the other: the
+  // hardcoded entries carry hand-drawn logos and live markup (Machines Can
+  // Think animates) that no database row can express, so they stay. A
+  // database row that names the same event wins, so featuring an event that
+  // is already hardcoded edits it rather than duplicating it.
+  //
+  // This arrives late, after the events query. Rebuilding the track is
+  // deliberate: the banner draws immediately from the hardcoded list, so the
+  // top of the page is never empty while the network is in flight.
+  document.addEventListener("sc:featured-db", function (ev) {
+    var rows = (ev.detail && ev.detail.events) || [];
+    if (!rows.length) return;
+
+    var byName = {};
+    live.forEach(function (f) { byName[String(f.name).toLowerCase()] = f; });
+
+    rows.forEach(function (r) {
+      var mapped = {
+        name: r.title,
+        dateLabel: r.dateLabel,
+        sortDate: r.sortDate || "",
+        venue: r.venue || "",
+        city: r.city || "",
+        note: r.note || "",
+        scale: r.scale || "",
+        logo: r.logo || "",
+        tile: r.tile === "light" ? "light" : "dark",
+        accent: r.accent || "violet",
+        link: r.link || "",
+        // Lower featured_sort shows first; blank sorts by date. Kept as a
+        // number so the sort below can use it without re-parsing.
+        order: (r.order === null || r.order === undefined) ? null : Number(r.order)
+      };
+      var key = String(mapped.name).toLowerCase();
+      if (byName[key]) {
+        // Same event, hardcoded AND featured in the admin. Overlay only the
+        // fields the row actually filled, so a database row cannot blank a
+        // hand-drawn logo by leaving its own logo empty.
+        Object.keys(mapped).forEach(function (k) {
+          if (mapped[k] !== "" && mapped[k] !== null && mapped[k] !== undefined) {
+            byName[key][k] = mapped[k];
+          }
+        });
+      } else {
+        byName[key] = mapped;
+        live.push(mapped);
+      }
+    });
+
+    live.sort(function (a, b) {
+      // An explicit order beats a date, and both beat "date not announced".
+      var ao = (a.order === null || a.order === undefined) ? Infinity : a.order;
+      var bo = (b.order === null || b.order === undefined) ? Infinity : b.order;
+      if (ao !== bo) return ao - bo;
+      if (!a.sortDate) return 1;
+      if (!b.sortDate) return -1;
+      return new Date(a.sortDate) - new Date(b.sortDate);
+    });
+
+    fillTrack(live);
+    if (strip) strip.hidden = false;
   });
 
   // ---- carousel motion + controls ---------------------------------------
@@ -419,7 +500,21 @@
       // May be null for a moment on a clone whose database predates 0048 —
       // buildCard checks before rendering the link rather than producing
       // event.html?e=null.
-      slug: row.slug
+      slug: row.slug,
+
+      // ⚠ The featured_* family (0048), for the mega banner. These were
+      // absent from this mapping, which is the whole reason ticking "Feature"
+      // in the admin panel changed nothing a visitor could see: the column was
+      // written, the row was fetched by `select("*")`, and then dropped right
+      // here on the way into EVENTS_ALL. Nothing downstream could have found
+      // them however hard it looked.
+      is_featured: row.is_featured,
+      featured_logo_url: row.featured_logo_url,
+      featured_tile: row.featured_tile,
+      featured_accent: row.featured_accent,
+      featured_scale: row.featured_scale,
+      featured_note: row.featured_note,
+      featured_sort: row.featured_sort
     };
   }
 
@@ -1328,7 +1423,13 @@
     var strip = document.getElementById("hub-strip");
     if (!section || !strip) return;
 
-    var mine = EVENTS_ALL.filter(function (e) { return e.isOurs || e.isPartnered; });
+    // ⚠ `isOurs` ONLY. This read `e.isOurs || e.isPartnered`, which put any
+    // event run by a partner into the Sahaba Club Events Hub — so the strip
+    // filled with Microsoft, AWS and ExpertsLive events the club had no hand
+    // in running. Ahmed: "Sahaba Club Events only when the organizer have
+    // Sahaba Club, other than this not mentioned." A partner's own conference
+    // is still listed further down the page like any other event.
+    var mine = EVENTS_ALL.filter(function (e) { return e.isOurs; });
     if (!mine.length) {
       section.parentNode && section.parentNode.removeChild(section);
       // The jump tag would otherwise point at a section that no longer exists.
@@ -1353,22 +1454,63 @@
         ? '<img class="evx-hub-art" src="' + escapeHtml(e.image) + '" alt="" loading="lazy">'
         : '<div class="evx-hub-art-fallback" aria-hidden="true">&#128197;</div>';
       var names = (e.organizerNames || []).join(" + ");
-      // The title links to the event's own page, matching the cards below —
-      // not to an anchor on this page, because the hub is about the event
-      // rather than about finding it in the list.
-      return '<article class="evx-hub-card">' + art +
+      // ⚠ The WHOLE card is the link, not just the title. Ahmed: "once user
+      // click it lead to the event page." Only the words of the title were
+      // clickable before, so the picture, the date and the surrounding card —
+      // which is what anyone actually aims at — did nothing.
+      //
+      // An event with no slug has no page to open, so it stays a plain card
+      // rather than becoming a link to nowhere.
+      var inner = art +
         '<div class="evx-hub-body">' +
           '<p class="evx-hub-when">' + escapeHtml(cardDate(e.date) || "") + "</p>" +
-          '<h3 class="evx-hub-title">' +
-            (e.slug
-              ? '<a href="event.html?e=' + encodeURIComponent(e.slug) + '">' + escapeHtml(e.title) + "</a>"
-              : escapeHtml(e.title)) +
-          "</h3>" +
+          '<h3 class="evx-hub-title">' + escapeHtml(e.title) + "</h3>" +
           (names ? '<p class="evx-hub-org">' + escapeHtml(names) + "</p>" : "") +
-        "</div></article>";
+        "</div>";
+
+      if (!e.slug) return '<article class="evx-hub-card">' + inner + "</article>";
+      return '<a class="evx-hub-card evx-hub-card-link" href="event.html?e=' +
+        encodeURIComponent(e.slug) + '">' + inner + "</a>";
     }).join("");
 
     section.hidden = false;
+  }
+
+  // ---- hand the admin-featured events to the mega banner -----------------
+  //
+  // The banner is a separate IIFE at the top of this file that runs before any
+  // network call, so it cannot see EVENTS_ALL. This is the handover: it maps
+  // the database's featured_* columns onto the shape FEATURED_EVENTS uses and
+  // fires one event. Mapping HERE rather than there keeps the banner ignorant
+  // of the database, which is what lets it draw instantly from the hardcoded
+  // list and never block on a query.
+  function announceFeatured() {
+    var rows = EVENTS_ALL.filter(function (e) { return e.is_featured; });
+    if (!rows.length) return;
+    document.dispatchEvent(new CustomEvent("sc:featured-db", {
+      detail: {
+        events: rows.map(function (e) {
+          return {
+            title: e.title,
+            dateLabel: cardDate(e.date) || "",
+            sortDate: e.date || "",
+            // FEATURED_EVENTS splits the place into venue + city; an event row
+            // has one `location` and a `country`. Mapping location onto venue
+            // and country onto city keeps the card's two lines meaningful
+            // rather than inventing a split that the data does not have.
+            venue: e.location || "",
+            city: e.country || "",
+            note: e.featured_note || "",
+            scale: e.featured_scale || "",
+            logo: e.featured_logo_url || "",
+            tile: e.featured_tile || "dark",
+            accent: e.featured_accent || "violet",
+            link: e.slug ? "event.html?e=" + encodeURIComponent(e.slug) : "",
+            order: e.featured_sort
+          };
+        })
+      }
+    }));
   }
 
   loadEventsFromDatabase().then(function () {
@@ -1378,6 +1520,7 @@
     }
     buildTagChips();
     buildHubStrip();
+    announceFeatured();
     // Draw the public list immediately; the personal layer arrives after and
     // re-renders, so events appear without waiting on a signed-in check.
     renderList();
