@@ -95,11 +95,26 @@
   .evp-share-msg { font-size: 13px; color: var(--text-muted); margin: 10px 0 0; }
 
   .evp-related { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+  /* The padding moves off the card and onto the body, so the picture can run
+     edge to edge under the rounded corner. overflow:hidden is what actually
+     clips it to that corner. */
   .evp-rel {
-    display: block; padding: 14px; border-radius: 14px;
+    display: block; border-radius: 14px; overflow: hidden;
     background: var(--glass); border: 1px solid var(--glass-border); color: var(--text);
+    text-decoration: none;
   }
   .evp-rel:hover { border-color: var(--cyan); }
+  .evp-rel:hover .evp-rel-title { color: var(--cyan); }
+  /* `contain`, for the same reason as the Hub strip: these are wide event
+     banners, and cropping one to a 16/9 box cuts the wordmark in half. */
+  .evp-rel-art {
+    display: block; width: 100%; aspect-ratio: 16 / 9;
+    object-fit: contain; background: rgba(255, 255, 255, .04);
+  }
+  .evp-rel-art-fallback {
+    display: flex; align-items: center; justify-content: center; font-size: 30px;
+  }
+  .evp-rel-body { padding: 12px 14px 14px; }
   .evp-rel-when { font-size: 12.5px; color: var(--text-muted); margin: 0 0 6px; }
   .evp-rel-title { font-size: 14.5px; font-weight: 600; line-height: 1.35; margin: 0; }
 
@@ -361,9 +376,18 @@
 
     var relHtml = related.length
       ? '<div class="evp-related">' + related.map(function (r) {
+          // A picture, or a placeholder of the same size. Every card keeps the
+          // same shape either way — a row where only some cards have art tears
+          // the baseline of the titles apart and reads as a rendering fault.
+          var relArt = r.image
+            ? '<img class="evp-rel-art" src="' + esc(r.image) + '" alt="" loading="lazy">'
+            : '<div class="evp-rel-art evp-rel-art-fallback" aria-hidden="true">&#128197;</div>';
           return '<a class="evp-rel" href="event.html?e=' + encodeURIComponent(r.slug) + '">' +
-                 '<p class="evp-rel-when">' + esc(longDate(r.eventDate)) + "</p>" +
-                 '<p class="evp-rel-title">' + esc(r.title) + "</p></a>";
+                 relArt +
+                 '<div class="evp-rel-body">' +
+                   '<p class="evp-rel-when">' + esc(longDate(r.eventDate)) + "</p>" +
+                   '<p class="evp-rel-title">' + esc(r.title) + "</p>" +
+                 "</div></a>";
         }).join("") + "</div>"
       : '<p class="evp-share-msg">Nothing closely related yet — browse ' +
         '<a href="events.html">all events</a>.</p>';
@@ -477,7 +501,7 @@
       // in the related list must never take the event itself down with it.
       var allRes = await supabase
         .from("events")
-        .select("id, slug, title, event_date, mode, country, tags, presenter, is_published")
+        .select("id, slug, title, event_date, mode, country, tags, presenter, is_published, image_url")
         .eq("is_published", true);
 
       var linkRes = await supabase.from("event_organizers").select("event_id, organizer_id");
@@ -493,6 +517,10 @@
           mode: r.mode, country: r.country, tags: r.tags || [],
           presenter: r.presenter, isPublished: r.is_published,
           organizerIds: byEvent[r.id] || [],
+          // Carried for the card picture only. relatedEvents() scores on tags,
+          // mode, country, presenter and organizers and never reads this, so an
+          // event with no image is ranked exactly as it was before.
+          image: r.image_url,
         };
       });
 
