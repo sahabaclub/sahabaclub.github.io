@@ -972,7 +972,9 @@
     var name = (profile && profile.full_name) || session.user.email || session.user.phone || "there";
     document.getElementById("dash-greeting").textContent = "Welcome, " + name;
 
-    if (profile && profile.role === "admin") {
+    // ⚠ `global_admin` too — see the note in script.js. This one hides the
+    // Newsletter tool, which only a full administrator has.
+    if (profile && (profile.role === "admin" || profile.role === "global_admin")) {
       document.getElementById("nav-newsletter-link").hidden = false;
     }
 

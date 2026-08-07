@@ -151,7 +151,11 @@
       .eq("user_id", session.user.id)
       .maybeSingle();
 
-    if (!data || data.role !== "admin") {
+    // ⚠ `global_admin` too. 0054 renamed Ahmed's role, and this line refused
+    // the only person the newsletter tool is for — the dashboard link to it
+    // was hidden by the same omission, so the refusal was not even reachable
+    // to notice. tools/check-role-labels.mjs found this one, not a human.
+    if (!data || (data.role !== "admin" && data.role !== "global_admin")) {
       showStatus("gate-status", "This page is for admins only.", "err");
       return;
     }
