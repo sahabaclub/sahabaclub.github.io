@@ -117,14 +117,25 @@ const GOOGLE_KEY =
 
 type Provider = "openai" | "google";
 
-// A model id decides its own provider. Nothing else has to know.
+// ⚠ A HEURISTIC, and it is wrong on its own. Use it only as a fallback.
 //
-// ⚠ Deliberately a PREFIX test on the id rather than a lookup in ai_models.
-// This runs inside functions that must work when the database is unreachable,
-// and a text model called gemini-* is a Google model whatever any table says.
-// The table's `provider` column is for the PANEL; this is for the call.
+// The first version tested for `gemini*` and nothing else, on the assumption
+// that Google's models are called Gemini. The very first live listing disproved
+// it: of the 42 models Google returned for this project, several are named
+// `antigravity-preview-05-2026`, `deep-research-pro-preview-12-2025` and
+// `learnlm-*`. Under a gemini-only test every one of those routes to OpenAI,
+// which answers 404 model_not_found — a message that sends you to check the
+// model list rather than the router.
+//
+// So `ai_models.provider` — which ai-admin now records from the horse's mouth,
+// because it knows WHICH API returned each id — is the real answer, and callers
+// should pass it. This exists for the case where a caller has only a string:
+// it is right for everything named gemini/gemma/learnlm and wrong-but-safe
+// otherwise, since defaulting to OpenAI fails loudly rather than silently.
+const GOOGLE_FAMILIES = /^(models\/)?(gemini|gemma|learnlm|aqa|imagen|veo|antigravity|deep-research)/i;
+
 function providerFor(model: string): Provider {
-  return /^(gemini|models\/gemini)/i.test(model) ? "google" : "openai";
+  return GOOGLE_FAMILIES.test(model) ? "google" : "openai";
 }
 
 function keyFor(provider: Provider): string {
@@ -180,18 +191,83 @@ function toGeminiSchema(node: unknown): unknown {
   return out;
 }
 
+// Read a provider's body into the four things every caller needs. Shared by
+// both call paths AND by the tests, so what is checked is what runs — a
+// transcription of this logic could pass while the shipped version was wrong.
+function normalise(
+  raw: unknown,
+  provider: Provider,
+): { text: string; stopReason: "stop" | "length" | "filter" | "other"; truncated: boolean; refused: boolean } {
+  if (provider === "openai") {
+    let text = "";
+    let refused = false;
+    const output = (raw as { output?: unknown[] })?.output ?? [];
+    for (const item of output as Array<{ content?: Array<{ type?: string; text?: string }> }>) {
+      for (const part of item?.content ?? []) {
+        if (part?.type === "refusal") refused = true;
+        else if (part?.text) text += part.text;
+      }
+    }
+    const r = raw as { status?: string; incomplete_details?: { reason?: string } };
+    let stopReason: "stop" | "length" | "filter" | "other" = "stop";
+    if (r?.status === "incomplete") {
+      const reason = r.incomplete_details?.reason;
+      stopReason = reason === "content_filter" ? "filter"
+        : reason === "max_output_tokens" ? "length"
+        : "other";
+    }
+    return { text, stopReason, truncated: r?.status === "incomplete", refused };
+  }
+
+  const cand = (raw as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> })
+    ?.candidates?.[0];
+  let text = "";
+  for (const part of cand?.content?.parts ?? []) if (part?.text) text += part.text;
+
+  // ⚠ RECITATION belongs with SAFETY, not with length: the model stopped
+  // because the answer was reproducing training data, and retrying at a bigger
+  // ceiling produces the same stop while spending money.
+  //
+  // ⚠ A missing candidate is a FILTER, not an empty answer. Google drops the
+  // candidate entirely when a prompt is blocked before generation, leaving only
+  // promptFeedback.blockReason. Reporting that as "stop with no text" sends the
+  // caller looking for a parsing bug.
+  const blocked = (raw as { promptFeedback?: { blockReason?: string } })?.promptFeedback?.blockReason;
+  const finish = cand?.finishReason;
+  let gStop: "stop" | "length" | "filter" | "other";
+  if (!cand && blocked) gStop = "filter";
+  else if (finish === "MAX_TOKENS") gStop = "length";
+  else if (finish === "SAFETY" || finish === "RECITATION" || finish === "PROHIBITED_CONTENT") gStop = "filter";
+  else if (finish === "STOP" || finish === undefined) gStop = "stop";
+  else gStop = "other";
+
+  return {
+    text,
+    stopReason: gStop,
+    truncated: gStop === "length",
+    // Google has no separate refusal part: a filter stop with nothing written
+    // IS the refusal.
+    refused: gStop === "filter" && text.length === 0,
+  };
+}
+
 // ⚠ Exported for tools/check-ai-provider.mjs only. toGeminiSchema is the most
 // likely thing in this file to be quietly wrong — Google answers a bad schema
 // with a 400 that reads like a model error — and it is not reachable from
 // callText() without a network call and a key. Testing a transcription of it
 // would pass while the shipped version was broken.
-const __testables = { toGeminiSchema };
+const __testables = { toGeminiSchema, normalise };
 
 interface TextRequest {
   model: string;
   system: string;
   user: string;
   maxOutputTokens: number;
+  // ⚠ Pass this whenever it is known — it comes from ai_models.provider, which
+  // ai-admin records from whichever API actually returned the id. The
+  // heuristic above is only for callers holding nothing but a string, and it
+  // cannot be right for a model family nobody has seen yet.
+  provider?: Provider;
   // Optional strict-JSON contract. `name` is required by OpenAI and ignored by
   // Google, which is why it is carried rather than derived.
   schema?: { name: string; schema: unknown };
@@ -210,10 +286,33 @@ interface TextResult {
   // signal this differently and every caller wants to know, because the fix is
   // to retry with a larger one rather than to treat it as a bad answer.
   truncated?: boolean;
+
+  // ⚠ Why it stopped, normalised — and the distinction is not cosmetic.
+  // promptarena-challenge already treats these three as different outcomes and
+  // is right to: raising the ceiling fixes "length" and does nothing for the
+  // other two, so collapsing them would make the retry logic wrong.
+  //
+  //   "length"  ran out of room. Retry bigger.
+  //   "filter"  the provider's safety system stopped it. Retrying is pointless.
+  //   "stop"    finished normally.
+  //   "other"   something new. Treated as not-retryable, because guessing
+  //             wrong in the retryable direction spends money in a loop.
+  //
+  //   OpenAI  status:"incomplete" + incomplete_details.reason
+  //           ("max_output_tokens" | "content_filter")
+  //   Google  candidates[0].finishReason
+  //           ("MAX_TOKENS" | "SAFETY" | "RECITATION" | "STOP")
+  stopReason?: "stop" | "length" | "filter" | "other";
+
+  // The model declined the instructions outright. OpenAI emits a `refusal`
+  // content part; Google signals it through finishReason SAFETY with no text.
+  refused?: boolean;
 }
 
 async function callText(req: TextRequest): Promise<TextResult> {
-  const provider = providerFor(req.model);
+  // An explicit provider always wins. The heuristic is the fallback, not the
+  // rule — see the note on providerFor.
+  const provider = req.provider ?? providerFor(req.model);
   const key = keyFor(provider);
   if (!key) {
     return {
@@ -256,15 +355,10 @@ async function callOpenAI(req: TextRequest, key: string): Promise<TextResult> {
 
   // output[] holds reasoning items as well as the message; only the message
   // carries text, so this collects rather than indexing [0].
-  let text = "";
-  const output = (raw as { output?: unknown[] })?.output ?? [];
-  for (const item of output as Array<{ content?: Array<{ text?: string }> }>) {
-    for (const part of item?.content ?? []) if (part?.text) text += part.text;
-  }
-  const status = (raw as { status?: string })?.status;
+  const n = normalise(raw, "openai");
   return {
-    ok: true, text, provider: "openai", status: res.status, raw,
-    truncated: status === "incomplete",
+    ok: true, text: n.text, provider: "openai", status: res.status, raw,
+    truncated: n.truncated, stopReason: n.stopReason, refused: n.refused,
   };
 }
 
@@ -302,13 +396,10 @@ async function callGoogle(req: TextRequest, key: string): Promise<TextResult> {
     };
   }
 
-  const cand = (raw as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> })
-    ?.candidates?.[0];
-  let text = "";
-  for (const part of cand?.content?.parts ?? []) if (part?.text) text += part.text;
+  const n = normalise(raw, "google");
   return {
-    ok: true, text, provider: "google", status: res.status, raw,
-    truncated: cand?.finishReason === "MAX_TOKENS",
+    ok: true, text: n.text, provider: "google", status: res.status, raw,
+    truncated: n.truncated, stopReason: n.stopReason, refused: n.refused,
   };
 }
 
@@ -1691,34 +1782,64 @@ async function testImage(
     prompt = String(parts.image_brief ?? "") + " Theme: Cloud Native Night Dubai, Cloud, Networking.";
   }
 
-  // ⚠ /v1/images/generations, not /v1/images/edits, and the difference is
-  // worth being honest about. The avatar functions send a source photograph
-  // and there is no member photograph to borrow for a test — using one would
-  // be a straightforward breach of the promise that no real photographs live
-  // on this platform. So the test proves the model accepts this prompt and
-  // this account can call it, which is what a prompt edit puts at risk; it
-  // does not prove the likeness transfer, which a prompt edit cannot break.
-  const payload: Record<string, unknown> = {
-    model,
-    prompt,
-    size: "1024x1024",
-    n: 1,
-  };
-  // The production calls ask for `quality: high`. A test asks for the cheapest
-  // thing that still proves the prompt is accepted — but only where the
-  // parameter exists, because the older image families reject the value.
-  if (/^gpt-image/.test(model)) payload.quality = "low";
-
+  // ⚠ THE TEST NOW CALLS THE ENDPOINT THE SERVICE ACTUALLY CALLS.
+  //
+  // It used to POST /v1/images/generations while generate-avatar and
+  // refresh-avatars POST /v1/images/edits. That gap is not theoretical: on
+  // 7 Aug `gpt-image-2` was activated with test_status 'passed' and every
+  // avatar generation failed immediately afterwards, because passing
+  // `generations` says nothing about whether a model serves `edits`. A test
+  // that green-lights a model the service cannot use is worse than no test —
+  // it is the reason the change was trusted.
+  //
+  // The original comment gave a real reason for the difference: the avatar
+  // functions send a source photograph, and there is no member photograph to
+  // borrow — using one would breach the promise that no real photographs live
+  // on this platform. That constraint still holds and is not being relaxed.
+  //
+  // The answer is a SYNTHETIC base image. The club's own logo is a real PNG,
+  // served publicly, and is nobody's face. It proves the model accepts this
+  // endpoint, this prompt and this account — which is what a model change puts
+  // at risk. It still does not prove the likeness transfer, which no test
+  // without a face could.
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), TEST_TIMEOUT_MS);
 
+  let baseImage: Blob;
+  try {
+    const logo = await fetch("https://www.sahabaclub.ai/assets/logo.png", { signal: abort.signal });
+    if (!logo.ok) throw new Error("logo fetch " + logo.status);
+    baseImage = await logo.blob();
+  } catch (err) {
+    clearTimeout(timer);
+    return {
+      ok: false,
+      reason: "The test could not fetch its base image, so the model was never asked. This is a problem with the test, not with the prompt — try again shortly.",
+      composedPrompt: prompt,
+      detail: { error: String(err instanceof Error ? err.message : err) },
+    };
+  }
+
+  const form = new FormData();
+  form.append("model", model);
+  form.append("prompt", prompt);
+  form.append("size", "1024x1024");
+  form.append("n", "1");
+  // Production asks for `quality: high`. A test asks for the cheapest thing
+  // that still proves the call is accepted — and only where the parameter
+  // exists, because the older image families reject the value.
+  if (/^gpt-image/.test(model)) form.append("quality", "low");
+  form.append("image", baseImage, "base.png");
+
   let res: Response;
   try {
-    res = await fetch("https://api.openai.com/v1/images/generations", {
+    res = await fetch("https://api.openai.com/v1/images/edits", {
       method: "POST",
       signal: abort.signal,
-      headers: { "Authorization": "Bearer " + OPENAI_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      // ⚠ No Content-Type. fetch sets it with the multipart boundary, and
+      // setting it by hand produces a body the API cannot parse.
+      headers: { "Authorization": "Bearer " + OPENAI_API_KEY },
+      body: form,
     });
   } catch (err) {
     return {
