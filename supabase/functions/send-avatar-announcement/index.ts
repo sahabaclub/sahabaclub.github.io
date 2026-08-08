@@ -133,13 +133,52 @@ Deno.serve(async (req) => {
 
     const ids = batch.map((r) => r.user_id);
 
-    // Email and name. `staff_member_details` exists because the registration
-    // address lives in auth.users, which PostgREST cannot expose.
-    const { data: details, error: detErr } = await admin
-      .from("staff_member_details")
-      .select("user_id, email, email_confirmed_at, full_name, newsletter_opt_in")
+    // Name and mail preference come from `profiles`, which the service role
+    // reads with RLS bypassed.
+    const { data: profs, error: profErr } = await admin
+      .from("profiles")
+      .select("user_id, full_name, newsletter_opt_in")
       .in("user_id", ids);
-    if (detErr) return json({ error: detErr.message }, 500);
+    if (profErr) return json({ error: profErr.message }, 500);
+
+    // ⚠ THE ADDRESS COMES FROM THE AUTH ADMIN API, NOT `staff_member_details`.
+    //
+    // The obvious move is that view — it exists precisely because the
+    // registration address lives in `auth.users`, which PostgREST cannot
+    // expose. It returns NOTHING here, and silently: its last line is
+    // `where public.is_staff()`, and `is_staff()` reads `auth.uid()`, which is
+    // NULL on a service-role client. So the view is empty for the service role
+    // exactly as it is for an anonymous visitor, and the first run of this
+    // function skipped all 19 members with "no member record" — a message that
+    // reads like the members are missing rather than the view being blind.
+    //
+    // Same shape as the `contact_link_status` note in the handoff. A definer
+    // view whose predicate is a session function cannot be read by a caller
+    // that has no session.
+    const emailById = new Map<string, { email: string; confirmed: boolean }>();
+    {
+      const perPage = 200;
+      for (let page = 1; page <= 20; page++) {
+        const { data: list, error: listErr } = await admin.auth.admin.listUsers({ page, perPage });
+        if (listErr) return json({ error: "Could not read the member list: " + listErr.message }, 500);
+        const users = list?.users ?? [];
+        for (const u of users) {
+          emailById.set(u.id, {
+            email: String(u.email ?? "").trim(),
+            confirmed: !!u.email_confirmed_at,
+          });
+        }
+        if (users.length < perPage) break;
+      }
+    }
+
+    const details = (profs ?? []).map((p) => ({
+      user_id: p.user_id as string,
+      full_name: p.full_name as string | null,
+      newsletter_opt_in: p.newsletter_opt_in as boolean | null,
+      email: emailById.get(p.user_id as string)?.email ?? "",
+      email_confirmed_at: emailById.get(p.user_id as string)?.confirmed ? "yes" : null,
+    }));
 
     // Today's avatar, to decide which of the two mails is true for them.
     const { data: now, error: nowErr } = await admin

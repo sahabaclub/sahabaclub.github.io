@@ -678,19 +678,61 @@ type DueRow = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  // Scheduled job, not a public endpoint — the same gate as
-  // send-transactional-email and send-license-reminders. Without it, any
-  // visitor could make the club regenerate several hundred images, which is a
-  // bill rather than a defacement, and this function writes avatars for
-  // members other than the caller by design. Nothing legitimate reaches it
-  // from a browser.
-  const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-  if (!SERVICE_ROLE_KEY || bearer !== SERVICE_ROLE_KEY) {
-    console.error("refresh-avatars called without the service role key");
-    return json({ error: "Not allowed" }, 403);
-  }
+  // Not a public endpoint. Without a gate any visitor could make the club
+  // regenerate several hundred images, which is a bill rather than a
+  // defacement, and this function writes avatars for members other than the
+  // caller by design.
+  //
+  // TWO WAYS IN, and the second one exists because the first turned out to be
+  // unusable by a human:
+  //
+  //   1. The service-role key — the scheduled path, unchanged.
+  //
+  //   2. A STAFF SESSION. Added 8 Aug 2026.
+  //
+  // ⚠ The original comment here said "nothing legitimate reaches it from a
+  // browser", and on 8 Aug something did: a staff-initiated restart of the
+  // whole avatar system, which is precisely the sort of thing a club admin
+  // should be able to set off and precisely the sort of thing nobody wants on
+  // a cron. Worse, the service-role branch cannot be exercised by hand at all
+  // — `SUPABASE_SERVICE_ROLE_KEY` is INJECTED BY SUPABASE and is not the value
+  // on either dashboard page, which is the discovery that cost 7 Aug most of a
+  // day and led to `SENDER_TOKEN` in the two notification senders. Pasting the
+  // dashboard's service_role key here returns 403 forever and the message
+  // gives you no clue why.
+  //
+  // So this asks `is_staff()` as the CALLER — the same universal gate the rest
+  // of the admin surface uses, never a hardcoded list of role names, which
+  // this project has got wrong twice. A member token reaches nothing.
+  const bearer = (req.headers.get("Authorization") ?? "").replace("Bearer ", "").trim();
+  if (!SERVICE_ROLE_KEY) return json({ error: "Not configured" }, 503);
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+
+  if (bearer !== SERVICE_ROLE_KEY) {
+    if (!bearer) return json({ error: "Not allowed" }, 403);
+
+    const { data: userData, error: userErr } = await admin.auth.getUser(bearer);
+    if (userErr || !userData?.user) {
+      console.error("refresh-avatars: not the service key and not a valid session");
+      return json({ error: "Not allowed" }, 403);
+    }
+
+    // is_staff() reads auth.uid(), which is null on an admin client — it has
+    // to be asked through a client carrying the caller's own token.
+    const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${bearer}` } },
+    });
+    const { data: staff, error: staffErr } = await asCaller.rpc("is_staff");
+    if (staffErr) {
+      console.error("refresh-avatars: is_staff failed: " + staffErr.message);
+      return json({ error: "Could not check permissions" }, 500);
+    }
+    if (staff !== true) {
+      console.error(`user ${userData.user.id} attempted to reach refresh-avatars`);
+      return json({ error: "Not allowed" }, 403);
+    }
+  }
   const params = new URL(req.url).searchParams;
   const dryRun = params.get("dry") === "1";
   const limit = clampLimit(params.get("limit"));
