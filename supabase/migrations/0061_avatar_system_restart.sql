@@ -165,13 +165,9 @@ update public.profiles p
 -- 3. Everyone else: the allowance, and nothing else
 -- ============================================================
 --
--- ⚠ `avatar_cycle` is deliberately NOT cleared here. Clearing it would put
--- these members into `avatars_due_refresh`, and the next run of the monthly
--- job would hand each of them an initials tile in place of the picture they
--- have now — the exact outcome §"Three populations" exists to avoid. The
--- allowance is what they need and all they need: `avatar_attempts_this_cycle()`
--- reads the stored count only while the cycle is the current month, so zeroing
--- it hands back all three tries immediately.
+-- The allowance is what they need: `avatar_attempts_this_cycle()` reads the
+-- stored count only while the cycle is the current month, so zeroing it hands
+-- back all three tries immediately.
 
 update public.profiles p
    set avatar_attempts = 0
@@ -180,6 +176,54 @@ update public.profiles p
           where r.user_id = p.user_id and r.cohort <> 'A_redrawable'
        )
    and coalesce(p.avatar_attempts, 0) <> 0;
+
+-- ⚠⚠ AND THIS STATEMENT, WHICH THE FIRST VERSION OF THIS MIGRATION DID NOT
+-- HAVE. Read the reasoning it replaces, because the mistake is instructive.
+--
+-- That version argued: "`avatar_cycle` is deliberately NOT cleared for these
+-- members. Clearing it would put them into `avatars_due_refresh` and the job
+-- would hand them an initials tile instead of the picture they have now."
+--
+-- Every word of that is true and the conclusion is still wrong, because it
+-- assumed they had a cycle to leave alone. **THEY DID NOT.** Measured on the
+-- real database, 8 Aug: group B 4 of 4 and group C 7 of 7 had
+-- `avatar_cycle IS NULL` — they have never had an avatar generated, so they
+-- were ALREADY sitting in `avatars_due_refresh` and had been all along.
+-- Declining to clear a null protected nobody. `avatars_due_refresh` returned
+-- **19** where the migration expected 8.
+--
+-- The redraw would therefore have processed all 19 and given the four members
+-- holding a real Google or Microsoft photograph a two-letter tile — the exact
+-- outcome the "Three populations" section exists to prevent, arrived at by a
+-- different road.
+--
+-- ⚠ It was caught only because verification 2 asked for the number instead of
+-- assuming it. A migration that had trusted its own comment would have looked
+-- entirely successful right up until the pictures vanished.
+--
+-- Stamping the current cycle takes them out of the queue for this run. It
+-- costs them nothing — their allowance is already back to three, set above,
+-- because `avatar_attempts_this_cycle()` reads the stored count only when the
+-- cycle matches, and it now does.
+
+update public.profiles p
+   set avatar_cycle = to_char(now(), 'YYYY-MM')
+ where exists (
+         select 1 from public.avatar_restart_2026_08 r
+          where r.user_id = p.user_id and r.cohort <> 'A_redrawable'
+       );
+
+-- ⚠ THIS IS A PATCH ON THIS MONTH, NOT A FIX. Next month these members fall
+-- out of the current cycle and back into `avatars_due_refresh`, and whoever
+-- runs the monthly job then will hand group B their initials tile after all.
+--
+-- The real fix is that `avatars_due_refresh` should never offer a member whose
+-- avatar is not redrawable in the first place: refresh-avatars' fallback branch
+-- was written for "a member with no avatar at all, and one sitting on last
+-- month's fallback SVG", and the provider-link case that 0038 introduced later
+-- was never added to its reasoning. That is a change to the monthly job's
+-- behaviour for everybody, so it is written down here and deliberately NOT
+-- done as a side effect of a one-off announcement.
 
 -- ============================================================
 -- 4. Putting one member back
