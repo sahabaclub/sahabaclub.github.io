@@ -65,6 +65,22 @@ const MAX_LIMIT = 100;
 // Set to true to honour newsletter_opt_in. Left false by Ahmed's decision.
 const OPT_OUT_FILTER = false;
 
+// ⚠ Addresses that must never receive this announcement. Ahmed, 8 Aug:
+// exclude the test account.
+//
+// Kept HERE rather than expressed by stamping `announced_at` on the row,
+// which is the other obvious way to do it. Stamping would record that the
+// account WAS announced to, which is false, and the lie would outlive the
+// reason for it — the snapshot is the only record of this operation and it
+// should not contain a claim nobody can check. A named constant is in git,
+// shows up in review, and says why.
+//
+// Compared case-insensitively: the address in `auth.users` is whatever was
+// typed at signup.
+const EXCLUDED_EMAILS = new Set([
+  "test25dec@sahabaclub.com",
+]);
+
 type Row = {
   user_id: string;
   cohort: string;
@@ -206,6 +222,8 @@ Deno.serve(async (req) => {
         ? "no member record"
         : !email
         ? "no email address"
+        : EXCLUDED_EMAILS.has(email.toLowerCase())
+        ? "excluded by request"
         : !d.email_confirmed_at
         ? "email never confirmed"
         : OPT_OUT_FILTER && d.newsletter_opt_in === false
@@ -236,13 +254,35 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      const { error: sendErr } = await admin.functions.invoke("send-transactional-email", {
-        body: {
-          to: email,
-          template: "avatar_restart",
-          data: { fullName: d.full_name ?? "", redrawn },
-        },
-      });
+      // ⚠ fetch(), NOT admin.functions.invoke(). Same request, but invoke()
+      // collapses every failure into "Edge Function returned a non-2xx status
+      // code" and throws the body away — which is exactly the message 18
+      // members' rows carried on the first attempt, and it says nothing about
+      // whether the problem was the gateway, our own gate, or Resend. An error
+      // column that cannot tell you which is an error column that costs a
+      // second run to learn anything.
+      let sendErr: { message: string } | null = null;
+      try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/send-transactional-email`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+            apikey: SERVICE_ROLE_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            to: email,
+            template: "avatar_restart",
+            data: { fullName: d.full_name ?? "", redrawn },
+          }),
+        });
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          sendErr = { message: `${res.status} ${body.slice(0, 200)}` };
+        }
+      } catch (err) {
+        sendErr = { message: "unreachable: " + String(err instanceof Error ? err.message : err) };
+      }
 
       if (sendErr) {
         failed++;
