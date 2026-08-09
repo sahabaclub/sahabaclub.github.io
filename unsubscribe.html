@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=162f478dae">
+<link rel="stylesheet" href="styles.css?v=16538a1b6f">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -56,7 +56,7 @@
   //
   // The exception is the one-click header path (List-Unsubscribe-Post), which
   // mail providers POST rather than GET — that never reaches this page.
-  import { supabase } from "./lib/supabase-client.js?v=162f478dae";
+  import { supabase } from "./lib/supabase-client.js?v=16538a1b6f";
 
   const params = new URLSearchParams(window.location.search);
   const token = params.get("t");
@@ -100,6 +100,6 @@
         "still receiving mail from us, reply to it and we'll sort it out.";
   });
 </script>
-<script defer src="lib/back-to-top.js?v=162f478dae"></script>
+<script defer src="lib/back-to-top.js?v=16538a1b6f"></script>
 </body>
 </html>
