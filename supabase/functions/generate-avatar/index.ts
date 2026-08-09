@@ -70,6 +70,7 @@
 // the database unreachable, this function behaves exactly as it did before.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { callImage, providerConfigured } from "../_shared/ai-provider.ts";
 import { listOf, loadAiConfig, part } from "../_shared/ai-config.ts";
 import {
   AVATAR_ART_DEFAULTS,
@@ -77,7 +78,6 @@ import {
   buildPrompt,
   currentCycle,
   decodeBase64,
-  extFor,
   HOUSE_STYLE,
   MAX_ATTEMPTS,
   themeForCycle,
@@ -156,8 +156,15 @@ Deno.serve(async (req) => {
     }
     const userId = userData.user.id;
 
-    if (!OPENAI_API_KEY) {
-      console.error("OPENAI_API_KEY is not set");
+    // ⚠ "Is a key set" became TWO questions when this function stopped being
+    // OpenAI-only. This is the cheap one — is ANY provider configured. The one
+    // that matters, is the key for the provider THIS SERVICE'S MODEL belongs
+    // to configured, cannot be asked here: the model comes from the database,
+    // resolved further down. Testing only OPENAI_API_KEY, as this did before,
+    // would refuse a working Gemini-configured avatar service over a key it
+    // never uses.
+    if (!providerConfigured("openai") && !providerConfigured("google")) {
+      console.error("neither OPENAI_API_KEY nor GEMINI_API_KEY is set");
       return json({ error: "Avatar generation isn't configured yet." }, 503);
     }
 
@@ -514,22 +521,38 @@ async function generate(
   prompt: string,
   model: string,
 ): Promise<Uint8Array> {
-  const form = new FormData();
-  form.append("model", model);
-  form.append("image", new Blob([bytes], { type: mediaType }), "source." + extFor(mediaType));
-  form.append("prompt", prompt);
-  form.append("size", "1024x1024");
-  form.append("quality", "high");
-
-  const res = await fetch("https://api.openai.com/v1/images/edits", {
-    method: "POST",
-    headers: { "Authorization": "Bearer " + OPENAI_API_KEY },
-    body: form,
+  // ⚠ THROUGH callImage(), NOT api.openai.com DIRECTLY. Step 3 of the switch
+  // Ahmed asked for on 8 Aug 2026: the member-triggered avatar may now be drawn
+  // by Gemini as well as by OpenAI, decided by which model is configured for
+  // `avatar-art` in the AI panel.
+  //
+  // ⚠ `refresh-avatars` is DELIBERATELY NOT MIGRATED. It redraws every member
+  // in one run; this one redraws the single member who just asked. Moving the
+  // blast-radius-of-one first is the whole point, and the two must not be
+  // migrated together for tidiness.
+  //
+  // The provider comes from the model name. `ai_services` stores the model
+  // string and not which API produced it — see providerFor's own note on why
+  // that heuristic is safe here and wrong to rely on generally.
+  const result = await callImage({
+    model,
+    prompt,
+    image: bytes,
+    mediaType,
+    // OpenAI-only; callImage does not forward them to Google, which has no
+    // equivalent and rejects unknown generationConfig keys.
+    size: "1024x1024",
+    quality: "high",
   });
 
-  if (!res.ok) {
-    const detail = await res.text();
-    console.error("OpenAI " + res.status + ": " + detail.slice(0, 500));
+  if (!result.ok) {
+    // ⚠ `detail` is the provider's RAW body, which is exactly what every regex
+    // below expects. callImage hands it back untouched for this reason — the
+    // sentences these branches produce are read by the member off their own
+    // profile row, and a tidied-up message would match none of them.
+    const detail = String(result.error ?? "");
+    const res = { status: result.status };
+    console.error(result.provider + " " + result.status + ": " + detail.slice(0, 500));
 
     // Same triage as parse-profile-document: the model name is the setting
     // most likely to be wrong, and a generic message sends someone hunting in
@@ -572,10 +595,14 @@ async function generate(
     throw new Error("Couldn't create an avatar just now. Try again shortly.");
   }
 
-  const data = await res.json();
-  const b64 = data.data?.[0]?.b64_json;
-  if (!b64) throw new Error("No image came back — try again shortly.");
-  return decodeBase64(b64);
+  // ⚠ callImage already decoded it, and already treated a 200-with-no-image as
+  // a failure — which is the shape a Gemini refusal takes. So the old
+  // "no image came back" branch has moved rather than disappeared; reaching
+  // here means there are bytes.
+  if (!result.bytes || !result.bytes.length) {
+    throw new Error("No image came back — try again shortly.");
+  }
+  return result.bytes;
 }
 
 // ---- The fallback -----------------------------------------------------
