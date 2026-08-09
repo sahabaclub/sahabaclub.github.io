@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=95a6e12add">
+<link rel="stylesheet" href="admin.css?v=38ecac0a41">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -332,10 +332,10 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=95a6e12add";
-  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=95a6e12add";
+  import { supabase } from "../../lib/supabase-client.js?v=38ecac0a41";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=38ecac0a41";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js?v=95a6e12add";
+    from "../../lib/admin-guard.js?v=38ecac0a41";
 
   const user = await requireStaff("events");
   if (!user) throw new Error("not staff");
@@ -968,6 +968,6 @@
   // would otherwise see an empty list and save it as "no organizers".
   loadOrganizers().then(loadEvents);
 </script>
-<script defer src="../../lib/back-to-top.js?v=95a6e12add"></script>
+<script defer src="../../lib/back-to-top.js?v=38ecac0a41"></script>
 </body>
 </html>

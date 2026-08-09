@@ -18,8 +18,8 @@
 // So the model dropdown being filtered by kind is a courtesy. 0031's trigger
 // is what makes a text model on an image service impossible. Never move a
 // check out of the database and rely on this file.
-import { supabase } from "../../lib/supabase-client.js?v=95a6e12add";
-import { requireStaff, renderShell, escapeHtml, formatDate } from "../../lib/admin-guard.js?v=95a6e12add";
+import { supabase } from "../../lib/supabase-client.js?v=38ecac0a41";
+import { requireStaff, renderShell, escapeHtml, formatDate } from "../../lib/admin-guard.js?v=38ecac0a41";
 
 const state = {
   services: [],
@@ -414,12 +414,38 @@ async function savePrice(button) {
     return;
   }
 
-  // ⚠ Re-read rather than patching the row in place. price_updated_at is set
-  // by the database, so the only way to show the truth is to ask it — and a
-  // screen that says "just now" because the client assumed it would be is the
-  // kind of thing that hides a write that never landed.
+  // ⚠ Re-read rather than trusting the values just typed. `price_updated_at`
+  // is set by the database, so the only way to show the truth is to ask it — a
+  // screen that says "just now" because the client assumed it would is exactly
+  // how a write that never landed stays hidden.
+  //
+  // ⚠ But re-read ONE ROW, not the whole list. The obvious call here is
+  // refreshModels(), and it works — it also re-queries OpenAI AND Google before
+  // it returns, which measured 10–20 seconds on the live site while the row sat
+  // showing "never" and the count sat wrong. A rate card is filled in a row at
+  // a time and a fifteen-second pause after each one is how a screen stops
+  // being used. The model list has not changed; only this row has.
+  const { data: fresh, error: readErr } = await supabase
+    .from("ai_models")
+    .select("id, input_per_1m, output_per_1m, price_per_image, price_source, price_updated_at")
+    .eq("id", model)
+    .maybeSingle();
+
+  if (readErr || !fresh) {
+    // The write succeeded — say so — but be honest that the screen is now
+    // showing what was typed rather than what was stored.
+    warn(
+      "Saved the price for " + model + ", but could not read it back to confirm. " +
+      "Refresh the model list to see what is actually stored.",
+      "warn",
+    );
+    return;
+  }
+
+  const cached = (state.allModels || []).find((m) => m.id === model);
+  if (cached) Object.assign(cached, fresh);
+  renderPrices();
   warn("Saved the price for " + model + ".", "ok");
-  await refreshModels({ quiet: true });
 }
 
 function card(s) {
