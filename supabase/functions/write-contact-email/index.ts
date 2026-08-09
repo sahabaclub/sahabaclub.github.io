@@ -395,6 +395,9 @@ Deno.serve(async (req) => {
     const campaignId: string | undefined = body.campaignId;
     const only: string[] | undefined = body.recipientIds;
     const regenerate: boolean = body.regenerate === true;
+    // Permission to overwrite a draft a human edited. Only ever sent after the
+    // page has asked, and never by the bulk paths. See the guard below.
+    const force: boolean = body.force === true;
     const batch = Math.min(Math.max(Number(body.limit) || DEFAULT_BATCH, 1), MAX_BATCH);
 
     if (!campaignId) return fail(new EmailError("bad_request", 400, "campaignId is required"));
@@ -425,8 +428,22 @@ Deno.serve(async (req) => {
       .eq("campaign_id", campaignId)
       .limit(batch);
 
+    // ⚠ 0011 states the invariant in writing: "An edited draft must never be
+    // silently regenerated and overwritten." The `regenerate` path below
+    // honoured it. THIS path did not.
+    //
+    // `only` is what the per-row Rewrite button sends, and it carried no
+    // `edited` guard at all — so one click, with no confirmation anywhere,
+    // replaced text a human had written with model output. The word doing the
+    // work in the invariant is SILENTLY: rewriting an edited draft is a
+    // legitimate thing to want, and it must be asked for rather than assumed.
+    //
+    // So `force` is now required to touch an edited row. The page asks before
+    // it sends it; nothing else does. A caller that omits it gets the old safe
+    // behaviour rather than the old dangerous one.
     if (only && only.length) {
       q = q.in("id", only);
+      if (!force) q = q.eq("edited", false);
     } else if (regenerate) {
       q = q.in("status", ["pending", "generated"]).eq("edited", false);
     } else {
@@ -561,6 +578,12 @@ Deno.serve(async (req) => {
           generated_at: new Date().toISOString(),
           status: "generated",
           error: null,
+          // ⚠ The row is model output again, so it must stop claiming to be a
+          // human edit. This was never reset, so a forced rewrite left the
+          // "edited" pill showing on text no human had touched — and, worse,
+          // kept the row permanently excluded from the bulk regenerate path
+          // that skips edited drafts.
+          edited: false,
           updated_at: new Date().toISOString(),
         }).eq("id", r.id);
         written++;

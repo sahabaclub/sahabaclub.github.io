@@ -997,9 +997,24 @@
     } else if (act === "skip") {
       patch = { status: "skipped", error: "Skipped by " + (user.fullName || user.email) };
     } else if (act === "rewrite") {
+      // ⚠ ASK BEFORE DESTROYING SOMEBODY'S WRITING. 0011: "An edited draft must
+      // never be silently regenerated and overwritten." Rewrite is a legitimate
+      // thing to want on an edited draft — you may have made it worse — but it
+      // has to be chosen, not discovered afterwards. The function refuses an
+      // edited row unless `force` is sent, so this dialog is the only thing
+      // that can send it.
+      const row = (drafts || []).find((d) => d.id === id);
+      if (row && row.edited) {
+        const okToLose = confirm(
+          "You edited this draft by hand.\n\n" +
+          "Rewriting replaces your text with a new one from the model, and your version cannot be recovered.\n\n" +
+          "Rewrite anyway?",
+        );
+        if (!okToLose) { btn.disabled = false; return; }
+      }
       showMessage("ad-msg", "Rewriting…", "info");
       const { data, error } = await supabase.functions.invoke("write-contact-email", {
-        body: { campaignId: campaign.id, recipientIds: [id] },
+        body: { campaignId: campaign.id, recipientIds: [id], force: !!(row && row.edited) },
       });
       btn.disabled = false;
       if (error || data?.error) {
