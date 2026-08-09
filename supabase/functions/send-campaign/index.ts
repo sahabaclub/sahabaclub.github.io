@@ -258,13 +258,41 @@ Deno.serve(async (req) => {
         .select("id", { count: "exact", head: true })
         .eq("campaign_id", campaignId)
         .in("status", ["approved", "sending"]);
-      if ((left ?? 0) === 0) {
+      const remaining = left ?? 0;
+
+      if (remaining === 0) {
         await admin.from("campaigns")
           .update({ status: "sent", sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
           .eq("id", campaignId)
           .in("status", ["review", "sending"]);
+        return json({ ok: true, sent: 0, failed: 0, remaining: 0, done: true });
       }
-      return json({ ok: true, sent: 0, failed: 0, remaining: 0, done: true });
+
+      // ⚠ THIS USED TO RETURN `remaining: 0, done: true` HERE TOO.
+      //
+      // `left` was computed correctly and used to decide whether to stamp the
+      // campaign `sent` — and then thrown away, because the return was
+      // unconditional. So when rows WERE left, the function still reported that
+      // the campaign was finished with nothing outstanding. The page believed
+      // it, printed "Done — N sent", stopped looping, and nobody pressed Send
+      // again. Anyone held by a worker that died mid-batch was simply never
+      // mailed, and the screen said the campaign was complete.
+      //
+      // Nothing is claimable but rows remain, which means another invocation
+      // holds them: `claim` only takes `approved` rows and `sending` rows older
+      // than CLAIM_STALE_MS, so these are inside that window. They are not lost
+      // — they become claimable again when it expires — but this run cannot
+      // move them and must not pretend otherwise.
+      //
+      // ⚠ `stalled` exists because `done: false` alone would make the page's
+      // send loop spin: it breaks on `done`, so a truthful `false` with nothing
+      // claimable would call this function forever, as fast as it can answer.
+      // The flag says "stop looping, and this is not success".
+      console.warn(
+        `campaign ${campaignId}: nothing claimable but ${remaining} row(s) still approved/sending — ` +
+          `held by another run, claimable again after CLAIM_STALE_MS`,
+      );
+      return json({ ok: true, sent: 0, failed: 0, remaining, done: false, stalled: true });
     }
 
     await admin.from("campaigns")

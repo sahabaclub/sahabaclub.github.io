@@ -1107,6 +1107,22 @@
         showMessage("cp-send-msg", total + " sent, " + data.remaining + " to go…", "info");
         await refresh();
         if (data.done) { showMessage("cp-send-msg", "Done — " + total + " sent.", "ok"); break; }
+        // ⚠ Not done, and nothing this run can move: the remaining rows are
+        // held by another invocation. Stop rather than loop — the loop breaks
+        // only on `done`, so continuing here would call the function as fast as
+        // it can answer, for ever. And say plainly that the campaign is NOT
+        // finished, because the old code reported exactly this situation as
+        // "Done" and those people were never mailed.
+        if (data.stalled) {
+          showMessage(
+            "cp-send-msg",
+            total + " sent, but " + data.remaining + " still to go — they are held by another send " +
+            "that is still running or stopped part-way. Wait a few minutes and press Send again; " +
+            "nothing is lost and nobody is mailed twice.",
+            "warn",
+          );
+          break;
+        }
       }
     } catch (err) {
       showMessage("cp-send-msg", "Stopped: " + String(err.message || err), "err");
