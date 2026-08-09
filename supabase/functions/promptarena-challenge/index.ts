@@ -80,6 +80,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { loadAiConfig, part } from "../_shared/ai-config.ts";
+import {
+  callText,
+  providerConfigured,
+  providerFor,
+  type TextResult,
+} from "../_shared/ai-provider.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -527,12 +533,21 @@ Deno.serve(async (req) => {
       }
     }
 
-    if (!OPENAI_API_KEY) {
-      console.error("OPENAI_API_KEY is not set");
+    // ⚠ "Is a key set" is now TWO questions, and this is the cheap one: is any
+    // provider configured at all. The one that matters — is the key for the
+    // provider THIS SERVICE'S MODEL belongs to configured — cannot be asked
+    // yet, because the model comes from the database and `cfg` is resolved
+    // further down. It is asked there.
+    //
+    // Testing only OPENAI_API_KEY here, as this did before the migration, would
+    // refuse a perfectly working Gemini-configured service because a key it
+    // never uses is missing.
+    if (!providerConfigured("openai") && !providerConfigured("google")) {
+      console.error("neither OPENAI_API_KEY nor GEMINI_API_KEY is set");
       return fail(new ChallengeError(
         "ai_unconfigured",
         503,
-        "The challenge generator isn't configured yet. Set OPENAI_API_KEY in the Edge Function secrets.",
+        "The challenge generator isn't configured yet. Set OPENAI_API_KEY (or GEMINI_API_KEY) in the Edge Function secrets.",
       ));
     }
 
@@ -559,6 +574,23 @@ Deno.serve(async (req) => {
     // `generator_version` is a column that answers a question about the batch
     // rather than about the row.
     const cfg = await resolveChallengeConfig(admin);
+
+    // ⚠ NOW the model is known, so the right key can be checked. Staff can
+    // select a Gemini model in the AI panel; if GEMINI_API_KEY is missing this
+    // says so plainly, rather than letting the call fail upstream and surface
+    // as a generic "the AI service rejected our credentials" pointing at the
+    // wrong secret.
+    const chosen = providerFor(cfg.model);
+    if (!providerConfigured(chosen)) {
+      console.error(`${chosen} key is not set, but ${cfg.model} needs it`);
+      return fail(new ChallengeError(
+        "ai_unconfigured",
+        503,
+        `This service is set to use "${cfg.model}", which needs the ` +
+          (chosen === "google" ? "GEMINI_API_KEY" : "OPENAI_API_KEY") +
+          " secret, and it is not set. Either set it or choose a model from the other provider.",
+      ));
+    }
 
     const drafts = await askModel({ requests, titles: bank.titles, cfg }, startedAt);
 
@@ -1239,32 +1271,33 @@ async function askModelOnce(
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), ATTEMPT_TIMEOUT_MS);
 
-  let res: Response;
+  // ⚠ THROUGH callText(), NOT api.openai.com DIRECTLY. Migrated 8 Aug 2026 —
+  // the first of the seven text call sites to move.
+  //
+  // Nothing about this function's behaviour changes. The request it builds is
+  // identical, because callText() constructs exactly this body for OpenAI; what
+  // it buys is that `input.cfg.model` may now name a Gemini model and be asked
+  // of Google instead, with the JSON schema converted to Google's dialect on
+  // the way. Before this, selecting one in the AI panel saved fine and failed
+  // on every call.
+  //
+  // ⚠ The provider is derived from the model NAME here, because
+  // `ai_service_versions` stores the model string and not which API it came
+  // from. providerFor() is right for everything Google has actually returned
+  // and defaults to OpenAI otherwise, which fails loudly rather than silently —
+  // see its note. If ai_services ever carries the provider, pass it instead.
+  let result: TextResult;
   try {
-    res = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
+    result = await callText({
+      model: input.cfg.model,
+      system: input.cfg.systemPrompt,
+      user: userPrompt,
+      // See `ceilingFor`: sized per challenge from the bounds `validate`
+      // enforces, plus a reasoning allowance, because this ceiling is shared
+      // with the model's own reasoning tokens. Escalates once on truncation.
+      maxOutputTokens,
+      schema: { name: "promptarena_challenges", schema: CHALLENGE_SCHEMA },
       signal: abort.signal,
-      headers: {
-        "Authorization": "Bearer " + OPENAI_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: input.cfg.model,
-        instructions: input.cfg.systemPrompt,
-        // See `ceilingFor`: sized per challenge from the bounds `validate`
-        // enforces, plus a reasoning allowance, because this ceiling is shared
-        // with the model's own reasoning tokens. Escalates once on truncation.
-        max_output_tokens: maxOutputTokens,
-        input: [{ role: "user", content: [{ type: "input_text", text: userPrompt }] }],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "promptarena_challenges",
-            strict: true,
-            schema: CHALLENGE_SCHEMA,
-          },
-        },
-      }),
     });
   } catch (err) {
     const aborted = abort.signal.aborted;
@@ -1281,30 +1314,40 @@ async function askModelOnce(
     clearTimeout(timer);
   }
 
-  if (!res.ok) {
-    const detail = await res.text();
-    console.error("OpenAI " + res.status + ": " + detail.slice(0, 500));
+  if (!result.ok) {
+    console.error(result.provider + " " + result.status + ": " + String(result.error ?? "").slice(0, 500));
     throw triageOpenAI(
-      res.status,
-      detail,
-      parseRetryAfterMs((n) => res.headers.get(n), Date.now()),
+      result.status,
+      String(result.error ?? ""),
+      // ⚠ Retry-After is a HEADER and lives nowhere in the body, which is why
+      // TextResult carries `headers`. Without it this backoff would silently
+      // become a guess under rate limiting — the one condition where the wait
+      // actually matters.
+      parseRetryAfterMs((n) => result.headers?.get(n) ?? null, Date.now()),
     );
   }
 
-  const data = await res.json();
-  const message = (data.output ?? []).find((o: { type?: string }) => o.type === "message");
-  const parts = message?.content ?? [];
-  if (parts.some((p: { type?: string }) => p.type === "refusal")) {
+  const data = result.raw as {
+    usage?: { output_tokens?: number; output_tokens_details?: { reasoning_tokens?: number } };
+  };
+
+  // ⚠ Every branch below now reads a NORMALISED field rather than OpenAI's
+  // wire shape. That is the point of the move: `refused`, `filter` and
+  // `length` are three different outcomes here — one is unfixable, one is
+  // unfixable by retrying, and only the third is worth escalating the ceiling
+  // for — and normalise() derives all three from either provider. Reading
+  // `data.status === "incomplete"` would have been correct for OpenAI and
+  // silently wrong for Gemini, which says MAX_TOKENS in a different place.
+  if (result.refused) {
     throw new ChallengeError("model_refused", 422, "The model declined to write these challenges");
   }
   // ⚠ Checked BEFORE parsing. A truncated response still carries an
   // `output_text` part, cut off mid-string — parsing it would either throw or,
   // worse, succeed against a batch whose last challenge lost half its brief, and
   // store a half-written challenge for members to answer.
-  if (data.status === "incomplete") {
-    const reason = data.incomplete_details?.reason ?? "unknown";
+  if (result.truncated) {
     console.error(
-      `openai returned incomplete (${reason}) at max_output_tokens=${maxOutputTokens} ` +
+      `${result.provider} stopped early (${result.stopReason}) at max_output_tokens=${maxOutputTokens} ` +
         `for ${input.requests.length} challenge(s); reasoning tokens used: ` +
         `${data.usage?.output_tokens_details?.reasoning_tokens ?? "unreported"} ` +
         `of ${data.usage?.output_tokens ?? "unreported"} output tokens`,
@@ -1313,7 +1356,7 @@ async function askModelOnce(
     // A different condition wearing the same status — the model's own filter
     // stopped it, no ceiling is involved, and raising ours would not change the
     // answer.
-    if (reason === "content_filter") {
+    if (result.stopReason === "filter") {
       throw new ChallengeError(
         "content_filtered",
         422,
@@ -1333,8 +1376,7 @@ async function askModelOnce(
       { retryable: true },
     );
   }
-  const textPart = parts.find((p: { type?: string }) => p.type === "output_text");
-  if (!textPart?.text) {
+  if (!result.text) {
     // An empty 200 is the upstream misbehaving rather than refusing, and it does
     // clear on a second ask — so unlike the two above, this one is retryable.
     throw new ChallengeError(
@@ -1347,7 +1389,7 @@ async function askModelOnce(
 
   let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(textPart.text);
+    parsed = JSON.parse(result.text);
   } catch {
     throw new ChallengeError(
       "upstream_bad_response",

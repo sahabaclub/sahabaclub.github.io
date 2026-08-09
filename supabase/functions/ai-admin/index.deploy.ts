@@ -307,6 +307,21 @@ interface TextResult {
   // The model declined the instructions outright. OpenAI emits a `refusal`
   // content part; Google signals it through finishReason SAFETY with no text.
   refused?: boolean;
+
+  // ⚠ The response headers, carried because `Retry-After` lives nowhere else.
+  //
+  // A caller backing off a 429 needs it, and it is not in the body — so a
+  // TextResult without headers cannot express "wait 20 seconds", only "it
+  // failed". promptarena-challenge already parses this header to schedule its
+  // retry; migrating it to callText() without this would have silently
+  // downgraded a measured wait into a guess, which is the kind of regression
+  // that only shows up under load.
+  //
+  // The Headers object itself rather than a parsed number: the two formats
+  // (delta-seconds and an HTTP date) are already handled by the callers that
+  // care, and re-implementing that here would be a second place to get it
+  // wrong.
+  headers?: Headers;
 }
 
 async function callText(req: TextRequest): Promise<TextResult> {
@@ -348,7 +363,7 @@ async function callOpenAI(req: TextRequest, key: string): Promise<TextResult> {
   const raw = await res.json().catch(() => null);
   if (!res.ok) {
     return {
-      ok: false, text: "", provider: "openai", status: res.status, raw,
+      ok: false, text: "", provider: "openai", status: res.status, raw, headers: res.headers,
       error: readError(raw) || ("OpenAI returned " + res.status),
     };
   }
@@ -357,7 +372,7 @@ async function callOpenAI(req: TextRequest, key: string): Promise<TextResult> {
   // carries text, so this collects rather than indexing [0].
   const n = normalise(raw, "openai");
   return {
-    ok: true, text: n.text, provider: "openai", status: res.status, raw,
+    ok: true, text: n.text, provider: "openai", status: res.status, raw, headers: res.headers,
     truncated: n.truncated, stopReason: n.stopReason, refused: n.refused,
   };
 }
@@ -391,14 +406,14 @@ async function callGoogle(req: TextRequest, key: string): Promise<TextResult> {
   const raw = await res.json().catch(() => null);
   if (!res.ok) {
     return {
-      ok: false, text: "", provider: "google", status: res.status, raw,
+      ok: false, text: "", provider: "google", status: res.status, raw, headers: res.headers,
       error: readError(raw) || ("Gemini returned " + res.status),
     };
   }
 
   const n = normalise(raw, "google");
   return {
-    ok: true, text: n.text, provider: "google", status: res.status, raw,
+    ok: true, text: n.text, provider: "google", status: res.status, raw, headers: res.headers,
     truncated: n.truncated, stopReason: n.stopReason, refused: n.refused,
   };
 }
