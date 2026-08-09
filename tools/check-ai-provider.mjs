@@ -229,6 +229,66 @@ console.log("\nstop reasons, normalised across providers");
   check("  and calls it text", good.models[0]?.kind, "text");
   check("  and reports ok", good.ok, true);
 
+  // ============================================================
+  // Which Google models draw
+  // ============================================================
+  //
+  // ⚠ The seven ids below are REAL — read off the club's account on 8 Aug 2026,
+  // not invented. Before this classifier every one of them was handed to the
+  // six text services as `kind: "text"`, where a call returns an image, no
+  // text, and the caller reports "produced no output at all".
+  //
+  // The negatives matter as much: `learnlm`, `antigravity` and
+  // `deep-research-max` are text models whose names contain none of the
+  // signals, and `gemini-2.5-flash-image-caption` is the trap — a model that
+  // READS images and writes text. It must stay text, which is why the pattern
+  // anchors on `image` as a whole segment rather than testing `includes`.
+  stub(respond(200, {
+    models: [
+      "gemini-2.5-flash-image", "gemini-3-pro-image", "gemini-3-pro-image-preview",
+      "gemini-3.1-flash-image", "gemini-3.1-flash-image-preview",
+      "gemini-3.1-flash-lite-image", "nano-banana-pro-preview",
+      "gemini-2.5-pro", "gemini-2.5-flash", "learnlm-2.0-flash-experimental",
+      "antigravity-preview-05-2026", "deep-research-max-preview-04-2026",
+    ].map((n) => ({ name: "models/" + n, supportedGenerationMethods: ["generateContent"] })),
+  }));
+  const kinds = await keyed.listGoogleModels();
+  const kindOf = (id) => kinds.models.find((m) => m.id === id)?.kind;
+
+  for (const id of ["gemini-2.5-flash-image", "gemini-3-pro-image", "gemini-3.1-flash-image",
+    "gemini-3.1-flash-lite-image", "nano-banana-pro-preview"]) {
+    check(`${id} -> image`, kindOf(id), "image");
+  }
+  for (const id of ["gemini-2.5-pro", "gemini-2.5-flash", "learnlm-2.0-flash-experimental",
+    "antigravity-preview-05-2026", "deep-research-max-preview-04-2026"]) {
+    check(`${id} -> text`, kindOf(id), "text");
+  }
+  check("all seven real image ids classified image",
+    kinds.models.filter((m) => m.kind === "image").length, 7);
+
+  // A family that does not follow the naming convention, caught by its own
+  // description rather than by a guess.
+  stub(respond(200, {
+    models: [{
+      name: "models/some-future-drawer",
+      description: "A model for image generation and editing.",
+      supportedGenerationMethods: ["generateContent"],
+    }],
+  }));
+  check("description names it a drawer", (await keyed.listGoogleModels()).models[0]?.kind, "image");
+
+  // ⚠ The control that stops this quietly matching everything: a model that
+  // merely MENTIONS images in prose stays text.
+  stub(respond(200, {
+    models: [{
+      name: "models/gemini-vision-reader",
+      description: "Understands images and answers questions about them.",
+      supportedGenerationMethods: ["generateContent"],
+    }],
+  }));
+  check("control: an image READER stays text",
+    (await keyed.listGoogleModels()).models[0]?.kind, "text");
+
   globalThis.fetch = realFetch;
 }
 

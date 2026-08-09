@@ -377,10 +377,50 @@ function readError(raw: unknown): string {
 //
 // A project with no Google key must still show its OpenAI models, so this is
 // never fatal to the listing.
+// ⚠ WHICH GOOGLE MODELS DRAW, AND WHY THIS IS A HEURISTIC.
+//
+// The previous version of this file asserted that "Google's image models do not
+// serve generateContent", and hardcoded every Google model to `kind: "text"`.
+// That was true of Imagen and Veo, which use `:predict`. It is NOT true of the
+// Gemini `*-image` family, which does its image work THROUGH generateContent —
+// measured 8 Aug 2026 on the club's own account, which lists seven of them.
+//
+// The consequence of the old assumption was not cosmetic: those seven were
+// offered under the six TEXT services, 0031's trigger allowed it because the
+// kind said text, and the call would return an image and no text — surfacing as
+// "the call succeeded but produced no output at all".
+//
+// ⚠ THERE IS NO FIELD IN GOOGLE'S MODEL LIST THAT SAYS "THIS OUTPUTS IMAGES".
+// `supportedGenerationMethods` reads `generateContent` for a text model and for
+// an image model alike, so it cannot separate them. The name and the
+// description are the only signals on offer, which makes this a heuristic in
+// the same honest sense as `providerFor` above — and it is written to fail in
+// the safer direction.
+//
+// Failing safe here means: a text model wrongly called an image model
+// DISAPPEARS from the text dropdowns, which somebody notices immediately. An
+// image model wrongly called text is the footgun described above, which nobody
+// notices until a service returns nothing. So the test is deliberately narrow —
+// it matches only what actually names itself an image model — and everything it
+// is unsure about stays text.
+//
+// ⚠ `description` is carried through so this decision is checkable from the
+// panel rather than taken on trust. When Google adds a family this misses, the
+// evidence for the fix is already on screen.
+function googleKind(id: string, description?: string): "text" | "image" {
+  if (/(^|[-_])image([-_]|$)|nano-banana/i.test(id)) return "image";
+  // A description that says it generates or edits images, for a family whose
+  // name does not follow the convention.
+  if (/\b(image generation|generates images|image editing|edits images)\b/i.test(String(description ?? ""))) {
+    return "image";
+  }
+  return "text";
+}
+
 export interface GoogleModelList {
   ok: boolean;
   reason?: "no-key" | "bad-key" | "unreachable";
-  models: Array<{ id: string; kind: "text" | "image" | "other"; owned_by: string }>;
+  models: Array<{ id: string; kind: "text" | "image" | "other"; owned_by: string; description?: string }>;
   // Google's own words when it refused. Carried because "invalid", "revoked"
   // and "restricted to another referrer" are three different fixes and only
   // the message says which.
@@ -412,17 +452,20 @@ export async function listGoogleModels(): Promise<GoogleModelList> {
       };
     }
     const raw = await res.json();
-    const models = (raw as { models?: Array<{ name?: string; supportedGenerationMethods?: string[] }> })?.models ?? [];
+    const models = (raw as {
+      models?: Array<{ name?: string; description?: string; supportedGenerationMethods?: string[] }>;
+    })?.models ?? [];
     const mapped = models
       .filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
-      .map((m) => ({
-        id: String(m.name ?? "").replace(/^models\//, ""),
-        // Google's image models do not serve generateContent, so everything
-        // that reaches here is text. Claiming otherwise would let a staff
-        // member pick one for an image service and fail at run time.
-        kind: "text" as const,
-        owned_by: "google",
-      }))
+      .map((m) => {
+        const id = String(m.name ?? "").replace(/^models\//, "");
+        return {
+          id,
+          kind: googleKind(id, m.description),
+          owned_by: "google",
+          description: String(m.description ?? ""),
+        };
+      })
       .filter((m) => m.id.length > 0);
     return { ok: true, models: mapped };
   } catch {
