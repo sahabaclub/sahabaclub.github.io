@@ -260,8 +260,20 @@
         <div class="ad-panel-head"><strong>Send</strong></div>
         <p class="ad-hint" id="cp-send-summary">—</p>
         <div class="cp-progress"><span id="cp-send-bar"></span></div>
+        <!-- ⚠ Each address gets ITS OWN person's draft where the campaign has
+             one. These drafts are written per contact, so a test that always
+             sends the first one proves the template renders and tells you
+             nothing about what a given recipient will actually read. An
+             address that is not in this campaign is sent a sample and SAID to
+             be a sample, in the subject line and in the result. -->
+        <label class="ad-hint" for="cp-test-to" style="display:block;margin:10px 0 4px;">
+          Test addresses — up to 3, comma separated. Leave empty to send to yourself.
+          Any address that is in this campaign gets its own personalised draft.
+        </label>
+        <input class="ad-field" id="cp-test-to" type="text" autocomplete="off"
+               placeholder="you@example.com, someone@example.com" style="width:100%;max-width:520px;">
         <div class="ad-modal-actions">
-          <button class="ad-btn" id="cp-test">Send one to me first</button>
+          <button class="ad-btn" id="cp-test">Send test</button>
           <button class="ad-btn ad-btn-primary" id="cp-send">Send the approved ones</button>
           <button class="ad-btn" id="cp-send-stop" disabled>Stop</button>
         </div>
@@ -1029,15 +1041,29 @@
     clearMessage("cp-send-msg");
     const btn = el("cp-test");
     btn.disabled = true;
+    const testTo = (el("cp-test-to")?.value || "").split(/[\s,;]+/).filter(Boolean);
     const { data, error } = await supabase.functions.invoke("send-campaign", {
-      body: { campaignId: campaign.id, test: true },
+      body: { campaignId: campaign.id, test: true, testTo },
     });
     btn.disabled = false;
     if (error || data?.error) {
       showMessage("cp-send-msg", data?.error || await readFnError(error), "err");
       return;
     }
-    showMessage("cp-send-msg", "Test sent to " + data.to + ".", "ok");
+    // ⚠ Says which addresses got their OWN draft and which got a stand-in.
+    // "Test sent" on its own would let somebody approve a campaign having
+    // reviewed a stranger's copy believing it was their own.
+    const sent = data.sent || [];
+    const own = sent.filter((s) => s.personalised).map((s) => s.to);
+    const fell = sent.filter((s) => !s.personalised).map((s) => s.to);
+    let msg = "Test sent to " + (data.to || "") + ".";
+    if (own.length) msg += " Personalised for " + own.join(", ") + ".";
+    if (fell.length) {
+      msg += " " + fell.join(", ") + (fell.length === 1 ? " is" : " are") +
+        " not in this campaign, so " + (fell.length === 1 ? "it" : "they") +
+        " got a sample draft rather than their own.";
+    }
+    showMessage("cp-send-msg", msg, fell.length ? "warn" : "ok");
   });
 
   // Typing SEND is the last gate. Everything up to here is reversible; this

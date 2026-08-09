@@ -98,31 +98,107 @@ Deno.serve(async (req) => {
       return json({ error: "This campaign was cancelled." }, 409);
     }
 
-    // A test send goes to the person clicking the button and nobody else, so
-    // they can see a real draft arrive in a real inbox before committing.
+    // ============================================================
+    // Test send
+    // ============================================================
+    //
+    // A test goes to addresses the sender names and nobody else. It consumes
+    // nothing: no recipient's status moves, no unsubscribe token is spent, and
+    // the real audience is untouched however many times it is pressed.
+    //
+    // ⚠ EACH ADDRESS GETS ITS OWN PERSON'S DRAFT WHERE ONE EXISTS. Ahmed's
+    // ask, and it is the whole point: these drafts are written per contact, so
+    // sending "the first one" to three inboxes proves the template renders and
+    // tells you nothing about what any actual recipient will read. Typing
+    // Ghadir's address sends GHADIR'S draft, personalised from her row.
+    //
+    // ⚠ An address with no draft in this campaign is NOT silently given
+    // somebody else's. It falls back to a sample and the response says so, per
+    // address — because a test that quietly shows you the wrong person's copy
+    // is worse than one that admits it is a stand-in.
     if (test) {
+      // Up to three, because this accepts an arbitrary `to` and sends from a
+      // domain the club has spent DNS records establishing as its own. The cap
+      // and the staff gate above are what keep that from being a mailer for
+      // strangers; see the same argument at the head of
+      // send-transactional-email.
+      const MAX_TEST = 3;
+      const raw: unknown = (body as { testTo?: unknown }).testTo;
+      const asked = (Array.isArray(raw) ? raw : typeof raw === "string" ? String(raw).split(/[\s,;]+/) : [])
+        .map((a) => String(a ?? "").trim())
+        .filter(Boolean);
+
+      // No addresses named keeps the original behaviour — the button that used
+      // to read "Send one to me first" still works exactly as it did.
+      const wanted = asked.length ? asked : [userData.user.email ?? ""];
+
+      const bad = wanted.filter((a) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a));
+      if (bad.length) {
+        return json({ error: "That doesn't look like an email address: " + bad.join(", ") }, 400);
+      }
+      if (!wanted[0]) {
+        return json({ error: "Your account has no email address to send a test to." }, 400);
+      }
+      if (wanted.length > MAX_TEST) {
+        return json({ error: `A test goes to at most ${MAX_TEST} addresses at a time.` }, 400);
+      }
+
+      // One fallback draft, fetched once, for any address that is not in this
+      // campaign.
       const { data: sample } = await admin
         .from("campaign_recipients")
-        .select("subject, body_text, full_name")
+        .select("subject, body_text")
         .eq("campaign_id", campaignId)
         .in("status", ["generated", "approved"])
         .limit(1)
         .maybeSingle();
       if (!sample) return json({ error: "No drafts to preview yet." }, 400);
 
-      const to = userData.user.email;
-      if (!to) return json({ error: "Your account has no email address to send a test to." }, 400);
+      const sent: Array<{ to: string; personalised: boolean; subject: string }> = [];
+      for (const to of wanted) {
+        // ⚠ Case-insensitively, because an address typed by hand will not match
+        // the case it was stored in, and a capital letter must not be the
+        // difference between a personalised test and a stranger's copy.
+        const { data: own } = await admin
+          .from("campaign_recipients")
+          .select("subject, body_text")
+          .eq("campaign_id", campaignId)
+          // ⚠ The column is `email`, not `recipient`. 0011 copies the address
+          // onto the recipient row at resolve time so the send log survives the
+          // contact being corrected or deleted.
+          .ilike("email", to)
+          .in("status", ["generated", "approved"])
+          .limit(1)
+          .maybeSingle();
 
-      const resp = await sendOne({
-        from: fromHeader(campaign),
-        replyTo: campaign.reply_to,
-        to,
-        subject: "[TEST] " + sample.subject,
-        text: sample.body_text ?? "",
-        unsubscribeToken: null,
-      });
-      if (!resp.ok) return json({ error: "Resend refused the test: " + resp.detail }, 502);
-      return json({ ok: true, test: true, to });
+        const draft = own ?? sample;
+        const resp = await sendOne({
+          from: fromHeader(campaign),
+          replyTo: campaign.reply_to,
+          to,
+          // The prefix says which of the two arrived, so a test that fell back
+          // is obvious in the inbox and not only in the response.
+          subject: (own ? "[TEST] " : "[TEST — sample, not this address] ") + draft.subject,
+          text: draft.body_text ?? "",
+          // ⚠ Deliberately null. A test must not carry a working unsubscribe
+          // link: clicking it would opt out a real contact on the strength of a
+          // message that was never part of the campaign.
+          unsubscribeToken: null,
+        });
+        if (!resp.ok) {
+          return json({
+            error: "Resend refused the test to " + to + ": " + resp.detail,
+            sent,
+          }, 502);
+        }
+        sent.push({ to, personalised: !!own, subject: draft.subject });
+      }
+
+      console.log(
+        `campaign ${campaignId} test sent by ${userData.user.id} to ` +
+          sent.map((s) => s.to + (s.personalised ? "" : " (sample)")).join(", "),
+      );
+      return json({ ok: true, test: true, to: sent.map((s) => s.to).join(", "), sent });
     }
 
     // Only approved drafts. 'generated' is not enough — that is the whole
