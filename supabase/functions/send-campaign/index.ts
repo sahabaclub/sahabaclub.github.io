@@ -403,9 +403,28 @@ async function sendOne(opts: {
   // one-click unsubscribe control. People who can unsubscribe easily do that
   // instead of pressing "spam", and it is the spam presses that cost us the
   // domain.
-  if (unsubUrl) {
+  //
+  // ⚠ THE HEADER URL IS NOT THE FOOTER URL, AND THIS IS THE FIX.
+  //
+  // `List-Unsubscribe-Post` means the provider **POSTs** to whatever
+  // `List-Unsubscribe` names. This used to name `unsubscribe.html` — a static
+  // page on GitHub Pages, which runs nothing on a POST. So the recipient's own
+  // Unsubscribe button reported success, wrote nothing, and they went on
+  // receiving campaigns until they pressed spam instead. Every campaign sent
+  // before 9 Aug 2026 carried that.
+  //
+  // The header now names the `unsubscribe` Edge Function, which accepts the
+  // POST and writes the row. The FOOTER link below is deliberately left
+  // pointing at the page: a human clicking a link should get the confirm
+  // button 0011 designed, not a silent 200. (The function redirects a GET to
+  // that same page, so the two cannot drift apart.)
+  const unsubPostUrl = opts.unsubscribeToken
+    ? `${SUPABASE_URL}/functions/v1/unsubscribe?t=${opts.unsubscribeToken}`
+    : "";
+
+  if (unsubPostUrl) {
     payload.headers = {
-      "List-Unsubscribe": `<${unsubUrl}>`,
+      "List-Unsubscribe": `<${unsubPostUrl}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     };
   }
