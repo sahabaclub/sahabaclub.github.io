@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
         return json({ ok: true, skipped: "already_sent" });
       }
 
-      const sent = await send(admin, user.email, "welcome", {
+      const sent = await send(user.email, "welcome", {
         fullName: profile?.full_name ?? "",
       });
       if (!sent.ok) return json({ ok: false, error: sent.error }, 502);
@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
       return json({ error: "No Microsoft 365 account on record" }, 404);
     }
 
-    const sent = await send(admin, user.email, "ms365_linked", { mailbox: account.mailbox });
+    const sent = await send(user.email, "ms365_linked", { mailbox: account.mailbox });
     if (!sent.ok) return json({ ok: false, error: sent.error }, 502);
     return json({ ok: true, sent: "ms365_linked" });
   } catch (err) {
@@ -103,22 +103,43 @@ Deno.serve(async (req) => {
 });
 
 // One place that talks to send-transactional-email, so the service-role call
-// and its error handling are not copied twice. invoke() resolves with { error }
-// on a non-2xx rather than throwing, so the result has to be read — a try/catch
-// alone sees only network failures, which is how a Resend rejection used to
-// vanish silently.
+// and its error handling are not copied twice.
+//
+// ⚠ fetch(), NOT admin.functions.invoke(). This is the fix from 8 Aug 2026 and
+// it is worth knowing why, because the old version looked correct.
+//
+// `functions.invoke()` failed EVERY call in send-avatar-announcement — all 18
+// members — and reported only `Edge Function returned a non-2xx status code`,
+// its generic wrapper, with the response body discarded. The same request sent
+// with a plain fetch, to the same URL with the same key, SUCCEEDED. So the
+// credentials were never wrong; invoke() was.
+//
+// Which means the welcome mail and the ms365_linked mail have almost certainly
+// never been delivered — 0040 shipped them with a caller that could not call.
+// Nothing crashed, because invoke() resolves with `{ error }` rather than
+// throwing, so the failure went to a log nobody reads.
+//
+// The status and body are now carried into the message. "403 Not allowed" and
+// "422 invalid recipient" need completely different fixes, and the old wording
+// could not tell them apart.
 async function send(
-  admin: ReturnType<typeof createClient>,
   to: string,
   template: Kind,
   data: Record<string, unknown>,
 ) {
   try {
-    const { error } = await admin.functions.invoke("send-transactional-email", {
-      body: { to, template, data },
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-transactional-email`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        apikey: SERVICE_ROLE_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ to, template, data }),
     });
-    if (error) {
-      console.error(`send-transactional-email failed for ${template}:`, error);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`send-transactional-email ${res.status} for ${template}: ${body.slice(0, 300)}`);
       return { ok: false as const, error: "Could not send the email" };
     }
     return { ok: true as const };

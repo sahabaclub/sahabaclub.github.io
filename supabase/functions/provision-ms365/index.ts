@@ -318,22 +318,49 @@ Deno.serve(async (req) => {
       console.error(`ms365_credentials write threw for ${result.mailbox}:`, vaultErr);
     }
 
-    // functions.invoke() resolves with { error } on a non-2xx — it does not
-    // throw — so the result has to be read. A try/catch alone only sees
-    // network failures, which is how a 403 from a rotated service-role key, or
-    // a Resend rejection, used to vanish silently and leave the member with a
-    // mailbox whose password existed nowhere but a discarded variable.
+    // ⚠ fetch(), NOT functions.invoke(). Changed 8 Aug 2026, and the note this
+    // replaces was right about the danger and wrong about the cause.
+    //
+    // It said: invoke() resolves with { error } on a non-2xx rather than
+    // throwing, so the result must be read or a 403 vanishes silently and
+    // leaves the member with a mailbox whose password existed nowhere but a
+    // discarded variable. All true, and the result WAS read.
+    //
+    // What nobody knew is that invoke() fails here every time. It failed all 18
+    // calls in send-avatar-announcement and reported only its generic
+    // `Edge Function returned a non-2xx status code`; the identical request via
+    // plain fetch, same URL, same key, succeeded. So the careful error handling
+    // below has most likely been faithfully logging a failure on every single
+    // provisioning since this shipped, into a log nobody reads.
+    //
+    // ⚠ `credential_sent_at` is stamped only on a real 2xx, and 0039 vaults the
+    // password so the dashboard can show it. That vault is the reason this bug
+    // cost confusion rather than a lost mailbox — the member could still get in.
+    // Do not let that become an argument for leaving the mail unverified.
     let credentialSent = false;
     try {
-      const { error: mailError } = await admin.functions.invoke("send-transactional-email", {
-        body: {
+      const mailRes = await fetch(`${SUPABASE_URL}/functions/v1/send-transactional-email`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+          apikey: SERVICE_ROLE_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
           to: user.email,
           template: "ms365_credential",
           data: { mailbox: result.mailbox, tempPassword: result.tempPassword, preExisting },
-        },
+        }),
       });
-      if (mailError) {
-        console.error(`send-transactional-email failed for ${result.mailbox}:`, mailError);
+      if (!mailRes.ok) {
+        // ⚠ The body is read for the STATUS and the provider's message only.
+        // This template carries a starter password in its request; nothing from
+        // this response is echoed to the caller, and the request body is never
+        // logged.
+        const mailBody = await mailRes.text().catch(() => "");
+        console.error(
+          `send-transactional-email ${mailRes.status} for ${result.mailbox}: ${mailBody.slice(0, 300)}`,
+        );
       } else {
         credentialSent = true;
         await admin.from("ms365_accounts")
