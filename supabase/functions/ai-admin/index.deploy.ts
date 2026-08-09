@@ -1847,16 +1847,16 @@ async function runTest(
   // that pairing ever does arrive it would spend a real call to say "model not
   // found" about a model that exists. If the check is not in this file, it is
   // not made.
-  if (service.kind === "image" && provider === "google") {
-    return json({
-      error: `"${version.model}" is a Google model and this service makes images. ` +
-        "Google's image models are not reachable through the API this project uses, so there is nothing to test. Choose an OpenAI image model.",
-    }, 400);
-  }
+  // ⚠ The refusal that used to sit here — "Google's image models are not
+  // reachable through the API this project uses" — has been REMOVED because it
+  // stopped being true. Seven Gemini image models are live on this account and
+  // they do their image work through generateContent; callImage speaks it. A
+  // guard that outlives its reason is a guard that blocks the thing it was
+  // written to protect.
 
   const startedAt = Date.now();
   const result = service.kind === "image"
-    ? await testImage(service.slug, parts, version.model)
+    ? await testImage(service.slug, parts, version.model, provider)
     : await testText(service.slug, parts, version.model, version.max_output_tokens ?? service.recommended_max_output_tokens ?? 4000, provider);
 
   const detail = {
@@ -2086,6 +2086,7 @@ async function testImage(
   slug: string,
   parts: Record<string, unknown>,
   model: string,
+  provider: Provider,
 ): Promise<TestResult> {
   // ⚠ Composed by the REAL composer for the avatars. `buildPrompt` is imported
   // from `_shared/avatar-art.ts` — the same function `generate-avatar` and
@@ -2147,26 +2148,33 @@ async function testImage(
     };
   }
 
-  const form = new FormData();
-  form.append("model", model);
-  form.append("prompt", prompt);
-  form.append("size", "1024x1024");
-  form.append("n", "1");
+  // ⚠ THROUGH callImage(), so the TEST CALLS WHAT THE SERVICE CALLS. Step 4 of
+  // the avatar switch, and the whole point of it.
+  //
+  // This POSTed api.openai.com unconditionally. Once `generate-avatar` can be
+  // pointed at a Gemini model, a test that always asks OpenAI would green-light
+  // a model the service cannot use — or condemn one it can. That is exactly the
+  // 7 Aug `gpt-image-2` bug, which passed `/v1/images/generations` while the
+  // service called `/v1/images/edits`, and it would have been reintroduced in a
+  // new direction.
+  //
   // Production asks for `quality: high`. A test asks for the cheapest thing
   // that still proves the call is accepted — and only where the parameter
-  // exists, because the older image families reject the value.
-  if (/^gpt-image/.test(model)) form.append("quality", "low");
-  form.append("image", baseImage, "base.png");
+  // exists, because the older image families reject the value and Google has
+  // no equivalent at all (callImage does not forward it).
+  const bytes = new Uint8Array(await baseImage.arrayBuffer());
 
-  let res: Response;
+  let result: ImageResult;
   try {
-    res = await fetch("https://api.openai.com/v1/images/edits", {
-      method: "POST",
+    result = await callImage({
+      model,
+      provider,
+      prompt,
+      image: bytes,
+      mediaType: baseImage.type || "image/png",
+      size: "1024x1024",
+      quality: /^gpt-image/.test(model) ? "low" : undefined,
       signal: abort.signal,
-      // ⚠ No Content-Type. fetch sets it with the multipart boundary, and
-      // setting it by hand produces a body the API cannot parse.
-      headers: { "Authorization": "Bearer " + OPENAI_API_KEY },
-      body: form,
     });
   } catch (err) {
     return {
@@ -2181,38 +2189,53 @@ async function testImage(
     clearTimeout(timer);
   }
 
-  if (!res.ok) {
-    const body = await res.text();
-    console.error(`ai-admin test ${slug} ${res.status}: ${body.slice(0, 400)}`);
+  if (!result.ok) {
+    const body = String(result.error ?? "");
+    console.error(`ai-admin test ${slug} ${result.provider} ${result.status}: ${body.slice(0, 400)}`);
     // A prompt the safety system declines is the single most likely way to
     // break an image prompt by editing it, and it must read as a prompt
     // problem rather than as an outage.
-    if (/moderation|safety|content_policy/i.test(body)) {
+    //
+    // ⚠ Google signals a refusal as a 200 with no image rather than an error
+    // status. callImage turns that into ok:false with the body attached, so
+    // this branch catches both providers' refusals — which is why it matches on
+    // the body and not on the status.
+    if (/moderation|safety|content_policy|PROHIBITED|blockReason/i.test(body)) {
       return {
         ok: false,
         reason: "The safety system declined this prompt. Something in the wording is being read as a request it will not draw — this prompt would fail for every member.",
         composedPrompt: prompt,
-        detail: { http_status: res.status },
+        detail: { http_status: result.status, provider: result.provider },
       };
     }
     return {
       ok: false,
-      reason: triage(res.status, body, model),
+      reason: triage(result.status, body, model, result.provider),
       composedPrompt: prompt,
-      detail: { http_status: res.status },
+      detail: { http_status: result.status, provider: result.provider },
     };
   }
 
-  const data = await res.json();
-  const b64 = data?.data?.[0]?.b64_json;
-  if (!b64) {
+  if (!result.bytes || !result.bytes.length) {
     return {
       ok: false,
       reason: "The call succeeded but no image came back.",
       composedPrompt: prompt,
-      detail: {},
+      detail: { provider: result.provider },
     };
   }
+  // ⚠ Chunked, for the same reason ai-provider's encoder is: spreading a
+  // megabyte of bytes as arguments to String.fromCharCode overflows the call
+  // stack, and the symptom is a broken preview rather than an obvious error.
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < result.bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...result.bytes.subarray(i, i + CHUNK));
+  }
+  const b64 = btoa(bin);
+  // Google may return webp; the preview must say what it actually got rather
+  // than assume png.
+  const previewType = result.mediaType || "image/png";
 
   return {
     ok: true,
@@ -2220,7 +2243,7 @@ async function testImage(
     // Returned for the panel to show, and deliberately NOT written to
     // `test_detail` — a base64 image in a jsonb column is several hundred
     // kilobytes read back on every history load, for ever.
-    output: { image_data_url: "data:image/png;base64," + b64 },
+    output: { image_data_url: "data:" + previewType + ";base64," + b64 },
     composedPrompt: prompt,
     detail: { image_bytes: Math.round((String(b64).length * 3) / 4) },
   };
