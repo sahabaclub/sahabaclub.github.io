@@ -348,6 +348,188 @@ async function callGoogle(req: TextRequest, key: string): Promise<TextResult> {
   };
 }
 
+// ============================================================
+// Drawing
+// ============================================================
+//
+// The avatar services transform a source image: the member's picture in, a
+// drawing out. That is an EDIT, not a generation, and the two providers express
+// it about as differently as two APIs can.
+//
+//   OpenAI  POST /v1/images/edits, multipart/form-data
+//           model, image (file), prompt, size, quality
+//           → { data: [{ b64_json }] }
+//
+//   Google  POST /v1beta/models/<model>:generateContent, JSON
+//           contents[0].parts = [ {text}, {inlineData:{mimeType,data}} ]
+//           → candidates[0].content.parts[].inlineData.{mimeType,data}
+//
+// ⚠ `size` and `quality` are OPENAI-ONLY and are not forwarded to Google,
+// which has no equivalent and rejects unknown generationConfig keys. Silently
+// dropping them is right; pretending to honour them would be worse.
+//
+// ⚠ THE ERROR IS RETURNED AS THE PROVIDER'S RAW BODY TEXT, not a tidied
+// message. generate-avatar triages on that body with regexes — insufficient
+// quota, moderation, model_not_found — and turns each into a sentence a member
+// reads off their own profile. Parsing it here would break every one of those
+// branches, so this deliberately hands back exactly what the provider said.
+export interface ImageRequest {
+  model: string;
+  provider?: Provider;
+  prompt: string;
+  // The picture being transformed.
+  image: Uint8Array;
+  mediaType: string;
+  // OpenAI only; see the note above.
+  size?: string;
+  quality?: string;
+  signal?: AbortSignal;
+}
+
+export interface ImageResult {
+  ok: boolean;
+  provider: Provider;
+  status: number;
+  bytes?: Uint8Array;
+  mediaType?: string;
+  // The provider's raw body on failure — see the note above.
+  error?: string;
+  headers?: Headers;
+}
+
+// ⚠ CHUNKED, and it is not a micro-optimisation. `String.fromCharCode(...bytes)`
+// spreads every byte as an argument, and a 1 MB avatar is a million arguments —
+// which overflows the call stack and throws RangeError on a photograph that is
+// merely normal-sized. The failure looks like a corrupt image, not a stack
+// limit.
+function toBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
+function fromBase64(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+export async function callImage(req: ImageRequest): Promise<ImageResult> {
+  const provider = req.provider ?? providerFor(req.model);
+  const key = keyFor(provider);
+  if (!key) {
+    return {
+      ok: false, provider, status: 503,
+      error: provider === "google"
+        ? "GEMINI_API_KEY is not set on this project, so Gemini models cannot be called."
+        : "OPENAI_API_KEY is not set.",
+    };
+  }
+  return provider === "google" ? await drawGoogle(req, key) : await drawOpenAI(req, key);
+}
+
+async function drawOpenAI(req: ImageRequest, key: string): Promise<ImageResult> {
+  const form = new FormData();
+  form.append("model", req.model);
+  form.append("image", new Blob([req.image], { type: req.mediaType }), "source" + extFor(req.mediaType));
+  form.append("prompt", req.prompt);
+  if (req.size) form.append("size", req.size);
+  if (req.quality) form.append("quality", req.quality);
+
+  const res = await fetch("https://api.openai.com/v1/images/edits", {
+    method: "POST",
+    signal: req.signal,
+    headers: { Authorization: "Bearer " + key },
+    body: form,
+  });
+
+  if (!res.ok) {
+    return { ok: false, provider: "openai", status: res.status, error: await res.text().catch(() => ""), headers: res.headers };
+  }
+
+  const raw = await res.json().catch(() => null);
+  const b64 = (raw as { data?: Array<{ b64_json?: string }> })?.data?.[0]?.b64_json;
+  if (!b64) {
+    return { ok: false, provider: "openai", status: res.status, error: "no image in the response", headers: res.headers };
+  }
+  // The edits endpoint returns PNG.
+  return { ok: true, provider: "openai", status: res.status, bytes: fromBase64(b64), mediaType: "image/png", headers: res.headers };
+}
+
+async function drawGoogle(req: ImageRequest, key: string): Promise<ImageResult> {
+  const model = req.model.replace(/^models\//, "");
+
+  const res = await fetch(
+    "https://generativelanguage.googleapis.com/v1beta/models/" +
+      encodeURIComponent(model) + ":generateContent",
+    {
+      method: "POST",
+      signal: req.signal,
+      headers: { "x-goog-api-key": key, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          role: "user",
+          parts: [
+            { text: req.prompt },
+            { inlineData: { mimeType: req.mediaType, data: toBase64(req.image) } },
+          ],
+        }],
+        // ⚠ Asking for TEXT as well as IMAGE, not IMAGE alone. Several models in
+        // this family refuse an image-only modality list, and a model that
+        // returns a sentence alongside the picture costs nothing — the sentence
+        // is ignored below. Refusing to draw because the modality list was too
+        // narrow would cost the whole call.
+        generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    return { ok: false, provider: "google", status: res.status, error: await res.text().catch(() => ""), headers: res.headers };
+  }
+
+  const raw = await res.json().catch(() => null);
+  const parts = (raw as {
+    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> } }>;
+  })?.candidates?.[0]?.content?.parts ?? [];
+
+  // ⚠ The picture is not always the first part. With TEXT in the modality list
+  // the model may narrate before it draws, so this looks for the part that
+  // actually carries image data rather than indexing [0].
+  const drawn = parts.find((p) => p?.inlineData?.data);
+  if (!drawn?.inlineData?.data) {
+    // A refusal arrives as a 200 with no image, which is a different problem
+    // from a 400 and has to read differently. The body is handed back whole so
+    // the caller's own triage — moderation, safety — still has something to
+    // match on.
+    return {
+      ok: false, provider: "google", status: res.status,
+      error: "no image in the response: " + JSON.stringify(raw).slice(0, 500),
+      headers: res.headers,
+    };
+  }
+
+  return {
+    ok: true, provider: "google", status: res.status,
+    bytes: fromBase64(drawn.inlineData.data),
+    mediaType: drawn.inlineData.mimeType || "image/png",
+    headers: res.headers,
+  };
+}
+
+// Mirrors generate-avatar's own helper: the multipart filename needs an
+// extension the endpoint recognises, and it is derived from the media type
+// rather than assumed.
+function extFor(mediaType: string): string {
+  if (/png/i.test(mediaType)) return ".png";
+  if (/webp/i.test(mediaType)) return ".webp";
+  return ".jpg";
+}
+
 // Both providers nest their message differently, and a caller that prints
 // "[object Object]" at 2am is a caller that tells you nothing.
 function readError(raw: unknown): string {

@@ -292,6 +292,110 @@ console.log("\nstop reasons, normalised across providers");
   globalThis.fetch = realFetch;
 }
 
+// ============================================================
+// Drawing
+// ============================================================
+{
+  console.log("");
+  console.log("callImage");
+
+  globalThis.Deno = { env: { get: () => "a-key" } };
+  const drawMod = await import(
+    new URL("../supabase/functions/_shared/ai-provider.ts", import.meta.url).href + "?draw"
+  );
+
+  const realFetch = globalThis.fetch;
+  let seen = null;
+  const capture = (status, body, headers) => (url, init) => {
+    seen = { url: String(url), init };
+    return Promise.resolve({
+      ok: status >= 200 && status < 300,
+      status,
+      headers: new Map(Object.entries(headers || {})),
+      text: () => Promise.resolve(typeof body === "string" ? body : JSON.stringify(body)),
+      json: () => Promise.resolve(typeof body === "string" ? JSON.parse(body) : body),
+    });
+  };
+
+  // A one-pixel PNG, and then something far bigger than the 0x8000 chunk.
+  const tiny = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+  const huge = new Uint8Array(300000).map((_, i) => i % 251);
+
+  // ---- OpenAI goes to the edits endpoint, as multipart ----
+  globalThis.fetch = capture(200, { data: [{ b64_json: btoa("drawn") }] });
+  const o = await drawMod.callImage({
+    model: "gpt-image-1", prompt: "draw", image: tiny, mediaType: "image/png",
+    size: "1024x1024", quality: "high",
+  });
+  check("openai -> /v1/images/edits", /api\.openai\.com\/v1\/images\/edits$/.test(seen.url), true);
+  check("  sent as multipart FormData", seen.init.body instanceof FormData, true);
+  check("  carries size and quality", [seen.init.body.get("size"), seen.init.body.get("quality")],
+    ["1024x1024", "high"]);
+  check("  returns the decoded bytes", new TextDecoder().decode(o.bytes), "drawn");
+  check("  and reports png", o.mediaType, "image/png");
+
+  // ---- Google goes to generateContent, as JSON with inlineData ----
+  globalThis.fetch = capture(200, {
+    candidates: [{ content: { parts: [
+      { text: "here you go" },
+      { inlineData: { mimeType: "image/webp", data: btoa("gemini-drawn") } },
+    ] } }],
+  });
+  const g = await drawMod.callImage({
+    model: "gemini-2.5-flash-image", prompt: "draw", image: tiny, mediaType: "image/jpeg",
+    size: "1024x1024", quality: "high",
+  });
+  const gBody = JSON.parse(seen.init.body);
+  check("google -> generateContent", /gemini-2\.5-flash-image:generateContent$/.test(seen.url), true);
+  check("  source sent as inlineData", gBody.contents[0].parts[1].inlineData.mimeType, "image/jpeg");
+  check("  asks for TEXT and IMAGE", gBody.generationConfig.responseModalities, ["TEXT", "IMAGE"]);
+  // ⚠ The control for the note in drawGoogle: size/quality are OpenAI-only and
+  // must not be forwarded, because Google rejects unknown generationConfig keys.
+  check("  does NOT forward size/quality",
+    [gBody.generationConfig.size, gBody.generationConfig.quality, gBody.size], [undefined, undefined, undefined]);
+  // ⚠ And the picture was NOT the first part. Indexing [0] would have returned
+  // the narration.
+  check("  finds the image behind a text part", new TextDecoder().decode(g.bytes), "gemini-drawn");
+  check("  keeps the provider's media type", g.mediaType, "image/webp");
+
+  // ---- A 200 with no image is a failure, not an empty success ----
+  globalThis.fetch = capture(200, { candidates: [{ content: { parts: [{ text: "I won't draw that" }] } }] });
+  const refused = await drawMod.callImage({
+    model: "gemini-2.5-flash-image", prompt: "draw", image: tiny, mediaType: "image/png",
+  });
+  check("200 with no image is not ok", refused.ok, false);
+  check("  and hands back the body to triage on", /I won't draw that/.test(refused.error || ""), true);
+
+  // ---- The raw error body survives, because generate-avatar regexes it ----
+  globalThis.fetch = capture(429, '{"error":{"message":"insufficient_quota"}}');
+  const broke = await drawMod.callImage({
+    model: "gpt-image-1", prompt: "draw", image: tiny, mediaType: "image/png",
+  });
+  check("failure keeps the provider's raw body", /insufficient_quota/.test(broke.error || ""), true);
+  check("  and the status", broke.status, 429);
+
+  // ⚠ THE ONE THAT BREAKS ON A REAL PHOTOGRAPH. String.fromCharCode(...bytes)
+  // spreads a million arguments for a 1 MB image and throws RangeError; the
+  // symptom looks like a corrupt upload, not a stack limit. 300 KB is already
+  // well past the 0x8000 chunk.
+  globalThis.fetch = capture(200, {
+    candidates: [{ content: { parts: [{ inlineData: { data: btoa("ok") } }] } }],
+  });
+  let bigOk = true, bigErr = "";
+  try {
+    await drawMod.callImage({
+      model: "gemini-2.5-flash-image", prompt: "draw", image: huge, mediaType: "image/jpeg",
+    });
+  } catch (e) { bigOk = false; bigErr = String(e); }
+  check("a 300 KB source does not blow the stack", bigOk, true, bigErr);
+  // And it encoded faithfully, not merely without throwing.
+  check("  and round-trips exactly",
+    JSON.parse(seen.init.body).contents[0].parts[1].inlineData.data.length,
+    Math.ceil(huge.length / 3) * 4);
+
+  globalThis.fetch = realFetch;
+}
+
 console.log("");
 if (failed) { console.log(`${failed} check(s) failed`); process.exit(1); }
 console.log("ai-provider logic is sound.");
