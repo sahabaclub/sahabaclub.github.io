@@ -58,7 +58,21 @@ const SITE = (Deno.env.get("SITE_URL") ?? "https://www.sahabaclub.ai").replace(/
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// ⚠ CORS on a public endpoint, and it is not decoration. Gmail POSTs to this
+// from its own servers, where CORS does not apply — so the function worked
+// without these headers and could not be exercised from a browser at all,
+// which meant the only way to prove a real token writes the row was to
+// unsubscribe somebody by hand from a terminal. A public endpoint whose only
+// credential is a token that already travels in plain sight inside every email
+// loses nothing by being callable from a page.
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "content-type",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+};
+
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   const url = new URL(req.url);
   // `t` is what the emails already use; `token` accepted as a courtesy in case
   // a client rewrites it.
@@ -74,18 +88,18 @@ Deno.serve(async (req) => {
   if (req.method === "GET" || req.method === "HEAD") {
     return new Response(null, {
       status: 302,
-      headers: { Location: `${SITE}/unsubscribe.html${token ? "?t=" + encodeURIComponent(token) : ""}` },
+      headers: { ...cors, Location: `${SITE}/unsubscribe.html${token ? "?t=" + encodeURIComponent(token) : ""}` },
     });
   }
 
   if (req.method !== "POST") {
-    return new Response("", { status: 405, headers: { Allow: "GET, POST" } });
+    return new Response("", { status: 405, headers: { ...cors, Allow: "GET, POST" } });
   }
 
   // ⚠ Answered 200 whatever happens next. See the header: a provider that gets
   // an error will retry, and a body that distinguishes outcomes tells an
   // attacker which tokens are real. The console is where the truth goes.
-  const ok = new Response("", { status: 200 });
+  const ok = new Response("", { status: 200, headers: cors });
 
   if (!SERVICE_ROLE_KEY) {
     console.error("unsubscribe: SUPABASE_SERVICE_ROLE_KEY is not set — a real unsubscribe was DROPPED");
