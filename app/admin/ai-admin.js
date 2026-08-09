@@ -18,13 +18,17 @@
 // So the model dropdown being filtered by kind is a courtesy. 0031's trigger
 // is what makes a text model on an image service impossible. Never move a
 // check out of the database and rely on this file.
-import { supabase } from "../../lib/supabase-client.js?v=16538a1b6f";
-import { requireStaff, renderShell, escapeHtml, formatDate } from "../../lib/admin-guard.js?v=16538a1b6f";
+import { supabase } from "../../lib/supabase-client.js?v=95a6e12add";
+import { requireStaff, renderShell, escapeHtml, formatDate } from "../../lib/admin-guard.js?v=95a6e12add";
 
 const state = {
   services: [],
   // { text: [...], image: [...], other: [...] } — from OpenAI, via ai-admin.
   models: { text: [], image: [], other: [] },
+  // The unfiltered list, kept because the price table needs every field the
+  // dropdowns throw away — the rates, who set them and when.
+  allModels: [],
+  priceFilter: "",
   modelsLoaded: false,
   // The prompt each service uses when nothing is activated. From ai-admin,
   // which imports the avatar artwork for real and mirrors the six text
@@ -186,10 +190,12 @@ async function refreshModels(opts) {
     // first load and failed again on a manual retry looks like it worked.
     renderStats();
     render();
+    renderPrices();
     return;
   }
 
   const models = res.data.models || [];
+  state.allModels = models;
   state.models = {
     text: models.filter((m) => m.kind === "text" && m.available),
     image: models.filter((m) => m.kind === "image" && m.available),
@@ -215,6 +221,7 @@ async function refreshModels(opts) {
   // of the screen.
   renderStats();
   render();
+  renderPrices();
 }
 
 // ---- Rendering -------------------------------------------------------
@@ -254,6 +261,165 @@ function render() {
 
 function renderList(html) {
   document.getElementById("ai-list").innerHTML = html;
+}
+
+// ============================================================
+// Model prices
+// ============================================================
+//
+// A rate card, maintained by hand. 0060 built the columns and
+// set_model_price(); this is the half that lets a person reach them.
+//
+// ⚠ set_model_price() is called DIRECTLY over RPC rather than through the
+// ai-admin Edge Function, which every other write on this page goes through.
+// That is deliberate and it is 0060's own design: the function is
+// security definer and checks has_admin_section('ai') itself, so routing it
+// through an Edge Function would add a second place to get the gate wrong
+// without adding a gate. The database is the boundary here, as it is
+// everywhere else in this project.
+//
+// ⚠ Only models that are AVAILABLE and of a kind a service can actually call
+// are listed. The ~52 "other" models — embeddings, speech, moderation — cannot
+// be selected for any service, so a price against them is a number nobody will
+// ever spend.
+
+function priceValue(v) {
+  // ⚠ "" and 0 ARE DIFFERENT and the whole feature depends on it. Blank means
+  // nobody has recorded a price; 0 means the model is free, which 0060
+  // explicitly allows ("some models genuinely are free at some tiers"). A
+  // careless `Number(x) || null` would turn every recorded zero into "unknown"
+  // on the next save.
+  const s = String(v == null ? "" : v).trim();
+  if (s === "") return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function renderPrices() {
+  const host = document.getElementById("ai-prices");
+  if (!host) return;
+
+  if (!state.modelsLoaded) {
+    host.innerHTML = '<p class="ai-note">The model list has not loaded, so there is nothing to price yet.</p>';
+    return;
+  }
+
+  const q = (state.priceFilter || "").trim().toLowerCase();
+  const rows = (state.allModels || [])
+    .filter((m) => m.available && (m.kind === "text" || m.kind === "image"))
+    .filter((m) => !q || m.id.toLowerCase().includes(q) || String(m.provider || "").toLowerCase().includes(q))
+    .sort((a, b) =>
+      String(a.provider).localeCompare(String(b.provider)) || a.id.localeCompare(b.id)
+    );
+
+  const withPrice = (state.allModels || []).filter(
+    (m) => m.input_per_1m != null || m.output_per_1m != null || m.price_per_image != null
+  ).length;
+
+  if (!rows.length) {
+    host.innerHTML = '<p class="ai-note">No model matches that filter.</p>';
+    return;
+  }
+
+  let out =
+    '<p class="ai-note" style="margin-top:0;"><strong>' + withPrice + "</strong> of " +
+    (state.allModels || []).filter((m) => m.available && (m.kind === "text" || m.kind === "image")).length +
+    " priced" + (q ? " · showing " + rows.length + " matching “" + escapeHtml(q) + "”" : "") + "</p>";
+
+  out += '<div class="ad-tablewrap"><table class="ad-table"><thead><tr>' +
+    "<th>Model</th><th>Provider</th>" +
+    '<th class="ad-num">Input / 1M</th><th class="ad-num">Output / 1M</th><th class="ad-num">Per image</th>' +
+    "<th>Source</th><th>Updated</th><th></th>" +
+    "</tr></thead><tbody>";
+
+  for (const m of rows) {
+    const isImage = m.kind === "image";
+    // ⚠ A model is shown only the fields its own kind can have. Offering an
+    // "input per 1M tokens" box against an image model invites a number that
+    // means nothing and that nothing will ever read.
+    const cell = (field, val, on) =>
+      on
+        ? '<td class="ad-num"><input class="ad-field ai-price-in" data-f="' + field +
+          '" type="number" step="0.001" min="0" inputmode="decimal" style="width:96px;text-align:right;" value="' +
+          (val == null ? "" : escapeHtml(String(val))) + '"></td>'
+        : '<td class="ad-num"><span class="ad-cell-dim">n/a</span></td>';
+
+    out +=
+      '<tr data-model="' + escapeHtml(m.id) + '">' +
+      '<td class="ad-cell-strong">' + escapeHtml(m.id) + "</td>" +
+      "<td>" + escapeHtml(m.provider || "—") + "</td>" +
+      cell("input", m.input_per_1m, !isImage) +
+      cell("output", m.output_per_1m, !isImage) +
+      cell("image", m.price_per_image, isImage) +
+      '<td><input class="ad-field ai-price-in" data-f="source" type="text" style="width:150px;" ' +
+      'placeholder="where from" value="' + escapeHtml(m.price_source || "") + '"></td>' +
+      "<td>" + (m.price_updated_at
+        ? escapeHtml(formatDate(m.price_updated_at))
+        : '<span class="ad-cell-dim">never</span>') + "</td>" +
+      '<td><button class="ad-btn ad-btn-sm ai-price-save" type="button">Save</button></td>' +
+      "</tr>";
+  }
+
+  out += "</tbody></table></div>";
+  host.innerHTML = out;
+  wirePrices();
+}
+
+function wirePrices() {
+  document.querySelectorAll(".ai-price-save").forEach((btn) => {
+    btn.addEventListener("click", () => savePrice(btn));
+  });
+  // Enter in any field on a row saves that row — a rate card is entered a
+  // number at a time and reaching for the mouse every line is what makes
+  // somebody give up halfway.
+  document.querySelectorAll(".ai-price-in").forEach((input) => {
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const row = input.closest("tr");
+      const btn = row && row.querySelector(".ai-price-save");
+      if (btn) savePrice(btn);
+    });
+  });
+}
+
+async function savePrice(button) {
+  const row = button.closest("tr");
+  if (!row) return;
+  const model = row.getAttribute("data-model");
+  const get = (f) => {
+    const el = row.querySelector('[data-f="' + f + '"]');
+    return el ? el.value : "";
+  };
+
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = "Saving…";
+
+  const { error } = await supabase.rpc("set_model_price", {
+    p_model: model,
+    p_input: priceValue(get("input")),
+    p_output: priceValue(get("output")),
+    p_per_image: priceValue(get("image")),
+    p_source: String(get("source") || "").trim() || null,
+  });
+
+  button.disabled = false;
+  button.textContent = label;
+
+  if (error) {
+    // 0060 raises 'Not allowed' and 'A price cannot be negative' by name; both
+    // are worth showing verbatim rather than flattened into "could not save".
+    warn("Could not save the price for " + model + ": " + error.message, "err");
+    return;
+  }
+
+  // ⚠ Re-read rather than patching the row in place. price_updated_at is set
+  // by the database, so the only way to show the truth is to ask it — and a
+  // screen that says "just now" because the client assumed it would be is the
+  // kind of thing that hides a write that never landed.
+  warn("Saved the price for " + model + ".", "ok");
+  await refreshModels({ quiet: true });
 }
 
 function card(s) {
@@ -620,6 +786,21 @@ function wire() {
       refresh.disabled = true;
       await refreshModels({});
       refresh.disabled = false;
+    });
+  }
+
+  // ⚠ `dataset.wired` for the same reason as the button above: wire() runs on
+  // every render, and a filter box that gains a listener each time re-renders
+  // the table once per keystroke per render.
+  const filter = document.getElementById("ai-price-filter");
+  if (filter && !filter.dataset.wired) {
+    filter.dataset.wired = "1";
+    filter.addEventListener("input", () => {
+      state.priceFilter = filter.value;
+      renderPrices();
+      // renderPrices() replaces the table, not the box, so focus survives —
+      // but the caret does not follow a value the browser did not change, so
+      // nothing else is needed here.
     });
   }
 }

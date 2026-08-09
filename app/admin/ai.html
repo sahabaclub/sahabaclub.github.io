@@ -32,8 +32,8 @@
 
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=16538a1b6f">
-<link rel="stylesheet" href="ai-admin.css?v=16538a1b6f">
+<link rel="stylesheet" href="admin.css?v=95a6e12add">
+<link rel="stylesheet" href="ai-admin.css?v=95a6e12add">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -93,6 +93,38 @@
       <div class="ad-panel"><div class="ad-empty">Loading services…</div></div>
     </div>
 
+    <!--
+      Model prices. 0060 added the columns and set_model_price() and stopped
+      there, so until now the rate card existed in the schema and nowhere a
+      human could see or reach it.
+
+      ⚠ These numbers are TYPED IN, not fetched. No provider offers a pricing
+      API, so this is a rate card somebody maintains by hand — which is exactly
+      why every row records WHEN it was last touched and WHERE the figure came
+      from. A price with no date is a price nobody can trust six months later,
+      and the date is most of the value of the feature.
+
+      ⚠ Nothing on this page spends money or changes what any service does.
+      Editing a rate card is bookkeeping; 0060 gates it on has_admin_section('ai')
+      for that reason, not on global_admin.
+    -->
+    <div class="ad-panel" style="margin-top:20px;">
+      <div class="ad-panel-head">
+        <h2>Model prices</h2>
+        <input class="ad-field" id="ai-price-filter" type="search" placeholder="Filter by model or provider…"
+               style="max-width:260px;" autocomplete="off">
+      </div>
+      <div class="ad-panel-body">
+        <p class="ai-note" style="margin-top:0;">
+          What each model costs, for working out what a service is worth running. Typed in by hand from the
+          providers' own pricing pages — nobody publishes an API for this — so each row keeps the date it was
+          last set and where the figure came from. Blank means <strong>nobody has recorded it</strong>, which is
+          not the same as free: <code>0</code> is a real price and saves as one.
+        </p>
+        <div id="ai-prices"><p class="ai-note">Loading the model list…</p></div>
+      </div>
+    </div>
+
     <div class="ad-panel" style="margin-top:20px;">
       <div class="ad-panel-head"><h2>What is deliberately not here</h2></div>
       <div class="ad-panel-body">
@@ -111,7 +143,7 @@
   </main>
 </div>
 
-<script type="module" src="ai-admin.js?v=16538a1b6f"></script>
-<script defer src="../../lib/back-to-top.js?v=16538a1b6f"></script>
+<script type="module" src="ai-admin.js?v=95a6e12add"></script>
+<script defer src="../../lib/back-to-top.js?v=95a6e12add"></script>
 </body>
 </html>

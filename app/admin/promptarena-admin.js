@@ -68,7 +68,7 @@ function isStaffRole(role) {
 //   6. **Everything player-written is escaped.** Prompts came from a room full
 //      of people and the questions came from Microsoft Forms.
 
-import { escapeHtml } from "../../lib/admin-guard.js?v=16538a1b6f";
+import { escapeHtml } from "../../lib/admin-guard.js?v=95a6e12add";
 
 // ============================================================================
 // What the six events were measured to contain

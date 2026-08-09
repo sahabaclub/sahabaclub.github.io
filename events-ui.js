@@ -520,7 +520,7 @@
 
   function loadEventsFromDatabase() {
     var client = null;
-    return import("./lib/supabase-client.js?v=16538a1b6f").then(function (mod) {
+    return import("./lib/supabase-client.js?v=95a6e12add").then(function (mod) {
       client = mod.supabase;
       var todayIso = new Date().toISOString().slice(0, 10);
       return client
@@ -574,7 +574,7 @@
   // Personal layer. Any failure here leaves the public list intact rather
   // than taking the page down with it.
   function loadSocial() {
-    return import("./lib/event-social.js?v=16538a1b6f").then(function (mod) {
+    return import("./lib/event-social.js?v=95a6e12add").then(function (mod) {
       social = mod;
       return mod.currentUserId();
     }).then(function (uid) {
@@ -601,9 +601,9 @@
   var ACCESS = { tier: "guest" };
 
   function refreshAccess() {
-    return import("./lib/supabase-client.js?v=16538a1b6f").then(function (client) {
+    return import("./lib/supabase-client.js?v=95a6e12add").then(function (client) {
       if (!client.isConfigured) return null;
-      return import("./lib/tier-gate.js?v=16538a1b6f").then(function (m) { return m.getAccessLevel(); });
+      return import("./lib/tier-gate.js?v=95a6e12add").then(function (m) { return m.getAccessLevel(); });
     }).then(function (level) {
       if (level) ACCESS.tier = level.tier;
     }).catch(function () {});
