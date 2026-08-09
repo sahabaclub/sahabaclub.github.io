@@ -133,11 +133,39 @@
       <textarea id="f-html" placeholder="&lt;p&gt;Hi,&lt;/p&gt;&#10;&lt;p&gt;Here's what's coming up…&lt;/p&gt;"></textarea>
     </div>
 
+    <!-- ⚠ THE BUTTON IS DISABLED BECAUSE THE SEND PATH DOES NOT EXIST.
+         send-newsletter answers 501 to every real send: its loop was removed
+         deliberately, because it mailed people one at a time inside a single
+         invocation while recording nothing about who it had already reached, so
+         an interruption could only be recovered by mailing everyone twice.
+
+         The button, the "can't be undone" confirmation and the "Sent to N
+         members" message all stayed behind after the capability was taken out.
+         Pressing it did not send anything — it produced "Edge Function returned
+         a non-2xx status code", because supabase-js discards the body of a
+         non-2xx response and the 501's careful explanation never reached the
+         one screen it was written for.
+
+         A screen that offers an action it cannot perform is worse than one that
+         says so. It is disabled here rather than removed, because the composer
+         and the audience count above it still work and are still useful. -->
     <div class="nl-actions">
-      <button type="button" class="nl-btn-primary" id="btn-send">Send newsletter</button>
+      <button type="button" class="nl-btn-primary" id="btn-send" disabled
+              title="Newsletter sending is not available yet">Send newsletter</button>
     </div>
     <div id="send-status"></div>
-    <p class="nl-note">Every recipient gets their own email — nobody sees anyone else's address.</p>
+    <p class="nl-note" style="border-left:3px solid #b45309;padding-left:12px;">
+      <strong>Sending is not available yet.</strong> This composer and the audience count work, but there is
+      currently no way to send a newsletter to members: the sender was removed because it could not record who
+      it had already mailed, and an interrupted run could only be fixed by mailing everyone a second time.
+      <br><br>
+      To reach <strong>members</strong>, nothing here can do it yet. To reach <strong>contacts</strong> —
+      event attendees and prospects — use <a href="/app/admin/campaigns.html">Campaigns</a>, which sends in
+      reviewable batches, tracks every recipient, and carries a working unsubscribe link.
+      <br><br>
+      ⚠ Note that those are two different lists. A member who turned the newsletter off in Settings is not
+      excluded by Campaigns, because Campaigns reads the contacts list and never looks at member preferences.
+    </p>
   </div>
 </main>
 
