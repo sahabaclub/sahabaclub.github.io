@@ -5019,7 +5019,14 @@ html.reduce-motion .hk-video-rail { scroll-behavior: auto; }
 }
 
 /* The box both the poster button and the frame live in. Its size is the
-   wrapper's, not the child's, which is what makes the swap free. */
+   wrapper's, not the child's, which is what makes the swap free.
+
+   ⚠ THESE FIVE CLASSES HAVE A SECOND CALLER. event.html builds the same
+   click-to-load façade for a past event's recording and reuses
+   .hk-video-media, -play, -thumb, -cue and -frame as they are, so the two
+   players cannot drift apart. The rail's own sizing lives on .hk-video and
+   .hk-video-rail above, which the event page does not use — anything added
+   here that assumes a rail card belongs up there instead. */
 .hk-video-media {
   display: block;
   position: relative;

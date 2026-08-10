@@ -184,6 +184,26 @@
   .evp-rel-when { font-size: 12.5px; color: var(--text-muted); margin: 0 0 6px; }
   .evp-rel-title { font-size: 14.5px; font-weight: 600; line-height: 1.35; margin: 0; }
 
+  /* ---- The recording -------------------------------------------------
+     Only the box and the caption are here. The façade inside it — poster,
+     play cue, and the frame that replaces them — reuses .hk-video-media,
+     .hk-video-play, .hk-video-thumb, .hk-video-cue and .hk-video-frame out
+     of styles.css, which this page already loads.
+
+     ⚠ Those classes are shared with the hackathons Project Showcase and are
+     NOT copies. That is deliberate: the cue's colour, its hover, its focus
+     ring and both reduced-motion spellings are written once and cannot drift
+     between the two pages. It also means an edit there lands here — the note
+     above .hk-video-media in styles.css says so from the other side.
+
+     The cap is on the section, not the media, so the heading and the caption
+     stay in line with the poster's left edge. 820px keeps a 16:9 frame under
+     half the viewport height on a laptop; the full 960px column would put the
+     caption off the bottom of the screen. */
+  .evp-rec { max-width: 820px; }
+  .evp-rec-note { font-size: 13px; color: var(--text-muted); margin: 10px 0 0; }
+  .evp-rec-note a { color: var(--cyan); }
+
   .evp-state { padding: 60px 0; text-align: center; color: var(--text-secondary); }
 
   @media (max-width: 760px) {
@@ -390,6 +410,135 @@
       : '<span class="evp-org">' + inner + "</span>";
   }
 
+  // ⚠ ONE definition of the sign-in round trip, used by BOTH gated controls on
+  // this page — Register and the recording. Ahmed asked for the two to behave
+  // identically, and two copies of a string are two things that can drift.
+  // `next` is what brings somebody back to the event they were reading.
+  function signInHref(e) {
+    return "login.html?next=" + encodeURIComponent("event.html?e=" + e.slug);
+  }
+
+  // The id out of a YouTube link. Measured, not guessed: all 16 recordings in
+  // the archive are either `youtu.be/<id>?si=…` or `watch?v=<id>&t=…`. /embed/,
+  // /live/ and /shorts/ cost a word each and are what an organiser is likely to
+  // paste next.
+  //
+  // ⚠ Returns "" for anything else, and that is a supported outcome rather than
+  // a failure: the column only checks `^https?://`, so a Vimeo or Teams link is
+  // a legal value. The caller falls back to the plain link for those — still
+  // gated, just not embedded. It must never build a player around a URL it did
+  // not recognise.
+  //
+  // The captured id is [A-Za-z0-9_-] and nothing else, so what goes into the
+  // iframe URL and the data attribute cannot be a broken or hostile URL — the
+  // same reasoning as safeVideoId() on the hackathons page.
+  function youtubeId(url) {
+    var s = String(url == null ? "" : url).trim();
+    var m =
+      s.match(/^https?:\/\/(?:www\.|m\.)?youtu\.be\/([A-Za-z0-9_-]{6,})/) ||
+      s.match(/^https?:\/\/(?:www\.|m\.)?youtube(?:-nocookie)?\.com\/(?:embed|live|shorts|v)\/([A-Za-z0-9_-]{6,})/) ||
+      s.match(/^https?:\/\/(?:www\.|m\.)?youtube\.com\/watch\?(?:[^#]*&)?v=([A-Za-z0-9_-]{6,})/);
+    return m ? m[1] : "";
+  }
+
+  var PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">' +
+    '<path d="M8.5 5.6v12.8a1 1 0 0 0 1.53.85l10.1-6.4a1 1 0 0 0 0-1.7L10.03 4.75a1 1 0 0 0-1.53.85z"/></svg>';
+
+  // ---- The recording -------------------------------------------------------
+  //
+  // A past event's recording used to be a link straight out to YouTube, open to
+  // anyone who reached the page. Ahmed, 10 Aug: a guest is sent to sign in and
+  // brought back; a member watches it here, on the page.
+  //
+  // ⚠ IT IS A COURTESY, NOT A CONTROL, and Ahmed has accepted that in writing.
+  // The video is public on YouTube and anyone can find it by searching the
+  // title. So nothing here draws a padlock or says "members only": that would
+  // be a claim the page cannot back up, and the first person to search the
+  // title would catch it out. The caption says where the video plays and what
+  // signing in does, which is true either way.
+  //
+  // The player is the hackathons page's façade, taken for its reason and not
+  // its looks: no <iframe> exists until somebody presses play, so a Google
+  // player and its cookies stay off a page that most people open for the date
+  // and the venue. The frame is built against youtube-nocookie.com for the same
+  // reason. Both are load-bearing for the consent design — see the long note
+  // above videoHtml() in hackathons-ui.js.
+  //
+  // ⚠ The poster IS still a request to i.ytimg.com on load, for guests too.
+  // Same trade the showcase makes — one image against a whole player, and no
+  // cookie — but it is a third-party request and this comment is not going to
+  // pretend otherwise.
+  function recordingHtml(e, id, guest) {
+    // alt="" on purpose: the poster is a still from the video sitting inside a
+    // control that is already named, under a heading that already says what it
+    // is. A third reading of the title is noise.
+    var poster =
+      '<img class="hk-video-thumb" src="https://i.ytimg.com/vi/' + id + '/hqdefault.jpg"' +
+        ' alt="" loading="lazy" width="480" height="360">' +
+      '<span class="hk-video-cue" aria-hidden="true">' + PLAY_ICON + "</span>";
+
+    // A real <a> for the guest and a real <button> for the member, rather than
+    // one element with a click handler that decides: the guest's control is a
+    // navigation and should offer a middle-click and a status bar, the
+    // member's changes this page and should not.
+    var control = guest
+      ? '<a class="hk-video-play" href="' + signInHref(e) + '"' +
+          ' aria-label="Sign in to watch the recording">' + poster + "</a>"
+      : '<button type="button" class="hk-video-play" data-evp-play="' + id + '"' +
+          ' aria-label="' + esc("Play the recording: " + e.title) + '">' + poster + "</button>";
+
+    var note = guest
+      ? "Sign in and the recording plays here on the page. Joining is free, and it brings you " +
+        "straight back to this event."
+      // ⚠ The way out is for members only, and it is not decoration: a video
+      // whose uploader has disabled embedding plays perfectly on YouTube and
+      // shows "Video unavailable" in every iframe, and nothing on this side can
+      // detect that beforehand. Without this line that member has a dead page
+      // and no next step.
+      //
+      // ⚠ And it is NOT a hypothetical. Measured 10 Aug over all 16 archived
+      // recordings: 14 are the club's own channel and TWO — both
+      // `sahaba-club-webinar-2023-*` rows — are hosted by the Water Technology
+      // Experts Forum, whose embedding setting is not ours to change.
+      : "Nothing loads from YouTube until you press play. Trouble playing it here? " +
+        '<a href="' + esc(e.recording_url) + '" target="_blank" rel="noopener">Open it on YouTube</a>.';
+
+    return '<section class="evp-section evp-rec">' +
+        "<h2>Recording</h2>" +
+        '<span class="hk-video-media">' + control + "</span>" +
+        '<p class="evp-rec-note">' + note + "</p>" +
+      "</section>";
+  }
+
+  // autoplay=1 is honest here for the reason it is on the hackathons page: this
+  // is only ever reached from the reader's own press, so the thing that starts
+  // playing is the thing they just pressed.
+  function videoFrameHtml(id, title) {
+    return '<iframe class="hk-video-frame"' +
+      ' src="https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&amp;rel=0"' +
+      ' title="' + esc(title) + '"' +
+      ' width="960" height="540"' +
+      ' allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"' +
+      " allowfullscreen></iframe>";
+  }
+
+  function wireRecording(e) {
+    // Absent for a guest, and for a past event with no recording. Both are
+    // ordinary, so this returns quietly rather than reporting anything.
+    var btn = root.querySelector("[data-evp-play]");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var media = btn.parentNode;
+      media.innerHTML = videoFrameHtml(btn.getAttribute("data-evp-play"), e.title);
+      // ⚠ The element that had focus has just been removed from the document,
+      // which drops focus to <body> and leaves a keyboard reader at the top of
+      // the page having just started a video. Focus moves to the frame, which
+      // is where the controls they now want actually are.
+      var frame = media.querySelector("iframe");
+      if (frame && frame.focus) frame.focus();
+    });
+  }
+
   function render(e, organizers, related) {
     var today = new Date().toISOString().slice(0, 10);
     var isPast = e.event_date < today;
@@ -451,11 +600,20 @@
       return document.documentElement.classList.contains("sc-signed-out");
     }
 
+    // The recording is no longer one of these buttons: when it can be embedded
+    // it becomes its own section, below, with the player in it. What is left
+    // here is the case that section cannot serve — a recording that is not a
+    // YouTube link, so there is nothing to embed. It is gated the same way
+    // either route, because the gate is the point and the player is not.
+    var recId = isPast ? youtubeId(e.recording_url) : "";
+
     var actions = [];
     if (isPast) {
-      if (e.recording_url) {
-        actions.push('<a class="btn btn-glow" href="' + esc(e.recording_url) +
-          '" target="_blank" rel="noopener">Watch the recording</a>');
+      if (e.recording_url && !recId) {
+        actions.push(isGuest()
+          ? '<a class="btn btn-glow" href="' + signInHref(e) + '">Join free to watch</a>'
+          : '<a class="btn btn-glow" href="' + esc(e.recording_url) +
+            '" target="_blank" rel="noopener">Watch the recording</a>');
       }
     } else if (e.register_link) {
       if (isGuest()) {
@@ -463,8 +621,7 @@
         // a disabled button is either unreachable by keyboard or reachable and
         // inert, and both are worse than a control that goes somewhere and
         // says where. `next` brings them back to this event once they are in.
-        actions.push('<a class="btn btn-glow" href="login.html?next=' +
-          encodeURIComponent("event.html?e=" + e.slug) +
+        actions.push('<a class="btn btn-glow" href="' + signInHref(e) +
           '">Join free to register</a>');
       } else {
         actions.push('<a class="btn btn-glow" href="' + esc(e.register_link) +
@@ -512,10 +669,14 @@
           '<div class="evp-actions">' + actions.join("") + "</div>" +
         "</div>" +
       "</div>" +
+      // Above the description, because for a past event the recording IS the
+      // page — the description is what it was going to be about.
+      (recId ? recordingHtml(e, recId, isGuest()) : "") +
       (e.description ? '<div class="evp-body">' + esc(e.description) + "</div>" : "") +
       '<section class="evp-section"><h2>You might also like</h2>' + relHtml + "</section>";
 
     buildShare(e);
+    wireRecording(e);
   }
 
   function buildShare(e) {
