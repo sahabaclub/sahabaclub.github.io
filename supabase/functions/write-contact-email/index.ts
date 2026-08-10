@@ -369,12 +369,22 @@ Deno.serve(async (req) => {
     // and spends money per call; both are reasons the check is here and not
     // merely on the page that calls it.
     //
-    // ⚠ TWO SECTIONS, because TWO PAGES call this: `campaigns.html` gated on
-    // `campaigns`, and `contacts.html` gated on `contacts`. Gating on one of
-    // them would refuse half the callers the client already admitted, which is
-    // the very fault being fixed — see the note in `import-event`. Either
-    // section is enough, and `has_admin_section()` short-circuits on
-    // `is_staff()` so every role that passed the old list still passes.
+    // ⚠ THE `campaigns` SECTION ONLY. This accepted `contacts` as well until
+    // 10 Aug, on the stated grounds that `contacts.html` calls it too. It does
+    // not, and nothing else in `app/admin` does either — `campaigns.html` is
+    // the only page with an AI writer, and tools/check-function-gates.mjs is
+    // what noticed the claim was false.
+    //
+    // A section this accepts that no page ever presents is not a courtesy to
+    // some future caller; it is a way into a function that reads non-members'
+    // personal details and spends money per call, and no screen accounts for
+    // it. Nobody loses anything today: `operations_manager` is the only
+    // non-staff role here and 0054 grants it `campaigns` as well as
+    // `contacts`. If contacts.html ever grows a writer, widen this in the
+    // same commit as the page — not before it.
+    //
+    // ⚠ Still not a list of role names. `has_admin_section()` short-circuits
+    // on `is_staff()`, so every role that passed the old gate still passes.
     //
     // ⚠ Asked as the CALLER: `has_admin_section()` reads `auth.uid()`, null on
     // the service-role client above.
@@ -386,22 +396,19 @@ Deno.serve(async (req) => {
     const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
       global: { headers: { Authorization: `Bearer ${jwt}` } },
     });
-    const sectionChecks = await Promise.all(
-      ["campaigns", "contacts"].map((section) =>
-        asCaller.rpc("has_admin_section", { p_section: section })
-      ),
-    );
-    const gateError = sectionChecks.find((r) => r.error)?.error;
+    const { data: allowed, error: gateError } = await asCaller.rpc("has_admin_section", {
+      p_section: "campaigns",
+    });
     if (gateError) {
       console.error("write-contact-email: has_admin_section failed: " + gateError.message);
       return fail(new EmailError("gate_failed", 500, "Could not check permissions"));
     }
-    if (!sectionChecks.some((r) => r.data === true)) {
-      console.error(`write-contact-email: user ${userData.user.id} has neither section`);
+    if (allowed !== true) {
+      console.error(`write-contact-email: user ${userData.user.id} has no campaigns section`);
       return fail(new EmailError(
         "not_allowed",
         403,
-        "You don't have the Campaigns or Contacts section — ask an administrator.",
+        "You don't have the Campaigns section — ask an administrator.",
       ));
     }
 
