@@ -435,15 +435,51 @@ Deno.serve(async (req) => {
       return json({ error: "Not signed in" }, 401);
     }
 
-    // Staff only. The client-side admin guard is a courtesy; this is the
-    // boundary. Anyone can call an edge function with a valid member token.
-    const { data: profile } = await admin
-      .from("profiles")
-      .select("role")
-      .eq("user_id", userData.user.id)
-      .maybeSingle();
-    if (!profile || (profile.role !== "admin" && profile.role !== "staff" && profile.role !== "global_admin")) {
-      return json({ error: "Staff only" }, 403);
+    // ---- Who is asking ----
+    //
+    // The client-side admin guard is a courtesy; this is the boundary. Anyone
+    // can call an edge function with a valid member token.
+    //
+    // ⚠ THE GATE IS THE `events` SECTION, NOT A LIST OF ROLE NAMES. It used to
+    // read `role in ('admin','staff','global_admin')`, which is the fourth
+    // instance in this project of a control being stricter than the thing it
+    // protects — and the first one a colleague hit in normal work rather than
+    // a reviewer finding it. Ghadir, 10 Aug: "Import failed: Staff only".
+    //
+    // She holds the `events` section (0054 grants it to `operations_manager`),
+    // which means the DATABASE already lets her insert, update and delete
+    // events, and `app/admin/events.html` already admits her with
+    // `requireStaff("events")`. So the page let her in, the table would have
+    // taken her event — and only the importer, WHICH WRITES NO EVENT AT ALL,
+    // refused her, while its own message told her to type the same thing in by
+    // hand. A gate on a convenience cannot be tighter than the gate on the act
+    // it is a convenience for.
+    //
+    // `has_admin_section()` short-circuits on `is_staff()`, so every role that
+    // passed before still passes and nothing here needs editing when a section
+    // is regranted.
+    //
+    // ⚠ It must be asked as the CALLER. `has_admin_section()` reads
+    // `auth.uid()`, which is null on a service-role client, so asking through
+    // `admin` answers "no" for everybody — the trap that made
+    // `send-avatar-announcement` skip all 19 members.
+    //
+    // ⚠ This does spend money on the caller's behalf (a model call, and an
+    // image call when artwork is wanted). That is the same spend the events
+    // section already implies, and it is bounded per call by 0031's ceiling.
+    const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    });
+    const { data: allowed, error: gateError } = await asCaller.rpc("has_admin_section", {
+      p_section: "events",
+    });
+    if (gateError) {
+      console.error("import-event: has_admin_section failed: " + gateError.message);
+      return json({ error: "Could not check permissions" }, 500);
+    }
+    if (allowed !== true) {
+      console.error(`import-event: user ${userData.user.id} has no events section`);
+      return json({ error: "You don't have the Events section — ask an administrator." }, 403);
     }
 
     if (!OPENAI_API_KEY) {

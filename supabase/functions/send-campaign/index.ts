@@ -72,10 +72,30 @@ Deno.serve(async (req) => {
     const { data: userData, error: userError } = await admin.auth.getUser(jwt);
     if (userError || !userData.user) return json({ error: "Not signed in" }, 401);
 
-    const { data: callerProfile } = await admin
-      .from("profiles").select("role").eq("user_id", userData.user.id).maybeSingle();
-    if (!callerProfile || (callerProfile.role !== "admin" && callerProfile.role !== "staff" && callerProfile.role !== "global_admin")) {
-      return json({ error: "Club staff only" }, 403);
+    // ⚠ The gate is the `campaigns` SECTION, not a list of role names. See the
+    // long note in `import-event` — this is the same defect, found in the same
+    // hour, and this one is the more expensive of the two: `campaigns.html`
+    // admits anyone holding the section (`requireStaff("campaigns")`), and a
+    // campaign is created the instant the button is pressed and CANNOT BE
+    // DELETED. A role list here would have let Ghadir build a campaign she was
+    // then refused permission to send, with no way to clear it up.
+    //
+    // `has_admin_section()` short-circuits on `is_staff()`, so everyone who
+    // passed before still passes. It must be asked as the CALLER: it reads
+    // `auth.uid()`, which is null on the service-role client above.
+    const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    });
+    const { data: allowed, error: gateError } = await asCaller.rpc("has_admin_section", {
+      p_section: "campaigns",
+    });
+    if (gateError) {
+      console.error("send-campaign: has_admin_section failed: " + gateError.message);
+      return json({ error: "Could not check permissions" }, 500);
+    }
+    if (allowed !== true) {
+      console.error(`send-campaign: user ${userData.user.id} has no campaigns section`);
+      return json({ error: "You don't have the Campaigns section — ask an administrator." }, 403);
     }
 
     if (!RESEND_API_KEY) {

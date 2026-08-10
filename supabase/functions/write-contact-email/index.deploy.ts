@@ -568,21 +568,44 @@ Deno.serve(async (req) => {
   try {
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    // Staff only. This function reads the personal details of people who are
-    // not members and spends money per call; both are reasons the check is
-    // here and not merely on the page that calls it.
+    // This function reads the personal details of people who are not members
+    // and spends money per call; both are reasons the check is here and not
+    // merely on the page that calls it.
+    //
+    // ⚠ TWO SECTIONS, because TWO PAGES call this: `campaigns.html` gated on
+    // `campaigns`, and `contacts.html` gated on `contacts`. Gating on one of
+    // them would refuse half the callers the client already admitted, which is
+    // the very fault being fixed — see the note in `import-event`. Either
+    // section is enough, and `has_admin_section()` short-circuits on
+    // `is_staff()` so every role that passed the old list still passes.
+    //
+    // ⚠ Asked as the CALLER: `has_admin_section()` reads `auth.uid()`, null on
+    // the service-role client above.
     const jwt = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const { data: userData, error: userError } = await admin.auth.getUser(jwt);
     if (userError || !userData.user) {
       return fail(new EmailError("not_signed_in", 401, "Not signed in"));
     }
-    const { data: callerProfile } = await admin
-      .from("profiles")
-      .select("role")
-      .eq("user_id", userData.user.id)
-      .maybeSingle();
-    if (!callerProfile || (callerProfile.role !== "admin" && callerProfile.role !== "staff" && callerProfile.role !== "global_admin")) {
-      return fail(new EmailError("not_allowed", 403, "Club staff only"));
+    const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    });
+    const sectionChecks = await Promise.all(
+      ["campaigns", "contacts"].map((section) =>
+        asCaller.rpc("has_admin_section", { p_section: section })
+      ),
+    );
+    const gateError = sectionChecks.find((r) => r.error)?.error;
+    if (gateError) {
+      console.error("write-contact-email: has_admin_section failed: " + gateError.message);
+      return fail(new EmailError("gate_failed", 500, "Could not check permissions"));
+    }
+    if (!sectionChecks.some((r) => r.data === true)) {
+      console.error(`write-contact-email: user ${userData.user.id} has neither section`);
+      return fail(new EmailError(
+        "not_allowed",
+        403,
+        "You don't have the Campaigns or Contacts section — ask an administrator.",
+      ));
     }
 
     if (!OPENAI_API_KEY) {
