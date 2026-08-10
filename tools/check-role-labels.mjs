@@ -111,8 +111,24 @@ function stripComments(src) {
 const CMP =
   /\b[\w.]*\brole\s*[=!]==?\s*(["'])admin\1|(["'])admin\2\s*[=!]==?\s*[\w.]*\brole\b/;
 
-// This file's own self-tests contain the very strings it looks for.
-const SELF = "tools/check-role-labels.mjs";
+// Files whose self-tests contain the very strings this looks for.
+//
+// ⚠ A CHECKER'S FIXTURES ARE NOT LIVE CODE. Every checker in this project is
+// required to prove it can fail, which means each one carries deliberately
+// broken sample code — and a broken role comparison is exactly what this file
+// hunts for. It has always skipped itself for that reason; on 10 Aug 2026
+// `check-function-gates.mjs` arrived with fixtures of its own and this file
+// reported two "failures" in them, which are the other checker working.
+//
+// ⚠ The list is FILES, not a blanket skip of `tools/`. A tool that genuinely
+// gated on a role name would be a real finding and must still be caught —
+// `rebuild-nav.mjs` is already handled separately, as a nav gate rather than a
+// database role. Add a file here only when its matches are fixtures, and say
+// so in the commit.
+const FIXTURE_FILES = new Set([
+  "tools/check-role-labels.mjs",
+  "tools/check-function-gates.mjs",
+]);
 
 // A condition can span lines:
 //
@@ -128,7 +144,7 @@ function findings() {
   const hits = [];
   for (const file of walk(ROOT)) {
     const rel = relative(ROOT, file).split(sep).join("/");
-    if (rel === SELF) continue;
+    if (FIXTURE_FILES.has(rel)) continue;
     const lines = stripComments(readFileSync(file, "utf8")).split(/\r?\n/);
     lines.forEach((line, idx) => {
       if (!CMP.test(line)) return;
