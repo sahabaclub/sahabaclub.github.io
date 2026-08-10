@@ -14,8 +14,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=7fcba3e777">
-<link rel="stylesheet" href="connect.css?v=7fcba3e777">
+<link rel="stylesheet" href="../styles.css?v=44b5321453">
+<link rel="stylesheet" href="connect.css?v=44b5321453">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -47,7 +47,7 @@
      a guest/member split of its own (Dashboard and Inbox against Home and
      Join free). Running first means that split is decided before the header
      is laid out, rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=7fcba3e777"></script>
+<script src="../header-identity.js?v=44b5321453"></script>
 </head>
 <body>
 
@@ -203,7 +203,7 @@
     shortSummary, escapeHtml, initialOf, placeOf, experienceLabel,
     subjectHref, relevanceLabel,
     CONNECT_OFF_MESSAGE, DIRECTORY_CAP,
-  } from "../lib/connect.js?v=7fcba3e777";
+  } from "../lib/connect.js?v=44b5321453";
 
   var results = document.getElementById("results");
   var countEl = document.getElementById("count");
@@ -333,6 +333,15 @@
         });
 
     var flags = "";
+    // ⚠ NEW IS FIRST, and it is MEMBERS ONLY. Ahmed, 10 Aug 2026: mark people
+    // for their first seven days. A prospect's `listed_since` is the date the
+    // club imported them, not a date they did anything — calling an imported
+    // row "new" would be the page inventing an event that never happened, and
+    // all 62 of them share one timestamp, so they would appear and vanish
+    // together like a fault.
+    if (isNewMember(m)) {
+      flags += '<span class="cx-new" title="Joined in the last 7 days">New</span>';
+    }
     if (rel) flags += '<span class="cx-rel">' + escapeHtml(rel) + "</span>";
     if (!m.is_member) flags += '<span class="cx-notyet">Hasn’t joined yet</span>';
 
@@ -358,6 +367,25 @@
         (m.is_member && !isMe ? followButtonHtml(m.member_user_id) : "") +
       "</div>" +
     "</article>";
+  }
+
+  // Seven days since they joined, counted from `listed_since` — which for a
+  // member is `member_since`, itself `coalesce(ms365_accounts.created_at,
+  // profiles.created_at)`.
+  //
+  // ⚠ An unparseable or absent date answers NO. The badge is a claim about
+  // when somebody joined, and a card that says "New" about a member from last
+  // year is worse than one that says nothing. Date.parse gives NaN for
+  // rubbish, and every comparison against NaN is false, so the guard is
+  // explicit rather than relying on that.
+  var NEW_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+  function isNewMember(m) {
+    if (!m || !m.is_member || !m.listed_since) return false;
+    var joined = Date.parse(m.listed_since);
+    if (isNaN(joined)) return false;
+    var age = Date.now() - joined;
+    // A clock skewed into the future would otherwise read as "not new".
+    return age < NEW_FOR_MS && age > -NEW_FOR_MS;
   }
 
   function followButtonHtml(userId) {
@@ -548,7 +576,7 @@
     }
   })();
 </script>
-<script src="../script.js?v=7fcba3e777"></script>
-<script defer src="../lib/back-to-top.js?v=7fcba3e777"></script>
+<script src="../script.js?v=44b5321453"></script>
+<script defer src="../lib/back-to-top.js?v=44b5321453"></script>
 </body>
 </html>

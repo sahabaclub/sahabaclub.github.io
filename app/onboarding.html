@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=7fcba3e777">
+<link rel="stylesheet" href="../styles.css?v=44b5321453">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -457,10 +457,16 @@
   <!-- Step 3: the picture
        ------------------------------------------------------------
        This step is new. Until now onboarding ended at the profile and told
-       members to go and find a photo control on the dashboard — while
-       `missingForConnect` requires a photo before a profile is listed at all.
-       So the people most likely to skip it were exactly the people who then
-       could not find themselves in Connect and had no idea why.
+       members to go and find a photo control on the dashboard, so the people
+       most likely to skip it were exactly the people who then could not find
+       themselves in Connect and had no idea why.
+
+       ⚠ That last part is no longer true and the step is still worth having.
+       Since 0062 a photo is NOT required to be listed — a name is the whole
+       rule — so skipping this no longer makes anybody invisible. What it makes
+       is a thin card, which the dashboard now says out loud rather than
+       leaving the member to discover. Asking here is still the cheapest moment
+       to ask; it is simply an invitation now instead of a gate.
 
        The control is the same createAvatarControl the dashboard and profile
        pages use. Nothing about it is onboarding-specific, deliberately: a
@@ -489,12 +495,12 @@
 </main>
 
 <script type="module">
-  import { supabase } from "../lib/supabase-client.js?v=7fcba3e777";
-  import { getSession, sessionPhotoProviders } from "../lib/auth.js?v=7fcba3e777";
+  import { supabase } from "../lib/supabase-client.js?v=44b5321453";
+  import { getSession, sessionPhotoProviders } from "../lib/auth.js?v=44b5321453";
   import {
     loadTagSuggestions, suggestionsFor, createTagPicker, saveErrorMessage,
     createAvatarControl,
-  } from "../lib/profile-form.js?v=7fcba3e777";
+  } from "../lib/profile-form.js?v=44b5321453";
 
   var stepMs365 = document.getElementById("step-ms365");
   var stepProfile = document.getElementById("step-profile");
@@ -1119,7 +1125,7 @@
     finishOnboarding("dashboard.html");
   });
 </script>
-<script src="../script.js?v=7fcba3e777"></script>
-<script defer src="../lib/back-to-top.js?v=7fcba3e777"></script>
+<script src="../script.js?v=44b5321453"></script>
+<script defer src="../lib/back-to-top.js?v=44b5321453"></script>
 </body>
 </html>

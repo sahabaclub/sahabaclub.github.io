@@ -473,6 +473,34 @@ html.light-mode .cx-role { background: rgba(0, 0, 0, 0.04); }
 }
 html.light-mode .cx-rel { color: var(--violet); }
 
+/* The "New" chip: joined in the last 7 days. Cyan rather than the relevance
+   chip's violet, so the two never read as the same kind of statement — one is
+   about the reader ("same city"), this one is about the member.
+
+   ⚠ MEASURED, not chosen by eye, per this file's standing rule. The chip fill
+   is --cyan at 0.14 over the card, which composites to #132d36 dark and
+   #cddee7 light:
+
+     dark   #67e8f9 on #132d36 = 9.95:1   rim --cyan on the card = 10.36:1
+     light  #155e75 on #cddee7 = 5.26:1   rim --cyan on the card =  4.65:1
+
+   ⚠ THE LIGHT TEXT IS NOT --cyan, AND THAT IS THE WHOLE POINT OF MEASURING.
+   Light mode's --cyan (#0e7490) on this fill is 3.88:1 — it fails the 4.5:1
+   that 11.5px bold text needs, and it looks perfectly fine while doing so.
+   #155e75 is the same hue two steps darker and clears it. */
+.cx-new {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 11px;
+  border-radius: 999px;
+  color: #67e8f9;
+  border: 1px solid var(--cyan);
+  background: rgba(34, 211, 238, 0.14);
+}
+html.light-mode .cx-new { color: #155e75; }
+
 /* --text-muted as a dashed rim measures 5.52:1 dark and 5.03:1 light against
    the card, and the label itself is --text-secondary at 8.28:1 / 6.46:1. */
 .cx-notyet {

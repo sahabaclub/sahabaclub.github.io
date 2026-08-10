@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=7fcba3e777">
+<link rel="stylesheet" href="../styles.css?v=44b5321453">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -493,10 +493,14 @@
         <ul class="dash-pc-meta" id="pc-meta"></ul>
         <div class="dash-pc-tags" id="pc-tags"></div>
 
-        <!-- What Connect will show, and what it still needs. Never a blocker:
-             since migration 0019 retired the gate trigger there is nothing to
-             fail — an incomplete profile saves fine, it is simply not listed
-             until it has something to list. -->
+        <!-- What Connect shows, and what would make it better. Never a
+             blocker: an incomplete profile saves fine.
+
+             ⚠ Since 0062 this line has FOUR states, and the new one is the
+             nudge: listed already, but the card is thin. A name is the only
+             thing that keeps a member off the wall now, so for almost everyone
+             this reads as an invitation rather than a reason they are missing.
+             See connectHint() in lib/profile-form.js. -->
         <div class="dash-pc-state info" id="pc-state" role="status">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6v.4"/></svg>
           <span id="pc-state-text"></span>
@@ -834,20 +838,20 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../lib/supabase-client.js?v=7fcba3e777";
+  import { supabase } from "../lib/supabase-client.js?v=44b5321453";
   import {
     getSession, signOut, hasCompletedOnboarding, syncAvatar, sessionPhotoProviders,
-  } from "../lib/auth.js?v=7fcba3e777";
-  import { recommendEvents } from "../lib/event-social.js?v=7fcba3e777";
+  } from "../lib/auth.js?v=44b5321453";
+  import { recommendEvents } from "../lib/event-social.js?v=44b5321453";
   import {
     fetchList, markRead, markDepartmentRead, refreshNavBadges, subscribeToCounts,
     onCountsChange,
-  } from "../lib/notifications.js?v=7fcba3e777";
+  } from "../lib/notifications.js?v=44b5321453";
   import {
     loadCountries, loadTagSuggestions, suggestionsFor, fillCountrySelect,
     createTagPicker, connectHint, onConnectHintJump, createAvatarControl,
     avatarIsDrawing, mergeExtracted, saveErrorMessage, OPEN_TO, nullIfBlank, intOrNull,
-  } from "../lib/profile-form.js?v=7fcba3e777";
+  } from "../lib/profile-form.js?v=44b5321453";
 
   var session = null;
   var profileSource = null;   // set only when a document filled the form in
@@ -1975,7 +1979,7 @@
     window.location.href = "../login.html";
   });
 </script>
-<script src="../script.js?v=7fcba3e777"></script>
-<script defer src="../lib/back-to-top.js?v=7fcba3e777"></script>
+<script src="../script.js?v=44b5321453"></script>
+<script defer src="../lib/back-to-top.js?v=44b5321453"></script>
 </body>
 </html>
