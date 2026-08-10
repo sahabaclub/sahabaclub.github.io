@@ -522,12 +522,27 @@ Deno.serve(async (req) => {
       if (userError || !userData?.user) {
         return fail(new ChallengeError("not_signed_in", 401, "Not signed in"));
       }
-      const { data: callerProfile } = await admin
-        .from("profiles")
-        .select("role")
-        .eq("user_id", userData.user.id)
-        .maybeSingle();
-      if (callerProfile?.role !== "staff" && callerProfile?.role !== "admin" && callerProfile?.role !== "global_admin") {
+      // ⚠ `is_staff()` rather than the three role names spelled out — 0054
+      // defines it as exactly that list, so the same people pass and there is
+      // one definition instead of a copy to keep in step with the next rename.
+      //
+      // ⚠ NOT `has_admin_section('promptarena')`, even though that section
+      // exists and `app/admin/promptarena.html` uses it: no page calls this
+      // function, and the section is held by nobody outside full staff today,
+      // so switching would change nothing now and quietly widen who can spend
+      // money on challenges the moment somebody is granted it. That is a
+      // decision for whoever makes that grant, not a side effect of this sweep.
+      //
+      // Asked as the CALLER — `is_staff()` reads `auth.uid()`, null on `admin`.
+      const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+        global: { headers: { Authorization: `Bearer ${bearer}` } },
+      });
+      const { data: isStaff, error: gateError } = await asCaller.rpc("is_staff");
+      if (gateError) {
+        console.error("promptarena-challenge: is_staff failed: " + gateError.message);
+        return fail(new ChallengeError("gate_failed", 500, "Could not check permissions"));
+      }
+      if (isStaff !== true) {
         console.error(`non-staff user ${userData.user.id} attempted promptarena-challenge`);
         return fail(new ChallengeError("not_allowed", 403, "Not allowed"));
       }

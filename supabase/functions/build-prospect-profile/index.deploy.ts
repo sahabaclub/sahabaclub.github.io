@@ -468,12 +468,27 @@ Deno.serve(async (req) => {
       if (userError || !userData.user) {
         return fail(new ProfileError("not_signed_in", 401, "Not signed in"));
       }
-      const { data: callerProfile } = await admin
-        .from("profiles")
-        .select("role")
-        .eq("user_id", userData.user.id)
-        .maybeSingle();
-      if (callerProfile?.role !== "staff" && callerProfile?.role !== "admin" && callerProfile?.role !== "global_admin") {
+      // ⚠ `is_staff()` rather than the three role names spelled out. 0054
+      // defines it as EXACTLY `role in ('staff','admin','global_admin')`, so
+      // this is the same set of people — one definition instead of a copy that
+      // has to be found and edited every time a role is renamed. 0054's rename
+      // is what locked Ahmed out of his own dashboard.
+      //
+      // ⚠ Deliberately NOT a section gate: no admin page calls this function,
+      // so there is no `requireStaff("…")` to agree with, and inventing a
+      // section here would be guessing at a permission nobody has asked for.
+      // If this ever gets a screen, gate it on that screen's section.
+      //
+      // Asked as the CALLER — `is_staff()` reads `auth.uid()`, null on `admin`.
+      const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+        global: { headers: { Authorization: `Bearer ${bearer}` } },
+      });
+      const { data: isStaff, error: gateError } = await asCaller.rpc("is_staff");
+      if (gateError) {
+        console.error("build-prospect-profile: is_staff failed: " + gateError.message);
+        return fail(new ProfileError("gate_failed", 500, "Could not check permissions"));
+      }
+      if (isStaff !== true) {
         console.error(`non-staff user ${userData.user.id} attempted build-prospect-profile`);
         return fail(new ProfileError("not_allowed", 403, "Not allowed"));
       }

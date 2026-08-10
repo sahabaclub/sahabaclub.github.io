@@ -105,6 +105,15 @@ Deno.serve(async (req) => {
       .select("role")
       .eq("user_id", userData.user.id)
       .maybeSingle();
+    // ⚠ ADMINS ONLY, AND THE ROLE NAMES STAY. This is one of the two gates the
+    // 10 Aug sweep deliberately left spelling out its roles: `is_staff()` would
+    // WIDEN it to plain staff, and this function can mail every member of the
+    // club at once. There is no narrower helper — `is_admin()` is stale, see
+    // the long note in `provision-ms365`'s offboard branch.
+    //
+    // ⚠ It cannot send at all today (the button is disabled, `51251fe`), so
+    // nobody is being kept from working by this. When the newsletter is rebuilt,
+    // decide the gate then rather than inheriting this line by accident.
     if (!callerProfile || callerProfile.role !== "admin" && callerProfile.role !== "global_admin") {
       return json({ error: "Admins only" }, 403);
     }

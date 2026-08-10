@@ -370,13 +370,22 @@ Deno.serve(async (req) => {
       // that is the request whose cost is unbounded. A plain first write for
       // yourself still costs no extra query.
       if (callerUserId !== userId || wantsRegenerate) {
-        const { data: callerProfile } = await admin
-          .from("profiles")
-          .select("role")
-          .eq("user_id", callerUserId)
-          .maybeSingle();
-        callerIsPrivileged = !!callerProfile &&
-          (callerProfile.role === "admin" || callerProfile.role === "staff" || callerProfile.role === "global_admin");
+        // ⚠ `is_staff()` rather than the three role names spelled out — 0054
+        // defines it as exactly that list, so the same callers are privileged
+        // and a future rename does not have to be chased into this file.
+        //
+        // ⚠ An error answers NOT privileged. This flag decides whether someone
+        // may write another member's introduction and whether they may spend
+        // unbounded `regenerate` calls, so an unknown answer must be the small
+        // one. Asked as the CALLER: `is_staff()` reads `auth.uid()`.
+        const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+          global: { headers: { Authorization: `Bearer ${bearer}` } },
+        });
+        const { data: isStaff, error: staffError } = await asCaller.rpc("is_staff");
+        if (staffError) {
+          console.error("write-member-intro: is_staff failed: " + staffError.message);
+        }
+        callerIsPrivileged = isStaff === true;
 
         if (callerUserId !== userId && !callerIsPrivileged) {
           return fail(new IntroError("not_allowed", 403, "You can only write your own introduction"));

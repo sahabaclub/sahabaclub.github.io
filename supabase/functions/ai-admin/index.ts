@@ -145,14 +145,29 @@ Deno.serve(async (req) => {
     const { data: userData, error: userError } = await admin.auth.getUser(jwt);
     if (userError || !userData?.user) return json({ error: "Not signed in" }, 401);
 
-    const { data: callerProfile } = await admin
-      .from("profiles")
-      .select("role")
-      .eq("user_id", userData.user.id)
-      .maybeSingle();
-    if (!callerProfile || (callerProfile.role !== "admin" && callerProfile.role !== "staff" && callerProfile.role !== "global_admin")) {
+    // ⚠ The `ai` SECTION, not a list of role names — `app/admin/ai.html` admits
+    // by `requireStaff("ai")`, so anyone the page lets in must be able to use
+    // it. This also makes the function agree with `set_model_price()`, which
+    // 0060 wrote as `has_admin_section('ai')` and which the Model prices panel
+    // calls DIRECTLY over RPC: before this, the same screen had two different
+    // answers to "may this person change AI settings".
+    //
+    // `has_admin_section()` short-circuits on `is_staff()`, so nobody who
+    // passed the old list loses access. Asked as the CALLER — it reads
+    // `auth.uid()`, null on the service-role client above.
+    const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    });
+    const { data: allowed, error: gateError } = await asCaller.rpc("has_admin_section", {
+      p_section: "ai",
+    });
+    if (gateError) {
+      console.error("ai-admin: has_admin_section failed: " + gateError.message);
+      return json({ error: "Could not check permissions" }, 500);
+    }
+    if (allowed !== true) {
       console.error(`user ${userData.user.id} attempted to reach ai-admin`);
-      return json({ error: "Club staff only" }, 403);
+      return json({ error: "You don't have the AI section — ask an administrator." }, 403);
     }
 
     const body = await req.json().catch(() => ({}));

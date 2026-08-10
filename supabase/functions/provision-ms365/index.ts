@@ -52,6 +52,15 @@ Deno.serve(async (req) => {
     }
     const user = userData.user;
 
+    // The same connection, carrying the CALLER's token instead of the service
+    // role, for asking the database who they are. `is_staff()` and
+    // `has_admin_section()` both read `auth.uid()`, which is null on `admin`
+    // above — asking through that client answers "no" for everybody, the trap
+    // that made `send-avatar-announcement` skip all 19 members.
+    const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    });
+
     const {
       action,
       mailbox: existingMailbox,
@@ -92,6 +101,18 @@ Deno.serve(async (req) => {
         .from("profiles").select("role").eq("user_id", user.id).maybeSingle();
       // Deliberately stricter than the rest of this function: `staff` may
       // provision and reset, but only a global admin may take an account away.
+      //
+      // ⚠ THIS ONE KEEPS ITS ROLE NAMES ON PURPOSE, and it is the only gate in
+      // the sweep of 10 Aug that does. `is_staff()` is too WIDE here — it
+      // includes plain `staff` — and there is no narrower helper to use:
+      //
+      // ⚠ `public.is_admin()` EXISTS AND IS STALE. 0003 defines it as
+      // `role = 'admin'` and 0054 renamed administrators to `global_admin`
+      // without touching it, so it now answers false for Ahmed. Nothing calls
+      // it — measured across the migrations, the functions and the client — so
+      // it is dead rather than dangerous, but it is exactly the shape of bug
+      // that locked him out of his own dashboard once already. Do not reach
+      // for it here. Fixing or dropping it needs a migration.
       if (actor?.role !== "admin" && actor?.role !== "global_admin") {
         return json({ error: "Only a global admin may offboard a member" }, 403);
       }
@@ -144,12 +165,15 @@ Deno.serve(async (req) => {
     // provisioning attempt, which creates a mailbox in the tenant and burns a
     // seat just to discover a secret is wrong.
     if (action === "diagnose") {
-      const { data: diagProfile } = await admin
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (diagProfile?.role !== "staff" && diagProfile?.role !== "admin" && diagProfile?.role !== "global_admin") {
+      // ⚠ `is_staff()` rather than the three role names spelled out — 0054
+      // defines it as exactly that list, so the same people pass. Asked as the
+      // CALLER: `is_staff()` reads `auth.uid()`, null on the service client.
+      const { data: diagIsStaff, error: diagGateError } = await asCaller.rpc("is_staff");
+      if (diagGateError) {
+        console.error("provision-ms365: is_staff failed: " + diagGateError.message);
+        return json({ error: "Could not check permissions" }, 500);
+      }
+      if (diagIsStaff !== true) {
         return json({ error: "Not allowed" }, 403);
       }
       try {
@@ -230,12 +254,14 @@ Deno.serve(async (req) => {
       // they ask for a reset, and a human does it. That was a deliberate design
       // decision, not a limitation — a password reset on a real tenant mailbox
       // should have a person behind it.
-      const { data: prof } = await admin
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (prof?.role !== "staff" && prof?.role !== "admin" && prof?.role !== "global_admin") {
+      // ⚠ `is_staff()`, same reasoning as `diagnose` above: 0054 defines it as
+      // exactly the three names this used to spell out.
+      const { data: resetIsStaff, error: resetGateError } = await asCaller.rpc("is_staff");
+      if (resetGateError) {
+        console.error("provision-ms365: is_staff failed: " + resetGateError.message);
+        return json({ error: "Could not check permissions" }, 500);
+      }
+      if (resetIsStaff !== true) {
         console.error(`non-staff user ${user.id} attempted action=reset`);
         return json({ error: "Not allowed" }, 403);
       }

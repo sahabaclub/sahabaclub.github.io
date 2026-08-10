@@ -385,6 +385,12 @@ Deno.serve(async (req) => {
     }
     const user = userData.user;
 
+    // The same connection carrying the CALLER's token. `is_staff()` reads
+    // `auth.uid()`, which is null on the service-role client above.
+    const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    });
+
     const { action, mailbox: existingMailbox, fullName: requestedName } = await req.json();
     if (action !== "create" && action !== "reset" && action !== "diagnose") {
       return json({ error: "action must be 'create', 'reset' or 'diagnose'" }, 400);
@@ -398,12 +404,14 @@ Deno.serve(async (req) => {
     // provisioning attempt, which creates a mailbox in the tenant and burns a
     // seat just to discover a secret is wrong.
     if (action === "diagnose") {
-      const { data: diagProfile } = await admin
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (diagProfile?.role !== "staff" && diagProfile?.role !== "admin" && diagProfile?.role !== "global_admin") {
+      // ⚠ `is_staff()`, matching index.ts — 0054 defines it as exactly the
+      // three role names this used to spell out.
+      const { data: diagIsStaff, error: diagGateError } = await asCaller.rpc("is_staff");
+      if (diagGateError) {
+        console.error("provision-ms365: is_staff failed: " + diagGateError.message);
+        return json({ error: "Could not check permissions" }, 500);
+      }
+      if (diagIsStaff !== true) {
         return json({ error: "Not allowed" }, 403);
       }
       try {
@@ -484,12 +492,13 @@ Deno.serve(async (req) => {
       // they ask for a reset, and a human does it. That was a deliberate design
       // decision, not a limitation — a password reset on a real tenant mailbox
       // should have a person behind it.
-      const { data: prof } = await admin
-        .from("profiles")
-        .select("role")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (prof?.role !== "staff" && prof?.role !== "admin" && prof?.role !== "global_admin") {
+      // ⚠ `is_staff()`, matching index.ts.
+      const { data: resetIsStaff, error: resetGateError } = await asCaller.rpc("is_staff");
+      if (resetGateError) {
+        console.error("provision-ms365: is_staff failed: " + resetGateError.message);
+        return json({ error: "Could not check permissions" }, 500);
+      }
+      if (resetIsStaff !== true) {
         console.error(`non-staff user ${user.id} attempted action=reset`);
         return json({ error: "Not allowed" }, 403);
       }

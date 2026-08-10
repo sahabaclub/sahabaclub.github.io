@@ -93,11 +93,48 @@ Deno.serve(async (req) => {
     const { data: userData, error: userError } = await admin.auth.getUser(jwt);
     if (userError || !userData?.user) return json({ error: "Not signed in" }, 401);
 
+    // ⚠ The `data` SECTION, not a list of role names — `app/admin/data.html`
+    // admits by `requireStaff("data")`, so the gate here has to answer the same
+    // question the page asked. `has_admin_section()` short-circuits on
+    // `is_staff()`, so nobody who passed the old list loses access.
+    //
+    // ⚠ This one stays narrow in practice on purpose: `data` is not among the
+    // five sections granted to `operations_manager` in 0054, so widening the
+    // NAME of the gate does not widen who gets in today. What it does is stop
+    // the next section grant from being silently ignored here.
+    //
+    // Asked as the CALLER — `has_admin_section()` reads `auth.uid()`, which is
+    // null on the service-role client above.
+    const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+      global: { headers: { Authorization: `Bearer ${jwt}` } },
+    });
+    const { data: allowed, error: gateError } = await asCaller.rpc("has_admin_section", {
+      p_section: "data",
+    });
+    if (gateError) {
+      console.error("data-admin: has_admin_section failed: " + gateError.message);
+      return json({ error: "Could not check permissions" }, 500);
+    }
+    if (allowed !== true) {
+      console.error(`user ${userData.user.id} attempted to reach data-admin`);
+      return json({ error: "You don't have the Data section — ask an administrator." }, 403);
+    }
+
+    // ⚠ READ AS AUDIT DATA, NOT AS A GATE. The export writes `actor_role` into
+    // its record of who took a copy of people's personal details, and that has
+    // to be the role they actually hold. The permission decision was made
+    // above, by the section check — do not let this lookup drift back into
+    // being the thing that decides.
+    // ⚠ Checked for null, which the old code did not have to do: this used to
+    // BE the gate, so reaching the next line proved the row existed. It no
+    // longer does. A passing caller always has a profiles row today —
+    // `has_admin_section()` joins it — but an audit record that silently writes
+    // an empty actor is worse than a refusal nobody can misread.
     const { data: callerProfile } = await admin
       .from("profiles").select("role").eq("user_id", userData.user.id).maybeSingle();
-    if (!callerProfile || (callerProfile.role !== "admin" && callerProfile.role !== "staff" && callerProfile.role !== "global_admin")) {
-      console.error(`user ${userData.user.id} attempted to reach data-admin`);
-      return json({ error: "Club staff only" }, 403);
+    if (!callerProfile?.role) {
+      console.error(`data-admin: no profile row for ${userData.user.id} despite passing the section gate`);
+      return json({ error: "Could not read your role" }, 500);
     }
 
     // Everything from here on runs as the caller. See the header.

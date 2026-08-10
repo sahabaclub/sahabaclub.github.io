@@ -1207,12 +1207,26 @@ async function identify(admin: ReturnType<typeof createClient>, req: Request): P
   const { data: userData, error: userError } = await admin.auth.getUser(bearer);
   if (userError || !userData?.user) return { kind: "anonymous" };
 
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("role")
-    .eq("user_id", userData.user.id)
-    .maybeSingle();
-  if (profile?.role === "staff" || profile?.role === "admin" || profile?.role === "global_admin") {
+  // ⚠ `is_staff()` rather than the three role names spelled out. 0054 defines
+  // it as exactly `role in ('staff','admin','global_admin')`, so this classifies
+  // the same people it always did — but it now follows a rename instead of
+  // having to be found and edited after one.
+  //
+  // ⚠ A failure here is answered as `member`, NOT as staff. This function
+  // decides what a caller may do to other people's entries, so the safe
+  // direction when the answer is unknown is the smaller one.
+  //
+  // Asked as the CALLER: `is_staff()` reads `auth.uid()`, null on `admin`. The
+  // service-role caller never reaches this line — it returned above.
+  const asCaller = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    global: { headers: { Authorization: `Bearer ${bearer}` } },
+  });
+  const { data: isStaff, error: staffError } = await asCaller.rpc("is_staff");
+  if (staffError) {
+    console.error("promptarena-judge: is_staff failed: " + staffError.message);
+    return { kind: "member", userId: userData.user.id };
+  }
+  if (isStaff === true) {
     return { kind: "staff", userId: userData.user.id };
   }
   return { kind: "member", userId: userData.user.id };
