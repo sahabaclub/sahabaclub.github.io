@@ -14,8 +14,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=38ecac0a41">
-<link rel="stylesheet" href="connect.css?v=38ecac0a41">
+<link rel="stylesheet" href="../styles.css?v=aba5b41535">
+<link rel="stylesheet" href="connect.css?v=aba5b41535">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -47,7 +47,7 @@
      a guest/member split of its own (Dashboard and Inbox against Home and
      Join free). Running first means that split is decided before the header
      is laid out, rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=38ecac0a41"></script>
+<script src="../header-identity.js?v=aba5b41535"></script>
 </head>
 <body>
 
@@ -203,7 +203,7 @@
     shortSummary, escapeHtml, initialOf, placeOf, experienceLabel,
     subjectHref, relevanceLabel,
     CONNECT_OFF_MESSAGE, DIRECTORY_CAP,
-  } from "../lib/connect.js?v=38ecac0a41";
+  } from "../lib/connect.js?v=aba5b41535";
 
   var results = document.getElementById("results");
   var countEl = document.getElementById("count");
@@ -217,7 +217,6 @@
   var people = [];
   var activity = {};
   var followingSet = new Set();
-  var ranked = false;
 
   function state(title, text, actionsHtml) {
     results.innerHTML =
@@ -373,10 +372,19 @@
     var head = shown === people.length
       ? people.length + noun
       : shown + " of " + people.length + " people";
-    // Only claim an order when there is one. Without 0028 the list is the old
-    // newest-first, and captioning that as "closest to you first" would be a
-    // straightforwardly false statement about what the reader is looking at.
-    return ranked ? head + " · closest to you first" : head;
+    // ⚠ The caption says what the ORDER is, and the order changed on 10 Aug
+    // 2026 — Ahmed asked for latest joined. It read "closest to you first",
+    // which was true while `relevance` was the leading sort key and became a
+    // straightforwardly false statement about what the reader is looking at
+    // the moment `listConnect` started ordering on `listed_since`.
+    //
+    // ⚠ It is no longer conditional on the old `ranked` flag. Both paths are
+    // newest-first now — the ranked view and the 0028-less fallback — so there
+    // was nothing left for that flag to distinguish, and it was deleted rather
+    // than left assigned and unread. The per-card relevance labels do not need
+    // it either: without 0028 `memberAsSubject` sets `relevance: null` and
+    // `relevanceLabel(null)` returns "", so they suppress themselves.
+    return head + " · newest first";
   }
 
   function render() {
@@ -472,7 +480,6 @@
     }
 
     people = dir.data || [];
-    ranked = dir.ranked === true;
 
     // Nobody has opted in yet — including, most likely, the person reading
     // this. That's the moment to ask.
@@ -515,7 +522,7 @@
     }
   })();
 </script>
-<script src="../script.js?v=38ecac0a41"></script>
-<script defer src="../lib/back-to-top.js?v=38ecac0a41"></script>
+<script src="../script.js?v=aba5b41535"></script>
+<script defer src="../lib/back-to-top.js?v=aba5b41535"></script>
 </body>
 </html>
