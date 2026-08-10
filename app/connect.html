@@ -161,8 +161,11 @@
       <select class="cx-select" id="f-industry"><option value="">Any industry</option></select>
       <label class="sr-only" for="f-experience">Experience level</label>
       <select class="cx-select" id="f-experience"><option value="">Any experience</option></select>
-      <label class="sr-only" for="f-topic">Topic</label>
-      <select class="cx-select" id="f-topic"><option value="">Any topic</option></select>
+      <!-- ⚠ There was a Topic filter here until 11 Aug 2026 (Ahmed). It is
+           gone, not hidden. The topic CHIPS on each card stay — they are what
+           a member actually reads, and they come from the same
+           `member_activity.top_topics`. Removing the filter did not remove
+           the data or the chips. -->
     </div>
   </div>
 
@@ -242,14 +245,11 @@
   // Options come from the members actually on screen, so nobody can pick a
   // filter that returns nothing.
   function buildFilters() {
-    var countries = {}, industries = {}, levels = {}, topics = {};
+    var countries = {}, industries = {}, levels = {};
     people.forEach(function (m) {
       if (m.country) countries[m.country] = true;
       if (m.industry) industries[m.industry] = true;
       if (m.experience_level) levels[m.experience_level] = true;
-      ((activityOf(m) && activityOf(m).top_topics) || []).forEach(function (t) {
-        if (t) topics[t] = true;
-      });
     });
     var plain = function (o) {
       return Object.keys(o).sort(function (a, b) { return a.localeCompare(b); })
@@ -261,7 +261,6 @@
       Object.keys(levels).sort().map(function (v) {
         return { value: v, label: experienceLabel(v) };
       }), "Any experience");
-    fillSelect("f-topic", plain(topics), "Any topic");
     filtersEl.hidden = false;
   }
 
@@ -271,19 +270,12 @@
     var country = document.getElementById("f-country").value;
     var industry = document.getElementById("f-industry").value;
     var level = document.getElementById("f-experience").value;
-    var topic = document.getElementById("f-topic").value;
 
     if (kind === "member" && !m.is_member) return false;
     if (kind === "prospect" && m.is_member) return false;
     if (country && m.country !== country) return false;
     if (industry && m.industry !== industry) return false;
     if (level && m.experience_level !== level) return false;
-    if (topic) {
-      // Topics come from attended events, so a prospect can never match one —
-      // they have no account to have attended anything with.
-      var list = (activityOf(m) && activityOf(m).top_topics) || [];
-      if (list.indexOf(topic) === -1) return false;
-    }
     if (!q) return true;
 
     var haystack = [
@@ -470,7 +462,13 @@
     paint(followingSet.has(userId));
   });
 
-  var FILTER_IDS = ["f-kind", "f-country", "f-industry", "f-experience", "f-topic"];
+  // ⚠ EVERY ID HERE MUST EXIST IN THE MARKUP. Both users of this list call
+  // `document.getElementById(id)` and then reach straight into the result —
+  // `.value = ""` on the clear-filters path, `.addEventListener` below — so a
+  // stale id is not a dead filter, it is a TypeError that stops the module and
+  // leaves the whole directory blank. `f-topic` was removed from here at the
+  // same moment its <select> was, on 11 Aug 2026, for exactly that reason.
+  var FILTER_IDS = ["f-kind", "f-country", "f-industry", "f-experience"];
 
   ["q"].concat(FILTER_IDS).forEach(function (id) {
     var el = document.getElementById(id);
