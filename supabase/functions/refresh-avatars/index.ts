@@ -35,7 +35,8 @@
 //
 // Secrets this function needs (see SETUP.md):
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY  — injected by Supabase
-//   OPENAI_API_KEY
+//   OPENAI_API_KEY    — when the configured model is an OpenAI one
+//   GEMINI_API_KEY    — when it is a Google one; whichever the model needs
 //   OPENAI_IMAGE_MODEL                       — optional, same default as generate-avatar
 //
 // Since 0031 the artwork and the image model can also be set from Admin → AI
@@ -47,12 +48,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { listOf, loadAiConfig, part } from "../_shared/ai-config.ts";
+import { callImage, type Provider, providerConfigured } from "../_shared/ai-provider.ts";
 import {
   AVATAR_ART_DEFAULTS,
   AVATAR_BUCKET,
   buildPrompt,
   currentCycle,
-  decodeBase64,
   HOUSE_STYLE,
   themeForCycle,
   THEMES,
@@ -62,7 +63,11 @@ import {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
+// ⚠ No OPENAI_API_KEY constant here any more, deliberately: since this
+// function draws through `callImage()`, the key is chosen by that module from
+// the provider it is routing to — OPENAI_API_KEY or GEMINI_API_KEY. A copy
+// read here would be the OpenAI one regardless of which API the run uses, and
+// the precondition below would then be asking about the wrong secret.
 const IMAGE_MODEL = Deno.env.get("OPENAI_IMAGE_MODEL") ?? "gpt-image-1";
 
 // ⚠ The same slug `generate-avatar` reads. Two functions, one row. See the
@@ -172,6 +177,20 @@ Deno.serve(async (req) => {
     parts: AVATAR_ART_DEFAULTS,
   });
   const imageModel = ai.model;
+
+  // ⚠ Which API this model belongs to, ASKED rather than guessed. `ai_models`
+  // records the provider that listed the model, so it is the answer the
+  // listing API actually gave; `providerFor()`'s regex is the fallback for a
+  // model that is not in the table. Read ONCE per run, not per member — the
+  // whole batch draws with one model.
+  const { data: modelRow } = await admin
+    .from("ai_models")
+    .select("provider")
+    .eq("id", imageModel)
+    .maybeSingle();
+  const imageProvider: Provider | null =
+    modelRow?.provider === "google" || modelRow?.provider === "openai" ? modelRow.provider : null;
+
   const art = {
     house_style: part(ai, "house_style", HOUSE_STYLE),
     variants: listOf(ai, "variants", VARIANTS),
@@ -179,9 +198,19 @@ Deno.serve(async (req) => {
   const theme = themeForCycle(cycle, listOf(ai, "themes", THEMES));
 
   try {
-    if (!dryRun && !OPENAI_API_KEY) {
-      console.error("OPENAI_API_KEY is not set");
-      return json({ error: "Avatar generation isn't configured yet." }, 503);
+    // ⚠ Asks about the key for the provider THIS RUN will actually use. It
+    // checked OPENAI_API_KEY unconditionally, which since the switch would
+    // refuse a perfectly configured Google run for a missing OpenAI key — and,
+    // worse in the other direction, would let a Google run start with no
+    // GEMINI_API_KEY and fail one member at a time.
+    const runProvider: Provider = imageProvider ?? "openai";
+    if (!dryRun && !providerConfigured(runProvider)) {
+      console.error(`no API key for provider ${runProvider}`);
+      return json({
+        error: runProvider === "google"
+          ? "GEMINI_API_KEY is not set, and the avatar model configured in Admin → AI services is a Google one."
+          : "Avatar generation isn't configured yet — OPENAI_API_KEY is not set.",
+      }, 503);
     }
 
     // The view already filters to discoverable members whose cycle is not the
@@ -259,7 +288,7 @@ Deno.serve(async (req) => {
 
       try {
         const written = await refreshOne(
-          admin, row, avatarUrls.get(row.user_id) ?? "", cycle, theme, art, imageModel,
+          admin, row, avatarUrls.get(row.user_id) ?? "", cycle, theme, art, imageModel, imageProvider,
         );
         // Either way they are in this cycle now and out of the queue, so both
         // count toward `processed` — `superseded` is only there to explain a
@@ -339,6 +368,7 @@ async function refreshOne(
   // read here, so every member in one run is drawn the same way.
   art: { house_style: string; variants: string[] },
   imageModel: string,
+  imageProvider: Provider | null,
 ): Promise<boolean> {
   const profile = {
     full_name: row.full_name,
@@ -386,7 +416,7 @@ async function refreshOne(
   // and has nothing to vary between. The rota still has to be passed, because
   // entry 0 is one of the three staff can edit.
   const prompt = buildPrompt(profile, theme, "avatar", 0, art);
-  const pngBytes = await generate(sourceBytes, prompt, imageModel);
+  const drawn = await generate(sourceBytes, prompt, imageModel, imageProvider);
 
   // Generated art rather than a photograph, but zeroed on the same principle
   // as generate-avatar: the input to an image call does not outlive the call.
@@ -396,10 +426,18 @@ async function refreshOne(
   // A new path each month rather than an overwrite, so the public URL changes
   // and no CDN anywhere serves last month's face. Same `<user_id>/` prefix,
   // so the storage policies in 0016 cover it unchanged.
-  const path = `${row.user_id}/${crypto.randomUUID()}.png`;
+  //
+  // ⚠ The extension FOLLOWS the bytes, it is not assumed — d03f5e1's finding on
+  // the member path applies identically here: Gemini returns JPEG, and storing
+  // JPEG under a .png name with a PNG content type "works" only because
+  // browsers sniff the real bytes. 0016's bucket allows png, jpeg and webp, so
+  // there was never a reason to mislabel it.
+  const outType = drawn.mediaType || "image/png";
+  const outExt = /jpe?g/i.test(outType) ? "jpg" : /webp/i.test(outType) ? "webp" : "png";
+  const path = `${row.user_id}/${crypto.randomUUID()}.${outExt}`;
   const { error: upErr } = await admin.storage
     .from(AVATAR_BUCKET)
-    .upload(path, pngBytes, { contentType: "image/png", upsert: false });
+    .upload(path, drawn.bytes, { contentType: outType, upsert: false });
   if (upErr) throw new Error("upload: " + upErr.message);
 
   const avatarUrl = admin.storage.from(AVATAR_BUCKET).getPublicUrl(path).data.publicUrl;
@@ -461,28 +499,57 @@ async function saveRefreshed(
   return !!data?.length;
 }
 
-// ---- OpenAI -----------------------------------------------------------
+// ---- The image call ---------------------------------------------------
 
 // The edits endpoint again, with the member's existing avatar as the image
 // input. Errors here are read from a log by whoever is watching the batch,
 // not by a member staring at a spinner, so the triage is shorter than
 // generate-avatar's and phrased for the operator.
-async function generate(bytes: Uint8Array, prompt: string, model: string): Promise<Uint8Array> {
-  const form = new FormData();
-  form.append("model", model);
-  form.append("image", new Blob([bytes], { type: "image/png" }), "avatar.png");
-  form.append("prompt", prompt);
-  form.append("size", "1024x1024");
-  form.append("quality", "high");
-
-  const res = await fetch("https://api.openai.com/v1/images/edits", {
-    method: "POST",
-    headers: { "Authorization": "Bearer " + OPENAI_API_KEY },
-    body: form,
+//
+// ⚠ THROUGH callImage() SINCE 10 AUG 2026, and the reason is worth keeping.
+// This function was deliberately left on OpenAI when generate-avatar moved —
+// "blast radius of one first" — and that was right while the shared
+// `avatar-art` config still named an OpenAI model. It stopped being right the
+// moment `nano-banana-pro-preview` was activated: 0031 gives generate-avatar
+// and refresh-avatars ONE configuration on purpose, so activating a Google
+// model pointed this function's OpenAI call at a model OpenAI has never heard
+// of. Every member in the next monthly run would have failed with "the image
+// model chosen in Admin → AI services is not one this account can use" — an
+// accurate message about a setting that was correct.
+//
+// The lesson is the coupling, not the model: a shared configuration means the
+// two functions must agree about what a model IS, so they now share the same
+// router as well as the same house style.
+//
+// ⚠ The provider is PASSED, not guessed. `providerFor()` is a regex over the
+// model name, and d03f5e1 is the record of what that costs — it did not know
+// `nano-banana`, so the panel called it Google and generate-avatar called it
+// OpenAI. `ai_models.provider` is what the listing API actually said, and this
+// function can reach the database, so it asks. The regex stays as the fallback
+// for a model that is not in the table.
+async function generate(
+  bytes: Uint8Array,
+  prompt: string,
+  model: string,
+  provider: Provider | null,
+): Promise<{ bytes: Uint8Array; mediaType: string }> {
+  const result = await callImage({
+    model,
+    provider: provider ?? undefined,
+    prompt,
+    image: bytes,
+    // ⚠ The stored avatar is whatever the last run wrote, which since d03f5e1
+    // may be JPEG rather than PNG. Naming it png here would hand OpenAI a file
+    // whose extension contradicts its bytes.
+    mediaType: "image/png",
+    // OpenAI-only; callImage does not forward them to Google.
+    size: "1024x1024",
+    quality: "high",
   });
 
-  if (!res.ok) {
-    const detail = await res.text();
+  if (!result.ok) {
+    const detail = String(result.error ?? "");
+    const res = { status: result.status };
     if (/model_not_found|does not exist|unknown model/i.test(detail)) {
       // Names which setting is actually in play — since 0031 the model can
       // come from the admin panel instead of the secret, and sending an
@@ -500,20 +567,25 @@ async function generate(bytes: Uint8Array, prompt: string, model: string): Promi
     // against every member in the batch in turn, each one costing a request to
     // discover the same thing. It is thrown as its own type so the batch loop
     // can stop rather than work through several hundred people.
-    if (/insufficient_quota|billing_hard_limit|exceeded your current quota|billing_not_active/i.test(detail)) {
-      throw new QuotaExhausted("the OpenAI account is out of credit — top it up and re-run");
+    if (/insufficient_quota|billing_hard_limit|exceeded your current quota|billing_not_active|balance is spent/i.test(detail)) {
+      // ⚠ Names the provider that actually refused, because there are two now
+      // and topping up the wrong account fixes nothing.
+      throw new QuotaExhausted(`the ${result.provider} account is out of credit — top it up and re-run`);
     }
     if (res.status === 401 || res.status === 403 || /invalid_api_key|incorrect api key/i.test(detail)) {
-      throw new Error("OpenAI rejected OPENAI_API_KEY");
+      throw new Error(
+        result.provider === "google" ? "Google rejected GEMINI_API_KEY" : "OpenAI rejected OPENAI_API_KEY",
+      );
     }
     if (res.status === 429) throw new Error("rate limited");
-    throw new Error("OpenAI " + res.status + ": " + detail.slice(0, 200));
+    throw new Error(result.provider + " " + res.status + ": " + detail.slice(0, 200));
   }
 
-  const data = await res.json();
-  const b64 = data.data?.[0]?.b64_json;
-  if (!b64) throw new Error("no image came back");
-  return decodeBase64(b64);
+  // callImage already decoded the base64 and already treats a 200 carrying no
+  // image as a failure — the shape a Gemini refusal takes — so reaching here
+  // means there are bytes.
+  if (!result.bytes || !result.bytes.length) throw new Error("no image came back");
+  return { bytes: result.bytes, mediaType: result.mediaType || "image/png" };
 }
 
 // ---- Helpers ----------------------------------------------------------
