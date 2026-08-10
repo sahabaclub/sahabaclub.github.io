@@ -308,7 +308,21 @@ type Provider = "openai" | "google";
 // should pass it. This exists for the case where a caller has only a string:
 // it is right for everything named gemini/gemma/learnlm and wrong-but-safe
 // otherwise, since defaulting to OpenAI fails loudly rather than silently.
-const GOOGLE_FAMILIES = /^(models\/)?(gemini|gemma|learnlm|aqa|imagen|veo|antigravity|deep-research)/i;
+// ⚠ `nano-banana` was missing here and it broke a live avatar generation on
+// 10 Aug. googleKind() below knew about it — added when the image models were
+// classified — and this did not, so the two disagreed: the panel correctly
+// listed `nano-banana-pro-preview` as a Google IMAGE model, the test passed
+// (ai-admin passes the provider explicitly, from ai_models.provider), and then
+// generate-avatar, which has only the model NAME, routed it to OpenAI. OpenAI
+// answered model_not_found and the member was told the model "isn't valid for
+// this account" — pointing at the admin panel, which was right.
+//
+// ⚠ The real lesson is not the missing word. It is that a model's provider is
+// recorded in `ai_models.provider`, from whichever API actually returned it,
+// and every caller that can reach the database should PASS IT rather than ask
+// this regex. A name-based guess cannot be right about a family nobody has
+// seen yet, and Google keeps naming things like fruit.
+const GOOGLE_FAMILIES = /^(models\/)?(gemini|gemma|learnlm|aqa|imagen|veo|antigravity|deep-research|nano-banana)/i;
 
 function providerFor(model: string): Provider {
   return GOOGLE_FAMILIES.test(model) ? "google" : "openai";

@@ -389,13 +389,27 @@ async function draw(admin: ReturnType<typeof createClient>, job: DrawJob): Promi
     // failed generation is not a reason to keep somebody's photograph in
     // memory for the rest of the instance's life — and now that the response
     // has already gone, that life is longer than the request's was.
-    const pngBytes = await generate(job.sourceBytes, mediaType, prompt, imageModel)
+    const drawn = await generate(job.sourceBytes, mediaType, prompt, imageModel)
       .finally(() => job.sourceBytes.fill(0));
 
-    const path = `${userId}/${crypto.randomUUID()}.png`;
+    // ⚠ THE FORMAT IS NOT ALWAYS PNG ANY MORE. OpenAI's edits endpoint returns
+    // PNG and this hardcoded `.png` and `image/png` for as long as OpenAI was
+    // the only provider. Gemini returns JPEG — measured, 10 Aug: a real
+    // nano-banana-pro-preview call came back `image/jpeg`.
+    //
+    // Storing JPEG bytes under a .png name with a PNG content type mostly
+    // "works", because browsers sniff the actual bytes — which is exactly what
+    // makes it dangerous: it looks fine while the stored metadata is a lie, and
+    // anything that trusts the extension or the content type rather than
+    // sniffing gets the wrong answer. 0016's bucket allows png, jpeg and webp,
+    // so there is no reason to mislabel it.
+    const outType = drawn.mediaType || "image/png";
+    const outExt = /jpe?g/i.test(outType) ? "jpg" : /webp/i.test(outType) ? "webp" : "png";
+
+    const path = `${userId}/${crypto.randomUUID()}.${outExt}`;
     const { error: upErr } = await admin.storage
       .from(AVATAR_BUCKET)
-      .upload(path, pngBytes, { contentType: "image/png", upsert: false });
+      .upload(path, drawn.bytes, { contentType: outType, upsert: false });
     if (upErr) {
       console.error("upload: " + upErr.message);
       await fail(admin, userId, cycle, attempts, next, "Couldn't save the new avatar just now.");
@@ -520,7 +534,7 @@ async function generate(
   mediaType: string,
   prompt: string,
   model: string,
-): Promise<Uint8Array> {
+): Promise<{ bytes: Uint8Array; mediaType: string }> {
   // ⚠ THROUGH callImage(), NOT api.openai.com DIRECTLY. Step 3 of the switch
   // Ahmed asked for on 8 Aug 2026: the member-triggered avatar may now be drawn
   // by Gemini as well as by OpenAI, decided by which model is configured for
@@ -602,7 +616,7 @@ async function generate(
   if (!result.bytes || !result.bytes.length) {
     throw new Error("No image came back — try again shortly.");
   }
-  return result.bytes;
+  return { bytes: result.bytes, mediaType: result.mediaType || "image/png" };
 }
 
 // ---- The fallback -----------------------------------------------------
