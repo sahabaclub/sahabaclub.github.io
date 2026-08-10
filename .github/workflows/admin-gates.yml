@@ -1,0 +1,89 @@
+# Do the admin pages and the things behind them agree about who may pass?
+# ------------------------------------------------------------
+# Runs the two static gate checkers. Between them they compare what the admin
+# menu offers, what each admin page demands, what the migrations grant, and
+# what each Edge Function will actually accept — the four places in this
+# project that have to agree about permission and have disagreed four times.
+#
+# Every one of those four was found by a person being refused something they
+# were entitled to, and the last one was found by Ghadir rather than by a
+# reviewer: she opened app/admin/events.html, which admits her section, pressed
+# "Read the event", and got 403 "Staff only" from import-event.
+#
+# ---- Why these run on a PUSH and the anon-access check runs on a CLOCK ----
+#
+# anon-access.yml is on an hourly schedule because the failure it catches has
+# no commit: migration 0054 was applied by hand in the SQL editor and the
+# repository was byte-identical before and after. Only the database changed, so
+# only the database can be asked.
+#
+# These two are the opposite. They read files in this repository and nothing
+# else — no database, no key, no session. The state they inspect cannot change
+# without a commit, so a commit is exactly when to look, and a schedule would
+# add runs that can only ever repeat the last answer. Alert fatigue is how a
+# monitored outage goes unnoticed; the cheapest way to avoid it is to not cry
+# out when nothing has happened.
+#
+# ---- Why there is no `paths:` filter -------------------------------------
+#
+# Deliberate. Between them the checkers read app/admin/*, lib/admin-guard.js,
+# supabase/migrations/*, supabase/functions/*/index.ts and their deploy twins,
+# and tools/*. A filter listing those would be a fifth place that has to be
+# kept in step with the other four, and the run it wrongly skipped would be the
+# run that mattered — a check that silently does not run reads exactly like a
+# check that passed. These take seconds and need no secrets, so there is
+# nothing to buy by narrowing them.
+#
+# ⚠ NEITHER CHECKER MAY BE GIVEN A KEY. Both are static on purpose: that is
+# what lets them run on a fork, on a laptop with no secrets, and on a pull
+# request from outside. A green cross here means the files agree with each
+# other, which is a claim about this commit and not about production.
+
+name: Admin gates agree
+
+on:
+  # Every push, on every branch — not just main. The disagreement is cheapest
+  # to fix before it lands, and there is no cost to looking early.
+  push:
+  # ⚠ This DOES mean a pull request from a branch in this repository runs the
+  # job twice, once for the push and once for the PR. Kept anyway: the repo is
+  # public, and a PR from a fork is not covered by `push:` at all. A duplicate
+  # green run wastes seconds; an unchecked fork PR is the case this exists for.
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: admin-gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      # 22, not 20: the runner warns that 20 is deprecated. Neither script needs
+      # anything newer, so this is about staying on a supported runtime.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Can every role that is offered the Admin link open what it lands on?
+        id: entry
+        run: node tools/check-admin-entry.mjs
+
+      # ⚠ `always()`, so a failure in the step above does not hide the answer
+      # from this one. Fixing one disagreement and only then discovering the
+      # other is how a two-line fix turns into two round trips.
+      - name: Can every page's callers pass the functions that page calls?
+        if: always()
+        run: node tools/check-function-gates.mjs
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::An admin page and the thing behind it disagree about who may pass. The failing step above names the page, the role and the gate. Somebody with a legitimate grant is being refused, or is about to be. Reproduce locally with: node tools/check-admin-entry.mjs && node tools/check-function-gates.mjs"
