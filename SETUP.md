@@ -282,6 +282,96 @@ googletagmanager is created in exactly one of them.
 `node tools/analytics-checks/contrast.mjs` measures the consent bar in both
 themes. Neither needs a browser.
 
+## 7. LinkedIn — the daily events post
+
+`linkedin-daily-events` posts one digest a day of every published event dated
+that day, to the Sahaba Club **company page**. It is built and deployed, and it
+is **disarmed** until the two secrets below exist. Until then every run still
+composes the post and records it in `linkedin_daily_posts`, so the wording is
+proven long before the credential arrives.
+
+**Posting as a company page is not the same as posting as you, and this is the
+part that takes time.** A default LinkedIn app can only post as the signed-in
+member (`w_member_social`). Posting as an organisation needs the **Community
+Management API**, which LinkedIn grants on request:
+
+1. Create an app at [linkedin.com/developers](https://www.linkedin.com/developers/apps)
+   and associate it with the **Sahaba Club** page. You have to be an admin of
+   the page to do this, and LinkedIn verifies that association from the page
+   side before the app can act for it.
+2. On the app's **Products** tab, request **Community Management API**. This is
+   a review, not a switch — expect it to take days, and expect to describe what
+   the app posts and how often. "A daily digest of the community's own events
+   calendar" is the honest answer and a good one.
+3. Once granted, the scope to authorise is **`w_organization_social`**.
+4. Get the organisation's URN — `urn:li:organization:<numeric id>`. The numeric
+   id is in the page's admin URL.
+5. Generate an access token for the app with that scope.
+   ⚠ **These tokens expire — 60 days is LinkedIn's usual life for them, and a
+   refresh token is only issued to apps that were granted one.** Whatever the
+   term turns out to be, the job fails loudly rather than silently when it
+   lapses: the run records `failed` with LinkedIn's own words in
+   `linkedin_daily_posts.error`. Put a reminder in the calendar for a week
+   before it is due.
+
+Then set the secrets. ⚠ **Do not paste a token into a chat, a commit or a
+terminal you do not control** — write it to a file outside the repo, set it
+from that file, and delete the file. This is what was done for
+`GEMINI_API_KEY`:
+
+```bash
+# secrets.env, OUTSIDE the repository
+LINKEDIN_ACCESS_TOKEN=...
+LINKEDIN_ORG_URN=urn:li:organization:1234567
+LINKEDIN_API_VERSION=202505
+
+supabase secrets set --env-file ./secrets.env --project-ref sobxhcsgtimtiqtvqbag
+rm ./secrets.env
+```
+
+⚠ **`LINKEDIN_API_VERSION` is a real moving part, not boilerplate.** LinkedIn's
+REST API is versioned by month and the header is mandatory; a version that has
+fallen out of support is refused outright. Confirm the value against LinkedIn's
+current version list when you set the token — that is the one moment somebody
+is already looking at their docs.
+
+**Prove it before arming it**, signed in as staff:
+
+```
+POST /functions/v1/linkedin-daily-events?dry=1
+```
+
+That returns the exact text, the escaped `commentary_as_sent` that LinkedIn
+would receive, and `armed: false`. Read the escaped version: LinkedIn reserves
+a set of characters in that field and a wrong escape shows up as stray
+backslashes in a live post rather than as an error.
+
+**The schedule** is a `pg_cron` job calling the function once a day. Post in the
+morning, club time — the events are that day's, so a post at 07:00 Dubai gives
+people the whole day to act on it:
+
+```sql
+select cron.schedule(
+  'linkedin-daily-events',
+  '0 3 * * *',                                   -- 03:00 UTC = 07:00 Asia/Dubai
+  $$ select net.http_post(
+       url := 'https://sobxhcsgtimtiqtvqbag.supabase.co/functions/v1/linkedin-daily-events',
+       headers := jsonb_build_object(
+         'Authorization', 'Bearer <service role key>',
+         'Content-Type', 'application/json')
+     ); $$
+);
+```
+
+⚠ **The job cannot post the same day twice**, whatever the scheduler does.
+`linkedin_daily_posts.post_date` is the primary key and the function claims the
+day *before* it calls LinkedIn, so a retry, an overlapping run or somebody
+pressing it by hand collides on the constraint instead of posting again. There
+is no unsend on a company page.
+
+⚠ **A day with no events posts nothing** and records `skipped_empty`, so the
+silence is a decision with a receipt rather than a job that failed quietly.
+
 ## What's deliberately not built yet
 
 - **`ms365-lifecycle`** (the license revoke → grace → deactivate → delete
