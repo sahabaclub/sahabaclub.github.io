@@ -282,95 +282,97 @@ googletagmanager is created in exactly one of them.
 `node tools/analytics-checks/contrast.mjs` measures the consent bar in both
 themes. Neither needs a browser.
 
-## 7. LinkedIn — the daily events post
+## 7. The nightly events brief
 
-`linkedin-daily-events` posts one digest a day of every published event dated
-that day, to the Sahaba Club **company page**. It is built and deployed, and it
-is **disarmed** until the two secrets below exist. Until then every run still
-composes the post and records it in `linkedin_daily_posts`, so the wording is
-proven long before the credential arrives.
+Every night at 22:00 Dubai, `linkedin-daily-events` emails Ghadir a
+ready-to-paste LinkedIn post about **the next day's** events, with the event
+images attached. She posts it by hand. Ahmed is copied.
 
-**Posting as a company page is not the same as posting as you, and this is the
-part that takes time.** A default LinkedIn app can only post as the signed-in
-member (`w_member_social`). Posting as an organisation needs the **Community
-Management API**, which LinkedIn grants on request:
+⚠ **This replaced an API-posting job on 11 Aug, the same day it was built.**
+Posting as a company page needs LinkedIn's Community Management API — an
+approval measured in days, for a token that then expires on LinkedIn's schedule
+and takes the job down when it does. Email needs no approval and no token, and
+it puts a person between the database and the company page, which for a post
+naming other organisations' events is where a person should be.
 
-1. Create an app at [linkedin.com/developers](https://www.linkedin.com/developers/apps)
-   and associate it with the **Sahaba Club** page. You have to be an admin of
-   the page to do this, and LinkedIn verifies that association from the page
-   side before the app can act for it.
-2. On the app's **Products** tab, request **Community Management API**. This is
-   a review, not a switch — expect it to take days, and expect to describe what
-   the app posts and how often. "A daily digest of the community's own events
-   calendar" is the honest answer and a good one.
-3. Once granted, the scope to authorise is **`w_organization_social`**.
-4. Get the organisation's URN — `urn:li:organization:<numeric id>`. The numeric
-   id is in the page's admin URL.
-5. Generate an access token for the app with that scope.
-   ⚠ **These tokens expire — 60 days is LinkedIn's usual life for them, and a
-   refresh token is only issued to apps that were granted one.** Whatever the
-   term turns out to be, the job fails loudly rather than silently when it
-   lapses: the run records `failed` with LinkedIn's own words in
-   `linkedin_daily_posts.error`. Put a reminder in the calendar for a week
-   before it is due.
+**What the email contains**
 
-Then set the secrets. ⚠ **Do not paste a token into a chat, a commit or a
-terminal you do not control** — write it to a file outside the repo, set it
-from that file, and delete the file. This is what was done for
-`GEMINI_API_KEY`:
+- The post, in one block she can select in a single drag.
+- Every published event on that date, whoever runs it.
+- One call to action, pointing at the events page. Not a link per event:
+  LinkedIn favours a single link, and every event is on that page anyway.
+- The event images, **attached** — so she can drag them straight into LinkedIn.
+- On a night with nothing on: a one-line note saying so. ⚠ Silence and a broken
+  job look identical to the person waiting for the email.
+
+**The secrets**
+
+`RESEND_API_KEY` and `RESEND_FROM` are already set and shared with the other
+senders. Two more control the recipients, so an address can be changed in one
+command with no deploy:
 
 ```bash
-# secrets.env, OUTSIDE the repository
-LINKEDIN_ACCESS_TOKEN=...
-LINKEDIN_ORG_URN=urn:li:organization:1234567
-LINKEDIN_API_VERSION=202505
-
-supabase secrets set --env-file ./secrets.env --project-ref sobxhcsgtimtiqtvqbag
-rm ./secrets.env
+supabase secrets set \
+  BRIEF_TO=ghadir@sahabaclub.com,ghadeer.aldesouky@gmail.com \
+  BRIEF_CC=ahmed@sahabaclub.com \
+  --project-ref sobxhcsgtimtiqtvqbag
 ```
 
-⚠ **`LINKEDIN_API_VERSION` is a real moving part, not boilerplate.** LinkedIn's
-REST API is versioned by month and the header is mandatory; a version that has
-fallen out of support is refused outright. Confirm the value against LinkedIn's
-current version list when you set the token — that is the one moment somebody
-is already looking at their docs.
+⚠ **Both of Ghadir's addresses are in `BRIEF_TO` on purpose.**
+`ghadir@sahabaclub.com` is the address Ahmed asked for and **nothing has
+confirmed it exists** — it is not in `ms365_accounts`, where every other club
+mailbox is. Until somebody checks the tenant, the gmail address is what
+guarantees she actually receives it. Drop it from the secret once the club
+mailbox is confirmed to deliver, and see the note below about linking the two.
 
-**Prove it before arming it**, signed in as staff:
+⚠ **Linking `ghadir@sahabaclub.com` to her personal address is an admin action
+in Microsoft 365, not something this repository can do.** It is one of three
+different things depending on what exists today — create the mailbox, add the
+address as an alias on an existing one, or set forwarding to the gmail account
+— and guessing wrong in a live tenant is worse than asking. Microsoft 365 admin
+centre → Users → the account → Manage email aliases, or Mail → Forwarding.
+
+**Check it before trusting it**
 
 ```
-POST /functions/v1/linkedin-daily-events?dry=1
+POST /functions/v1/linkedin-daily-events?dry=1                  compose, send nothing
+POST /functions/v1/linkedin-daily-events?test=1                 send to the CC only
+POST /functions/v1/linkedin-daily-events?dry=1&date=2026-08-15  a specific day
 ```
 
-That returns the exact text, the escaped `commentary_as_sent` that LinkedIn
-would receive, and `armed: false`. Read the escaped version: LinkedIn reserves
-a set of characters in that field and a wrong escape shows up as stray
-backslashes in a live post rather than as an error.
+⚠ `test=1` sends to **BRIEF_CC only** and **claims no day**. Ghadir is
+deliberately not on a test: an unexpected "post this tomorrow" email at the
+wrong hour is the confusion this job exists to remove. And a test must not
+consume tomorrow, or the one action somebody takes to check the job is the
+action that stops it running.
 
-**The schedule** is a `pg_cron` job calling the function once a day. Post in the
-morning, club time — the events are that day's, so a post at 07:00 Dubai gives
-people the whole day to act on it:
+**The schedule**
 
 ```sql
 select cron.schedule(
-  'linkedin-daily-events',
-  '0 3 * * *',                                   -- 03:00 UTC = 07:00 Asia/Dubai
+  'events-brief-nightly',
+  '0 18 * * *',                                  -- 18:00 UTC = 22:00 Asia/Dubai
   $$ select net.http_post(
        url := 'https://sobxhcsgtimtiqtvqbag.supabase.co/functions/v1/linkedin-daily-events',
        headers := jsonb_build_object(
-         'Authorization', 'Bearer <service role key>',
+         'Authorization', 'Bearer <SENDER_TOKEN>',
          'Content-Type', 'application/json')
      ); $$
 );
 ```
 
-⚠ **The job cannot post the same day twice**, whatever the scheduler does.
-`linkedin_daily_posts.post_date` is the primary key and the function claims the
-day *before* it calls LinkedIn, so a retry, an overlapping run or somebody
-pressing it by hand collides on the constraint instead of posting again. There
-is no unsend on a company page.
+⚠ **`SENDER_TOKEN`, not the service role key, and this project paid to learn
+it.** The value Supabase injects as `SUPABASE_SERVICE_ROLE_KEY` matches none of
+the keys the dashboard offers, so a scheduled job gated on it returns 403 every
+time — see the note in `send-notification-emails`, which hit exactly this. The
+function is deployed with `--no-verify-jwt` for the same reason the other two
+scheduled senders are: a shared token is not a JWT and the gateway would reject
+it before the function ran. A staff session still works and is still verified
+inside the function.
 
-⚠ **A day with no events posts nothing** and records `skipped_empty`, so the
-silence is a decision with a receipt rather than a job that failed quietly.
+⚠ **It cannot email the same day twice.** `linkedin_daily_posts.post_date` is
+the primary key and the day is claimed *before* the send, so a retry or an
+overlapping run collides on the constraint instead of sending a second copy.
 
 ## What's deliberately not built yet
 
