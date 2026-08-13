@@ -520,7 +520,7 @@
 
   function loadEventsFromDatabase() {
     var client = null;
-    return import("./lib/supabase-client.js?v=44b5321453").then(function (mod) {
+    return import("./lib/supabase-client.js?v=4c6535f7ff").then(function (mod) {
       client = mod.supabase;
       var todayIso = new Date().toISOString().slice(0, 10);
       return client
@@ -574,7 +574,7 @@
   // Personal layer. Any failure here leaves the public list intact rather
   // than taking the page down with it.
   function loadSocial() {
-    return import("./lib/event-social.js?v=44b5321453").then(function (mod) {
+    return import("./lib/event-social.js?v=4c6535f7ff").then(function (mod) {
       social = mod;
       return mod.currentUserId();
     }).then(function (uid) {
@@ -601,9 +601,9 @@
   var ACCESS = { tier: "guest" };
 
   function refreshAccess() {
-    return import("./lib/supabase-client.js?v=44b5321453").then(function (client) {
+    return import("./lib/supabase-client.js?v=4c6535f7ff").then(function (client) {
       if (!client.isConfigured) return null;
-      return import("./lib/tier-gate.js?v=44b5321453").then(function (m) { return m.getAccessLevel(); });
+      return import("./lib/tier-gate.js?v=4c6535f7ff").then(function (m) { return m.getAccessLevel(); });
     }).then(function (level) {
       if (level) ACCESS.tier = level.tier;
     }).catch(function () {});
@@ -1157,7 +1157,57 @@
   });
 
   // ---- register, then ask on the way back ----
-  var PENDING_KEY = "sc_pending_registration";
+  //
+  // ⚠ THE DIALOGS AND THE PENDING RECORD MOVED to lib/register-prompt.js on
+  // 13 Aug, so event.html can ask the same question about the same click.
+  // Nothing here changed behaviour — what is left is only the part that is
+  // specific to this page: the click target is a card button, and every answer
+  // has to re-render the grid. Do not reinstate a local copy of the dialogs.
+  var registerPromptPromise = null;
+
+  function loadRegisterPrompt() {
+    // import() memoises on its own, but the promise is held anyway so a click
+    // arriving before the first load finishes joins it instead of racing it.
+    if (!registerPromptPromise) {
+      registerPromptPromise = import("./lib/register-prompt.js?v=4c6535f7ff");
+    }
+    return registerPromptPromise;
+  }
+
+  loadRegisterPrompt().then(function (mod) {
+    mod.createRegisterPrompt({
+      isFavourite: function (id) { return favourites.has(id); },
+
+      onRegistered: function (id) {
+        myRegistrations[id] = "registered";
+        renderAll();
+        if (!social) return;
+        social.setMyRegistration(id, "registered").then(function () {
+          // Refresh the attendee list so they see themselves appear.
+          return social.loadAttendees(EVENTS_ALL.map(function (x) { return x.id; }));
+        }).then(function (a) {
+          if (a) { attendees = a; renderAll(); }
+        });
+      },
+
+      onFavourite: function (id) {
+        favourites.add(id);
+        renderAll();
+        if (social) social.addFavourite(id);
+      },
+
+      onInterested: function (id) {
+        // They looked but passed. Still worth knowing — a weaker signal than a
+        // favourite, and the recommender weights it accordingly.
+        myRegistrations[id] = "interested";
+        renderAll();
+        if (social) social.setMyRegistration(id, "interested");
+      }
+    }).start();
+  }).catch(function () {
+    // The grid, the filters and the register link all still work without the
+    // follow-up question. Losing it is not a reason to take the page down.
+  });
 
   document.addEventListener("click", function (ev) {
     var btn = ev.target.closest ? ev.target.closest("[data-register]") : null;
@@ -1169,111 +1219,13 @@
     // Nothing is claimed yet. The ticketing site belongs to someone else, so
     // the only honest way to know whether they signed up is to ask them.
     if (signedIn) {
-      try {
-        sessionStorage.setItem(PENDING_KEY, JSON.stringify({ id: id, title: e.title, at: Date.now() }));
-      } catch (err) {}
+      loadRegisterPrompt().then(function (mod) { mod.rememberPending(id, e.title); });
       if (social) social.recordView(id);
     }
+    // ⚠ Stays OUTSIDE the promise above. A window.open() that a user gesture
+    // did not directly cause is what a popup blocker exists to stop.
     window.open(e.registerLink, "_blank", "noopener");
   });
-
-  function pendingRegistration() {
-    try {
-      var raw = sessionStorage.getItem(PENDING_KEY);
-      if (!raw) return null;
-      var p = JSON.parse(raw);
-      // Older than a couple of hours isn't a return from the registration
-      // page any more, it's a new visit.
-      if (Date.now() - p.at > 2 * 60 * 60 * 1000) {
-        sessionStorage.removeItem(PENDING_KEY);
-        return null;
-      }
-      return p;
-    } catch (err) { return null; }
-  }
-
-  function clearPending() {
-    try { sessionStorage.removeItem(PENDING_KEY); } catch (err) {}
-  }
-
-  function askDialog(html) {
-    var back = document.createElement("div");
-    back.className = "ev-ask-back";
-    back.innerHTML = '<div class="ev-ask" role="dialog" aria-modal="true">' + html + '</div>';
-    document.body.appendChild(back);
-    return back;
-  }
-
-  function askDidYouRegister(p) {
-    var back = askDialog(
-      "<h3>Did you register?</h3>" +
-      '<p>You opened the registration page for <span class="ev-ask-event">' +
-      escapeHtml(p.title) + '</span>.</p>' +
-      '<div class="ev-ask-actions">' +
-        '<button type="button" class="btn btn-glow" data-yes>Yes, I registered</button>' +
-        '<button type="button" class="btn btn-outline" data-no>Not yet</button>' +
-      '</div>'
-    );
-
-    back.querySelector("[data-yes]").addEventListener("click", function () {
-      back.remove();
-      clearPending();
-      myRegistrations[p.id] = "registered";
-      renderAll();
-      if (!social) return;
-      social.setMyRegistration(p.id, "registered").then(function () {
-        // Refresh the attendee list so they see themselves appear.
-        return social.loadAttendees(EVENTS_ALL.map(function (x) { return x.id; }));
-      }).then(function (a) {
-        if (a) { attendees = a; renderAll(); }
-      });
-    });
-
-    back.querySelector("[data-no]").addEventListener("click", function () {
-      back.remove();
-      clearPending();
-      askAddToFavourites(p);
-    });
-  }
-
-  function askAddToFavourites(p) {
-    if (favourites.has(p.id)) return;
-    var back = askDialog(
-      "<h3>Save it for later?</h3>" +
-      '<p>We can keep <span class="ev-ask-event">' + escapeHtml(p.title) +
-      '</span> in your favourites, and use it to suggest events like it.</p>' +
-      '<div class="ev-ask-actions">' +
-        '<button type="button" class="btn btn-glow" data-yes>Add to favourites</button>' +
-        '<button type="button" class="btn btn-outline" data-no>No thanks</button>' +
-      '</div>'
-    );
-
-    back.querySelector("[data-yes]").addEventListener("click", function () {
-      back.remove();
-      favourites.add(p.id);
-      renderAll();
-      if (social) social.addFavourite(p.id);
-    });
-
-    back.querySelector("[data-no]").addEventListener("click", function () {
-      back.remove();
-      // They looked but passed. Still worth knowing — a weaker signal than a
-      // favourite, and the recommender weights it accordingly.
-      myRegistrations[p.id] = "interested";
-      renderAll();
-      if (social) social.setMyRegistration(p.id, "interested");
-    });
-  }
-
-  function checkPendingOnReturn() {
-    if (document.visibilityState !== "visible") return;
-    if (document.querySelector(".ev-ask-back")) return;
-    var p = pendingRegistration();
-    if (p) askDidYouRegister(p);
-  }
-
-  document.addEventListener("visibilitychange", checkPendingOnReturn);
-  window.addEventListener("focus", checkPendingOnReturn);
 
   // ---- filters ----
   function wireChipGroup(id, attr, key) {

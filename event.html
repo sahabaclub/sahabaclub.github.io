@@ -48,7 +48,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=44b5321453">
+<link rel="stylesheet" href="styles.css?v=4c6535f7ff">
 <style>
   .evp-wrap { max-width: 1000px; margin: 0 auto; padding: 40px 20px 96px; }
   .evp-back { display: inline-block; font-size: 14px; color: var(--text-secondary); margin-bottom: 18px; }
@@ -269,7 +269,7 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=44b5321453"></script>
+<script src="header-identity.js?v=4c6535f7ff"></script>
 
 <!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
@@ -352,8 +352,11 @@
 </footer>
 
 <script type="module">
-  import { supabase } from "./lib/supabase-client.js?v=44b5321453";
-  import { relatedEvents } from "./lib/event-related.js?v=44b5321453";
+  import { supabase } from "./lib/supabase-client.js?v=4c6535f7ff";
+  import { relatedEvents } from "./lib/event-related.js?v=4c6535f7ff";
+  // ⚠ A static import, not a `const` — imports are hoisted, so this one is
+  // exempt from the dead-zone trap described immediately below.
+  import { createRegisterPrompt, rememberPending } from "./lib/register-prompt.js?v=4c6535f7ff";
 
   // ⚠ `var` throughout, and every binding declared before the first executing
   // statement. There is a top-level await below, and a `const` after it would
@@ -362,6 +365,17 @@
   var root = document.getElementById("evp-root");
   var params = new URLSearchParams(window.location.search);
   var slug = (params.get("e") || "").trim();
+
+  // The event on screen, and this member's own relationship to it. All three
+  // are read by the register flow at the bottom of this file, which runs long
+  // after render() has finished.
+  var CURRENT = null;
+  var myStatus = "";
+  var myFavourite = false;
+  // render()'s other two arguments, kept so the personal layer can redraw the
+  // page without refetching the organizers or rescoring the related list.
+  var LAST_ORGANIZERS = [];
+  var LAST_RELATED = [];
 
   var COLUMNS =
     "id, slug, title, description, event_date, starts_at, time_label, duration_minutes, " +
@@ -416,6 +430,17 @@
   // `next` is what brings somebody back to the event they were reading.
   function signInHref(e) {
     return "login.html?next=" + encodeURIComponent("event.html?e=" + e.slug);
+  }
+
+  // ⚠ THE MIRROR OF isGuest(), AND DELIBERATELY NOT `!isGuest()`. Neither class
+  // set means "not known yet", and isGuest() resolves that towards the MEMBER
+  // control on purpose — the worst case there is a guest clicking through to a
+  // public ticket page. Here the stakes point the other way: writing a pending
+  // record for somebody who turns out to be signed out promises them a question
+  // whose answer we could not save, so this one needs a POSITIVE signal and
+  // stays silent when it does not have one.
+  function isSignedIn() {
+    return document.documentElement.classList.contains("sc-signed-in");
   }
 
   // The id out of a YouTube link. Measured, not guessed: all 16 recordings in
@@ -544,6 +569,12 @@
     var isPast = e.event_date < today;
     var ours = organizers.some(function (o) { return o.slug === "sahaba-club"; });
 
+    // render() is called again when the personal layer lands, so these are set
+    // on every pass rather than once at load.
+    CURRENT = e;
+    LAST_ORGANIZERS = organizers;
+    LAST_RELATED = related;
+
     // The tab title is fixable even though the share preview is not — see the
     // note in <head>. Worth doing: it is what a reading list and a pinned tab
     // show, and what a screen reader announces on load.
@@ -623,9 +654,22 @@
         // says where. `next` brings them back to this event once they are in.
         actions.push('<a class="btn btn-glow" href="' + signInHref(e) +
           '">Join free to register</a>');
+      } else if (myStatus === "registered") {
+        // Already told us they are going. The list drops the Register button
+        // for exactly this case and shows the chip instead; this page used to
+        // keep asking somebody to register for something they had confirmed.
+        actions.push('<span class="ev-status is-going">Going</span>');
       } else {
+        // ⚠ STAYS AN <a href>, where the list uses a <button> + window.open().
+        // The difference is deliberate and this is the better half: it is a
+        // real link to the organiser's page, so middle-click, "open in new
+        // tab" and copy-link all keep working, and nothing has to survive a
+        // popup blocker. `data-register` is only a note to ourselves — the
+        // handler below does NOT preventDefault, and target=_blank still does
+        // the opening.
         actions.push('<a class="btn btn-glow" href="' + esc(e.register_link) +
-          '" target="_blank" rel="noopener">Register</a>');
+          '" target="_blank" rel="noopener" data-register="' + esc(e.id) +
+          '">Register</a>');
       }
     }
 
@@ -677,6 +721,102 @@
 
     buildShare(e);
     wireRecording(e);
+  }
+
+  // ---- Register, and the question on the way back --------------------------
+  //
+  // Ahmed, 13 Aug: pressing Register here should behave the way it does on the
+  // events list — the member goes out to the organiser's site, and is asked
+  // whether they actually registered when they come back.
+  //
+  // The dialogs, the note in sessionStorage and its two-hour expiry all live in
+  // lib/register-prompt.js and are shared with events-ui.js, so the two screens
+  // cannot drift apart. ⚠ They share ONE storage key on purpose: press Register
+  // on the list, land back here, and the question is asked once, here. That is
+  // the point of the shared key, not an accident of it.
+  //
+  // ⚠ WHY THE CLICK HANDLER DOES NOT preventDefault: see the note on the anchor
+  // above. The browser opens the tab; all this does is leave the note.
+  //
+  // ⚠ AND WHY THIS IS A FUNCTION RATHER THAN TOP-LEVEL CODE. Two reasons, both
+  // learned the hard way on 13 Aug. tools/check-recording-gate.mjs loads this
+  // module statically — imports stripped, everything from "---- Load" cut away
+  // — and RUNS what is left against a stub document. Top-level listeners made
+  // it throw, and `createRegisterPrompt` was undefined there because its import
+  // line had been removed. A declaration executes nothing until the load path
+  // calls it, so the static checker stays static and this stays wired.
+  //
+  // ⚠ The click is delegated on `document`, not bound to the button, because
+  // render() replaces root.innerHTML wholesale — a listener on the anchor would
+  // be thrown away the moment the personal layer redraws the page.
+  function wireRegisterFlow() {
+    document.addEventListener("click", function (ev) {
+      var a = ev.target.closest ? ev.target.closest("a[data-register]") : null;
+      if (!a || !CURRENT) return;
+      // A guest never sees this control, and "not known yet" is not good enough
+      // to promise a question — see isSignedIn().
+      if (!isSignedIn()) return;
+      rememberPending(CURRENT.id, CURRENT.title);
+    });
+
+    createRegisterPrompt({
+      isFavourite: function () { return myFavourite; },
+
+      onRegistered: function (id) {
+        myStatus = "registered";
+        // Redraw so the button they just answered about stops asking them to
+        // register. Local first, then the write — the same optimistic order the
+        // favourite heart on the list uses, for the same reason.
+        if (CURRENT && CURRENT.id === id) renderCurrent();
+        social(function (mod) { mod.setMyRegistration(id, "registered"); });
+      },
+
+      onFavourite: function (id) {
+        myFavourite = true;
+        social(function (mod) { mod.addFavourite(id); });
+      },
+
+      onInterested: function (id) {
+        // They looked but passed. A weaker signal than a favourite, and the
+        // recommender weights it accordingly. ⚠ Not rendered: "Interested" is
+        // not a state this page has ever shown, and inventing one here would
+        // put a label on the detail page that the list does not use the same
+        // way.
+        myStatus = "interested";
+        social(function (mod) { mod.setMyRegistration(id, "interested"); });
+      }
+    }).start();
+  }
+
+  // event-social.js is loaded on demand rather than up front: most people open
+  // this page for the date and the venue and never touch any of it.
+  function social(fn) {
+    import("./lib/event-social.js?v=4c6535f7ff").then(fn).catch(function () {});
+  }
+
+  function renderCurrent() {
+    if (CURRENT) render(CURRENT, LAST_ORGANIZERS, LAST_RELATED);
+  }
+
+  // The member's own layer, fetched after the event is on screen. ⚠ Deliberately
+  // not awaited by the load path below: a slow or failed personal read must
+  // leave the public page exactly as it is, which is the same rule loadSocial()
+  // follows on the events list.
+  function loadMine() {
+    if (!isSignedIn() || !CURRENT) return;
+    social(function (mod) {
+      return Promise.all([mod.loadMyRegistrations(), mod.loadFavourites()])
+        .then(function (r) {
+          var status = r[0][CURRENT.id] || "";
+          myFavourite = r[1].has(CURRENT.id);
+          if (status === myStatus) return;
+          myStatus = status;
+          // Only a confirmed registration changes what is drawn. Re-rendering
+          // for anything else would throw away the share buttons and the
+          // recording player for no visible gain.
+          if (myStatus === "registered") renderCurrent();
+        });
+    });
   }
 
   function buildShare(e) {
@@ -851,12 +991,18 @@
 
       render(event, organizers,
         relatedEvents(subject, candidates, new Date().toISOString().slice(0, 10), 3));
+
+      // After the page is on screen, never before it. Both are no-ops for a
+      // guest — wireRegisterFlow() only ever writes a note for somebody the
+      // header has already confirmed is signed in.
+      wireRegisterFlow();
+      loadMine();
     }
   }
 </script>
 
-<script src="analytics.js?v=44b5321453"></script>
-<script src="script.js?v=44b5321453"></script>
-<script defer src="lib/back-to-top.js?v=44b5321453"></script>
+<script src="analytics.js?v=4c6535f7ff"></script>
+<script src="script.js?v=4c6535f7ff"></script>
+<script defer src="lib/back-to-top.js?v=4c6535f7ff"></script>
 </body>
 </html>
