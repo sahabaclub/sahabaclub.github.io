@@ -374,6 +374,63 @@ inside the function.
 the primary key and the day is claimed *before* the send, so a retry or an
 overlapping run collides on the constraint instead of sending a second copy.
 
+## 8. The two-hour event reminder, and the `events@` mailbox
+
+A member who marks themselves **going** to an event gets an email about two
+hours before it starts, from **events@sahabaclub.com**.
+
+**Nothing needs scheduling.** The whole chain was already automated and this
+only retargets it: `notification-sweeps` runs `sweep_event_reminders()` every
+15 minutes (0046) → `email_queue()` filters it (0051) → `send-notification-emails`
+sends it (0052). Migration **0065** moved the lead time from one hour to two,
+pointed the link at the event's own page, and gave it its own sender.
+
+### ⚠ It sends nothing until `events.starts_at` is filled in
+
+`starts_at` is a real timestamp; `event_date` + `time_label` cannot be computed
+with, because `time_label` is free text ("8:00 AM onwards"). The sweep skips any
+event without it rather than guess.
+
+**Measured 13 Aug 2026: 39 upcoming published events, 0 with a start time —
+and nothing in the product writes that column.** Not `app/admin/events.html`,
+not the `import-event` importer. Until that changes the reminder is real code
+that can never fire.
+
+```
+node tools/check-event-reminders.mjs
+```
+
+fails while that is true, on purpose. Check it before believing a reminder went
+out, and after any backfill.
+
+⚠ **Do not backfill by parsing `time_label` alone.** The upcoming list spans
+more than one country, so reading "7:00 PM" as Dubai time makes an Egyptian
+event's reminder two hours wrong — the club stating the wrong hour in its own
+voice, which is worse than staying quiet. A backfill needs a per-event time
+zone.
+
+### The sender address
+
+| | |
+|---|---|
+| Secret | `EVENTS_FROM` — optional, defaults to `Sahaba Club Events <events@sahabaclub.com>` |
+| Resend | **nothing to do.** Resend verifies a *domain*; `sahabaclub.com` is already verified, so any address on it can send. |
+| Microsoft 365 | **create `events@sahabaclub.com` as a SHARED MAILBOX.** |
+
+⚠ **Shared, not a licensed user.** Resend does the sending, so the mailbox is
+only needed to *receive* — and a reminder is exactly the mail somebody replies
+to ("can't make it", "is it still on?"). A shared mailbox costs **no licence**,
+has **no password to leak**, and lets several staff read and reply as
+`events@`. A normal user mailbox would cost a licence per month and create a
+sign-in nobody needs; a distribution list cannot store replies at all.
+
+In the Microsoft 365 admin centre: **Teams & groups → Shared mailboxes → Add a
+shared mailbox**, name it `events@sahabaclub.com`, then add the staff who
+should read it as members.
+
+⚠ **If that mailbox does not exist, replies bounce.** The reminder still sends —
+Resend never checks — so this fails silently in the one direction nobody tests.
+
 ## What's deliberately not built yet
 
 - **`ms365-lifecycle`** (the license revoke → grace → deactivate → delete

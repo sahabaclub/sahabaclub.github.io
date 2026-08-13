@@ -19,6 +19,23 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Sahaba Club <members@sahabaclub.com>";
 
+// ⚠ THE EVENT REMINDER SENDS FROM ITS OWN ADDRESS. Ahmed, 13 Aug.
+//
+// Two things about this that are easy to get wrong:
+//
+// 1. **Resend verifies a DOMAIN, not an address.** sahabaclub.com is already
+//    verified — members@ has been sending from it — so events@ needs NOTHING
+//    added in Resend. Any address at a verified domain can send. If this ever
+//    starts failing with a 403 naming the from address, the domain's
+//    verification lapsed; do not go looking for a per-address setting.
+//
+// 2. **A from address people can REPLY to must be able to receive.** Resend
+//    only sends. If events@sahabaclub.com does not exist as a mailbox in the
+//    Microsoft 365 tenant, every reply to a reminder bounces — and a reminder
+//    is exactly the mail somebody replies to ("can't make it", "is it still
+//    on?"). See SETUP.md §8 for which kind of mailbox that should be.
+const EVENTS_FROM = Deno.env.get("EVENTS_FROM") ?? "Sahaba Club Events <events@sahabaclub.com>";
+
 type TemplateName =
   | "welcome"
   | "ms365_credential"
@@ -26,7 +43,14 @@ type TemplateName =
   | "ms365_reset_request"
   | "hackathon_interest"
   | "notification"
+  | "event_reminder"
   | "avatar_restart";
+
+// Per-template sender. Anything absent falls back to RESEND_FROM, so adding a
+// template never silently changes who existing mail comes from.
+const FROM_BY_TEMPLATE: Partial<Record<TemplateName, string>> = {
+  event_reminder: EVENTS_FROM,
+};
 
 // Every link in a member-facing email points at the live site. Relative URLs
 // are meaningless in an inbox, and a hard-coded host that drifts is how a
@@ -381,6 +405,67 @@ function renderTemplate(template: TemplateName, data: Record<string, unknown>) {
     };
   }
 
+  // "event_reminder" — two hours before an event the member said they'd attend.
+  //
+  // ⚠ WHY THIS IS NOT JUST `notification`, given the note above argues for one
+  // template across the deadline kinds. Two reasons, and neither is cosmetic:
+  // it sends from a DIFFERENT ADDRESS (events@, Ahmed's ask), and it is the
+  // only one of them a member is likely to act on within the hour, so the
+  // when/where has to survive a glance on a phone rather than sit inside a
+  // sentence.
+  //
+  // ⚠ THE WORDS STILL COME FROM ONE PLACE. `title`, `body` and `href` are
+  // written by sweep_event_reminders() in 0065 and are the SAME strings the
+  // member sees in the app — this template lays them out, it does not restate
+  // them. That is what keeps the email and the notification from ever telling
+  // somebody two different things about the same event. If the time or the
+  // venue is wrong here, it is wrong in the sweep; fix it there.
+  //
+  // ⚠ Every value is esc()'d: the event title is typed by staff or produced by
+  // the AI importer, and the venue comes from whatever the organiser published.
+  if (template === "event_reminder") {
+    const who = String(data.fullName ?? "").trim();
+    const title = String(data.title ?? "").trim();
+    const body = String(data.body ?? "").trim();
+    const rawHref = String(data.href ?? "").trim();
+    // Same rule as `notification`, and it matters more here: this link is
+    // signed by the club's own DKIM key, so a bad one spends the club's
+    // reputation. Anything that is not a site-relative path is dropped and the
+    // mail simply has no button.
+    const safePath = /^\/[^/]/.test(rawHref) ? rawHref : "";
+    const url = safePath ? `${SITE}${safePath}` : "";
+
+    return {
+      subject: title || "An event you're going to starts soon",
+      html: `
+        <p>${who ? `Hi ${esc(who.split(/\s+/)[0])},` : "Hi,"}</p>
+        <p>A quick reminder — <strong>${esc(title)}</strong></p>
+        ${body ? `<p style="font-size:16px;line-height:1.6;">${esc(body)}</p>` : ""}
+        ${
+        url
+          ? `<p style="margin:24px 0;">
+               <a href="${url}"
+                  style="background:#155e75;color:#ffffff;text-decoration:none;
+                         padding:12px 22px;border-radius:8px;display:inline-block;
+                         font-weight:600;">Open the event</a>
+             </p>
+             <p style="color:#6b7189;font-size:13px;">
+               Or paste this into your browser:<br>${url}
+             </p>`
+          : ""
+      }
+        <p>You're getting this because you told us you're going. If your plans
+           have changed, you can say so on the event page — it only affects what
+           we send you.</p>
+        <p style="color:#6b7189;font-size:13px;">
+          Reminders like this can be turned off under Notifications in
+          <a href="${SITE}/app/settings.html">your settings</a>.
+        </p>
+        <p>— Sahaba Club</p>
+      `,
+    };
+  }
+
   // "welcome" — sent once, the first time a member reaches onboarding.
   //
   // This template existed from the beginning and NOTHING EVER SENT IT, so the
@@ -478,7 +563,9 @@ Deno.serve(async (req) => {
       : null;
 
     const payload: Record<string, unknown> = {
-      from: RESEND_FROM,
+      // Per-template sender, falling back to the club address. See
+      // FROM_BY_TEMPLATE — today only the event reminder differs.
+      from: FROM_BY_TEMPLATE[template as TemplateName] ?? RESEND_FROM,
       to: recipient,
       subject,
       html,

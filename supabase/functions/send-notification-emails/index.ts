@@ -80,6 +80,20 @@ function json(body: unknown, status = 200) {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// ⚠ WHICH TEMPLATE, AND THEREFORE WHICH SENDER ADDRESS.
+//
+// The event reminder goes out from events@sahabaclub.com rather than the club
+// address (Ahmed, 13 Aug); send-transactional-email picks the from line off the
+// template name, so this map is what decides it. Everything else keeps the one
+// generic `notification` template it has always used.
+//
+// ⚠ This does NOT decide who gets mailed — `email_queue()` still owns that, and
+// this map must never grow into a second filter. A kind missing from here gets
+// the default template, not silence.
+const TEMPLATE_BY_KIND: Record<string, string> = {
+  event_starting_soon: "event_reminder",
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -139,7 +153,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           to: row.recipient_email,
-          template: "notification",
+          template: TEMPLATE_BY_KIND[row.kind] ?? "notification",
           data: {
             fullName: row.full_name,
             title: row.title,

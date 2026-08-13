@@ -63,7 +63,7 @@ const BUCKET = "event-images";
 // — the docs list them under "some type-specific keywords are not yet
 // supported" for strings, and calling with `strict: true` and an unsupported
 // keyword returns an error rather than ignoring it. Putting `maxLength` on
-// these eleven fields would not bound anything; it would stop the function
+// these thirteen fields would not bound anything; it would stop the function
 // working at all. `minItems`/`maxItems` on an array ARE supported, so `tags`
 // carries them for real, on the schema, below.
 //
@@ -75,6 +75,8 @@ const B = {
   description: 600,
   event_date: 10,     // YYYY-MM-DD
   time_label: 60,
+  start_time_local: 5,  // HH:MM, 24-hour
+  time_zone: 40,        // the longest IANA names are around 30
   location: 160,
   country: 56,        // the longest country name in common use
   mode: 10,           // "In-Person"
@@ -93,6 +95,8 @@ const TAGS_MAX = 6;
 //   description                                              600
 //   event_date                                                10
 //   time_label                                                60
+//   start_time_local                                           5
+//   time_zone                                                 40
 //   location                                                 160
 //   country                                                   56
 //   mode                                                      10
@@ -101,11 +105,11 @@ const TAGS_MAX = 6;
 //   tags            TAGS_MAX × B.tag = 6 × 40                240
 //   confidence                                                 6
 //                                                  ----------------
-//                                                 1,346 characters
-//   JSON scaffolding: 11 keys, quotes, commas, braces,
+//                                                 1,391 characters
+//   JSON scaffolding: 13 keys, quotes, commas, braces,
 //   the tag array's own punctuation                         ~200
 //                                                  ----------------
-//                                                ~1,550 characters
+//                                                ~1,600 characters
 //
 // Event pages are read in English and answered in English, so there is no
 // Arabic multiplier here as there is in `promptarena-judge`. At ~3.2 characters
@@ -165,6 +169,13 @@ const EVENT_SCHEMA = {
     description: { type: "string", description: `Two to four sentences describing what happens and who it suits. Empty string if the page says too little. At most ${B.description} characters.` },
     event_date: { type: "string", description: "Start date as YYYY-MM-DD, exactly 10 characters. Empty string if the page does not state a date — never guess one." },
     time_label: { type: "string", description: `Human-readable time as shown, e.g. '6:30 PM - 9:00 PM'. Empty string if not stated. At most ${B.time_label} characters.` },
+    // ⚠ THESE TWO FEED THE 2-HOUR REMINDER (0065/0066), so a guess here mails
+    // every attendee at the wrong hour in the club's own voice. Both
+    // descriptions say "never guess" for that reason, and clampEvent throws
+    // away anything that is not exactly the right shape — a half-read time is
+    // worse than none, because none simply means no reminder.
+    start_time_local: { type: "string", description: "The START time only, as 24-hour HH:MM in the event's own local time, e.g. '18:30' for 6:30 PM. Take only the start of a range. Empty string if the page does not state a start time — never guess or round." },
+    time_zone: { type: "string", description: "The IANA time zone the start time is local to, inferred from the venue city, e.g. 'Asia/Dubai' for Dubai, 'Africa/Cairo' for Cairo. Empty string for an online event with no stated zone, or if the city is unclear — never guess." },
     location: { type: "string", description: `Venue and area, e.g. 'Gate Avenue, DIFC'. Empty string for online events or if not stated. At most ${B.location} characters.` },
     country: { type: "string", description: `Country, e.g. 'UAE'. Empty string if not stated and not inferable from the venue. At most ${B.country} characters.` },
     mode: { type: "string", enum: ["In-Person", "Online"], description: "Online covers webinars and livestreams. Anything with a physical venue is In-Person." },
@@ -186,7 +197,7 @@ const EVENT_SCHEMA = {
       description: "How complete the source was. 'low' means key fields had to be left empty — the admin should check before publishing.",
     },
   },
-  required: ["title", "description", "event_date", "time_label", "location", "country", "mode", "price_label", "brand", "tags", "confidence"],
+  required: ["title", "description", "event_date", "time_label", "start_time_local", "time_zone", "location", "country", "mode", "price_label", "brand", "tags", "confidence"],
   additionalProperties: false,
 } as const;
 
@@ -376,6 +387,11 @@ Deno.serve(async (req) => {
         description: evt.description,
         event_date: evt.event_date,
         time_label: evt.time_label,
+        // Both may be "" — the model is told to leave them empty rather than
+        // guess. The form treats empty as "staff will fill this in", which is
+        // the same outcome as no reminder for this event.
+        start_time_local: evt.start_time_local,
+        time_zone: evt.time_zone,
         location: evt.location,
         country: evt.country,
         mode: evt.mode,
@@ -617,6 +633,7 @@ function decodeEntities(s: string) {
 
 type Extracted = {
   title: string; description: string; event_date: string; time_label: string;
+  start_time_local: string; time_zone: string;
   location: string; country: string; mode: string; price_label: string;
   brand: string; tags: string[]; confidence: string;
 };
@@ -857,6 +874,21 @@ function clampEvent(raw: Record<string, unknown>): Extracted {
     description: str(raw.description, B.description),
     event_date: str(raw.event_date, B.event_date),
     time_label: str(raw.time_label, B.time_label),
+    // ⚠ EXACT SHAPE OR NOTHING. A model asked for HH:MM will occasionally
+    // answer "18:30 GST", "6:30 PM" or "18:30–21:00". Clipping those to five
+    // characters yields "18:30", "6:30 " and "18:30" — one right, one broken,
+    // one right by luck. Since this value decides when an email goes out, an
+    // unrecognised answer is discarded and the field is left for a human.
+    start_time_local: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(raw.start_time_local ?? "").trim())
+      ? String(raw.start_time_local).trim()
+      : "",
+    // Same rule: a plausible-looking zone is worse than an empty one, because
+    // the form would accept it silently. Only Area/City (optionally
+    // Area/Sub/City) is taken; the database rejects anything not in
+    // pg_timezone_names anyway, and this keeps that error off the save button.
+    time_zone: /^[A-Za-z]+(?:\/[A-Za-z0-9_+-]+){1,2}$/.test(String(raw.time_zone ?? "").trim())
+      ? clip(String(raw.time_zone).trim(), B.time_zone)
+      : "",
     location: str(raw.location, B.location),
     country: str(raw.country, B.country),
     mode: str(raw.mode, B.mode),

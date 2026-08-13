@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=44b5321453">
+<link rel="stylesheet" href="admin.css?v=4c6535f7ff">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -141,6 +141,37 @@
           <label for="f-time">Time</label>
           <input type="text" id="f-time" placeholder="6:00 PM – 8:00 PM">
           <span class="ad-hint">Shown exactly as typed</span>
+        </div>
+        <!-- ⚠ THE REMINDER LIVES OR DIES ON THIS FIELD, and it is separate from
+             the one above on purpose. "Time" is display text — a range, or
+             "8:00 AM onwards" — and no machine can act on it. This is the start
+             instant, and 0065 emails everyone who said they are going two hours
+             before it. Leave it blank and the event simply gets no reminder,
+             which is the honest outcome and not an error. -->
+        <div class="ad-field">
+          <label for="f-start">Starts at</label>
+          <input type="time" id="f-start">
+          <span class="ad-hint">For the 2-hour reminder. Blank = no reminder.</span>
+        </div>
+        <div class="ad-field">
+          <label for="f-tz">Time zone</label>
+          <!-- ⚠ Not the browser's zone. A form that assumed the staff member's
+               laptop would stamp a Cairo event with Dubai time the moment
+               somebody edited it from the wrong city. The list is short because
+               it is the list this club actually runs events in; the column
+               accepts any IANA name if a longer one is ever needed. -->
+          <select id="f-tz">
+            <option value="Asia/Dubai">Dubai / UAE (GST)</option>
+            <option value="Africa/Cairo">Cairo / Egypt</option>
+            <option value="Asia/Riyadh">Riyadh / Saudi Arabia</option>
+            <option value="Asia/Qatar">Doha / Qatar</option>
+            <option value="Asia/Kuwait">Kuwait</option>
+            <option value="Asia/Bahrain">Bahrain</option>
+            <option value="Asia/Muscat">Muscat / Oman</option>
+            <option value="Europe/London">London</option>
+            <option value="UTC">UTC</option>
+          </select>
+          <span class="ad-hint">Where that clock time is local to</span>
         </div>
         <div class="ad-field">
           <label for="f-mode">Format</label>
@@ -332,10 +363,10 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=44b5321453";
-  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=44b5321453";
+  import { supabase } from "../../lib/supabase-client.js?v=4c6535f7ff";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=4c6535f7ff";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js?v=44b5321453";
+    from "../../lib/admin-guard.js?v=4c6535f7ff";
 
   const user = await requireStaff("events");
   if (!user) throw new Error("not staff");
@@ -351,6 +382,8 @@
     location: document.getElementById("f-location"),
     date: document.getElementById("f-date"),
     time: document.getElementById("f-time"),
+    start: document.getElementById("f-start"),
+    tz: document.getElementById("f-tz"),
     mode: document.getElementById("f-mode"),
     price: document.getElementById("f-price"),
     tags: document.getElementById("f-tags"),
@@ -370,6 +403,24 @@
     fnote: document.getElementById("f-fnote"),
     fsort: document.getElementById("f-fsort"),
   };
+
+  // ⚠ AN UNLISTED ZONE MUST NOT FALL BACK TO THE FIRST OPTION. Assigning a
+  // value a <select> does not contain leaves it on whatever was selected —
+  // Dubai — so an event stored as Asia/Kolkata would be silently rewritten to
+  // Dubai the next time anybody opened it and pressed Save, moving its reminder
+  // by three and a half hours with nothing on screen to show it happened. The
+  // column takes any IANA name, so the honest fix is to widen the list, not to
+  // narrow the data.
+  //
+  // ⚠ Declared AFTER F on purpose — it reads F.tz, and this file has a `const`
+  // form map. See tools/check-dead-zone.mjs for why that ordering is a rule
+  // here rather than a preference.
+  function setZone(tz) {
+    const v = tz || "Asia/Dubai";
+    const known = Array.prototype.some.call(F.tz.options, (o) => o.value === v);
+    if (!known) F.tz.add(new Option(v, v));
+    F.tz.value = v;
+  }
 
   // ---- Images -----------------------------------------------------------
   //
@@ -641,6 +692,7 @@
     const e = id ? allEvents.find(x => x.id === id) : null;
 
     document.getElementById("ad-modal-title").textContent = e ? "Edit event" : "New event";
+
     document.getElementById("f-delete").classList.toggle("ad-hidden", !e);
 
     F.id.value = e ? e.id : "";
@@ -649,6 +701,11 @@
     F.location.value = e ? (e.location || "") : "";
     F.date.value = e ? e.event_date : "";
     F.time.value = e ? (e.time_label || "") : "";
+    // Postgres hands back "19:00:00"; <input type="time"> only accepts "HH:MM".
+    // Assigning the seconds form silently leaves the box EMPTY, which on the
+    // next save would clear the start time — and with it the event's reminder.
+    F.start.value = e && e.start_time_local ? String(e.start_time_local).slice(0, 5) : "";
+    setZone(e ? e.time_zone : "Asia/Dubai");
     F.mode.value = e ? e.mode : "In-Person";
     F.price.value = e ? (e.price_label || "Free") : "Free";
     F.tags.value = e && e.tags ? e.tags.join(", ") : "";
@@ -840,6 +897,11 @@
     F.location.value = d.location || "";
     F.date.value = d.event_date || "";
     F.time.value = d.time_label || "";
+    // The importer supplies these when it can read a start time off the page;
+    // when it cannot, the fields stay blank and staff fill them in — which is
+    // the same honest outcome as leaving the reminder off.
+    F.start.value = d.start_time_local ? String(d.start_time_local).slice(0, 5) : "";
+    setZone(d.time_zone);
     F.mode.value = d.mode === "Online" ? "Online" : "In-Person";
     F.price.value = d.price_label || "Free";
     F.tags.value = (d.tags || []).join(", ");
@@ -879,6 +941,12 @@
       location: F.location.value.trim() || null,
       event_date: F.date.value,
       time_label: F.time.value.trim() || null,
+      // ⚠ `starts_at` IS NOT SENT. 0066 derives it in a trigger from these two
+      // plus the date, so that the admin form, the AI importer and any future
+      // backfill cannot each do their own time-zone arithmetic and disagree.
+      // Sending it here would be overwritten anyway.
+      start_time_local: F.start.value || null,
+      time_zone: F.tz.value || "Asia/Dubai",
       mode: F.mode.value,
       price_label: F.price.value.trim() || "Free",
       tags: F.tags.value.split(",").map(s => s.trim()).filter(Boolean),
@@ -968,6 +1036,6 @@
   // would otherwise see an empty list and save it as "no organizers".
   loadOrganizers().then(loadEvents);
 </script>
-<script defer src="../../lib/back-to-top.js?v=44b5321453"></script>
+<script defer src="../../lib/back-to-top.js?v=4c6535f7ff"></script>
 </body>
 </html>
