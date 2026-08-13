@@ -409,6 +409,28 @@ event's reminder two hours wrong — the club stating the wrong hour in its own
 voice, which is worse than staying quiet. A backfill needs a per-event time
 zone.
 
+### Filling in the events that predate the field
+
+**Admin → Events → "Start times · N missing".** The button only appears while
+some upcoming event has no start time, and the count is deliberately taken from
+every event rather than the filtered rows, so a search cannot hide it.
+
+**Read** asks the AI importer to find the start time on the organiser's own
+page — it reads both the clock time and the city, which is what makes the time
+zone real rather than assumed. One model call per event. **Nothing is saved
+until you press Apply**, and Apply writes only `start_time_local` and
+`time_zone`, never the rest of the event.
+
+Expect some to fail honestly, and the reason is shown per row:
+
+| what it says | why |
+|---|---|
+| *page needs pasting* | LinkedIn, Microsoft Events, AWS and Kaggle hide everything from a server-side fetch. Open the event and use the normal form. |
+| *no start time stated on the page* | Some listings genuinely never say. Ask the organiser, or leave it — no reminder is the honest outcome. |
+
+New events need none of this: the importer fills both fields, and the form has
+them.
+
 ### The sender address
 
 | | |

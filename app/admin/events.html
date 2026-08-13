@@ -40,6 +40,11 @@
         </select>
         <div class="ad-spacer"></div>
         <span class="ad-cell-dim" id="ad-count"></span>
+        <!-- ⚠ The count in the label is live, and it is the point. Events with
+             no start time get no 2-hour reminder (0065), and that failure is
+             otherwise invisible — nothing on this screen would ever mention it.
+             Hidden entirely when the number is zero. -->
+        <button class="ad-btn ad-hidden" id="ad-starts">Start times<span id="ad-starts-n"></span></button>
         <button class="ad-btn ad-btn-primary" id="ad-new">+ New event</button>
       </div>
       <div class="ad-tablewrap">
@@ -62,6 +67,37 @@
 
     <div id="ad-msg"></div>
   </main>
+</div>
+
+<!-- Start times — the backfill for events that predate the field.
+     ⚠ NOTHING HERE WRITES WITHOUT A PRESS. The importer reads the organiser's
+     own page and PROPOSES a start time and zone; a person applies it. That is
+     the same rule the event importer follows, and it matters more here because
+     the value decides when an email goes out to everyone attending. -->
+<div class="ad-modal-back ad-hidden" id="ad-st-back">
+  <div class="ad-modal">
+    <h2>Start times</h2>
+    <p class="ad-modal-sub">
+      These events have no machine-readable start time, so nobody attending them
+      gets the two-hour email reminder. Reading an event asks the AI importer to
+      find the start time on the organiser's own page — it costs one model call
+      each, and nothing is saved until you press Apply.
+    </p>
+    <div id="ad-st-msg"></div>
+    <div class="ad-tablewrap" style="max-height:52vh;overflow:auto;">
+      <table class="ad-table" id="ad-st-list">
+        <thead>
+          <tr><th>Event</th><th>Date</th><th>Found</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="ad-modal-actions">
+      <button type="button" class="ad-btn ad-btn-primary" id="ad-st-readall">Read all</button>
+      <button type="button" class="ad-btn" id="ad-st-applyall">Apply all found</button>
+      <button type="button" class="ad-btn" id="ad-st-close">Close</button>
+    </div>
+  </div>
 </div>
 
 <!-- Editor -->
@@ -622,6 +658,117 @@
     return error;
   }
 
+  // ---- Start times: the backfill -----------------------------------------
+  //
+  // 0066 gave the form a Starts at field, so every NEW event can have one. The
+  // events that already existed cannot get one that way without somebody
+  // opening all of them, and on 13 Aug that was 39 events with a start time
+  // between none and none.
+  //
+  // ⚠ WHY THE AI AND NOT A PARSER. `time_label` is free text and the events are
+  // not all in one country — "7:00 PM" alone is not an instant, and reading it
+  // as Dubai time makes an Egyptian event's reminder two hours wrong. The
+  // importer reads the organiser's actual page, which states both the time and
+  // the city, and it is told to return nothing rather than guess either.
+  //
+  // ⚠ UPCOMING ONLY. A past event's start time changes nothing — no reminder
+  // can fire for it — so spending a model call on one would be spending Ahmed's
+  // money to fill in a column nobody reads.
+  function startTimeGaps() {
+    const today = new Date().toISOString().slice(0, 10);
+    return allEvents.filter(e =>
+      e.is_published && e.event_date >= today && !e.starts_at && e.register_link);
+  }
+
+  // Per event id, what the importer came back with, so a reopened panel does
+  // not throw away reads that have already been paid for.
+  const stFound = {};
+
+  function stRender() {
+    const rows = startTimeGaps();
+    const body = document.querySelector("#ad-st-list tbody");
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="4" class="ad-empty">' +
+        'Every upcoming event has a start time. Reminders can fire.</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(e => {
+      const f = stFound[e.id];
+      let found, action;
+      if (!f) {
+        found = '<span class="ad-cell-dim">not read yet</span>';
+        action = '<button class="ad-btn ad-btn-sm" data-st-read="' + e.id + '">Read</button>';
+      } else if (f.error) {
+        // ⚠ Say what actually happened. "Couldn't read" covers a login wall, a
+        // JavaScript shell and a page that simply never states a time, and
+        // those need three different things from the person reading this.
+        found = '<span class="ad-cell-dim">' + escapeHtml(f.error) + "</span>";
+        action = '<button class="ad-btn ad-btn-sm" data-st-read="' + e.id + '">Retry</button>';
+      } else {
+        found = "<strong>" + escapeHtml(f.start_time_local) + "</strong> " +
+                '<span class="ad-cell-dim">' + escapeHtml(f.time_zone) + "</span>";
+        action = '<button class="ad-btn ad-btn-sm ad-btn-primary" data-st-apply="' + e.id + '">Apply</button>';
+      }
+      return "<tr>" +
+        '<td class="ad-cell-strong">' + escapeHtml(e.title) + "</td>" +
+        "<td>" + escapeHtml(e.event_date) + "</td>" +
+        "<td>" + found + "</td>" +
+        "<td>" + action + "</td>" +
+      "</tr>";
+    }).join("");
+  }
+
+  async function stRead(e) {
+    try {
+      const res = await supabase.functions.invoke("import-event", {
+        body: {
+          url: e.register_link,
+          // ⚠ No artwork. This is a start-time read on an event that already
+          // has its picture; generating another would cost an image call per
+          // event and overwrite nothing useful.
+          generateImage: false,
+        },
+      });
+      const d = res.data;
+      if (res.error || !d) {
+        stFound[e.id] = { error: "importer refused — " + (res.error?.message || "no answer") };
+      } else if (d.needsPaste) {
+        // Measured in the importer's own header: LinkedIn, Microsoft Events,
+        // AWS and Kaggle hide everything from a server-side fetch.
+        stFound[e.id] = { error: "page needs pasting — open it and use the form" };
+      } else if (!d.draft || !d.draft.start_time_local) {
+        stFound[e.id] = { error: "no start time stated on the page" };
+      } else {
+        stFound[e.id] = {
+          start_time_local: d.draft.start_time_local,
+          // The importer returns "" when the city is unclear rather than
+          // guessing. The club's own zone is the honest default, and the person
+          // applying it can see the event's country in the row above.
+          time_zone: d.draft.time_zone || "Asia/Dubai",
+        };
+      }
+    } catch (err) {
+      stFound[e.id] = { error: "couldn't reach the importer" };
+    }
+  }
+
+  async function stApply(e) {
+    const f = stFound[e.id];
+    if (!f || f.error) return;
+    // ⚠ Only these two columns. A full payload would carry every other field
+    // through this path too, and an importer read is not a mandate to rewrite
+    // an event somebody has already edited by hand.
+    const { error } = await supabase.from("events")
+      .update({ start_time_local: f.start_time_local, time_zone: f.time_zone })
+      .eq("id", e.id);
+    if (error) {
+      showMessage("ad-st-msg", "Couldn't save " + e.title + ": " + error.message, "err");
+      return false;
+    }
+    delete stFound[e.id];
+    return true;
+  }
+
   async function loadEvents() {
     const { data, error } = await supabase
       .from("events")
@@ -651,6 +798,16 @@
 
     document.getElementById("ad-count").textContent =
       rows.length + " of " + allEvents.length + " shown";
+
+    // ⚠ Counted off `allEvents`, NOT off the filtered rows. The number is about
+    // the club's reminders, not about what this search happens to be showing —
+    // a filter that hid the gap would be the reminder failing silently all over
+    // again, one level up.
+    const missing = startTimeGaps();
+    const stBtn = document.getElementById("ad-starts");
+    stBtn.classList.toggle("ad-hidden", missing.length === 0);
+    document.getElementById("ad-starts-n").textContent =
+      missing.length ? " · " + missing.length + " missing" : "";
 
     const body = document.querySelector("#ad-list tbody");
     if (!rows.length) {
@@ -776,6 +933,85 @@
       subEl.textContent = "Everything except title and date is optional.";
     }
   }
+
+  // ---- Start times panel wiring ------------------------------------------
+
+  const stBack = document.getElementById("ad-st-back");
+
+  document.getElementById("ad-starts").addEventListener("click", function () {
+    showMessage("ad-st-msg", "", "info");
+    stRender();
+    stBack.classList.remove("ad-hidden");
+  });
+
+  document.getElementById("ad-st-close").addEventListener("click", function () {
+    stBack.classList.add("ad-hidden");
+  });
+
+  // Delegated, because stRender() replaces the rows on every change.
+  document.querySelector("#ad-st-list tbody").addEventListener("click", async function (ev) {
+    const readBtn = ev.target.closest("[data-st-read]");
+    const applyBtn = ev.target.closest("[data-st-apply]");
+    const id = (readBtn || applyBtn)?.getAttribute(readBtn ? "data-st-read" : "data-st-apply");
+    if (!id) return;
+    const e = allEvents.find(x => x.id === id);
+    if (!e) return;
+
+    if (readBtn) {
+      readBtn.disabled = true;
+      readBtn.textContent = "Reading…";
+      await stRead(e);
+      stRender();
+      return;
+    }
+
+    applyBtn.disabled = true;
+    if (await stApply(e)) {
+      await loadEvents();   // starts_at comes back derived, so re-read it
+      stRender();
+    } else {
+      applyBtn.disabled = false;
+    }
+  });
+
+  document.getElementById("ad-st-readall").addEventListener("click", async function (ev) {
+    const btn = ev.currentTarget;
+    // ⚠ SEQUENTIAL, not Promise.all. Each read is a page fetch plus a model
+    // call; firing thirty at once is a burst at somebody else's site and a
+    // burst at OpenAI, and the importer is the one thing here that costs money
+    // per call.
+    const todo = startTimeGaps().filter(e => !stFound[e.id] || stFound[e.id].error);
+    btn.disabled = true;
+    for (let i = 0; i < todo.length; i++) {
+      btn.textContent = "Reading " + (i + 1) + " of " + todo.length + "…";
+      await stRead(todo[i]);
+      stRender();
+    }
+    btn.textContent = "Read all";
+    btn.disabled = false;
+    const got = startTimeGaps().filter(e => stFound[e.id] && !stFound[e.id].error).length;
+    showMessage("ad-st-msg",
+      got + " of " + todo.length + " read. Nothing is saved until you apply it.",
+      got ? "info" : "err");
+  });
+
+  document.getElementById("ad-st-applyall").addEventListener("click", async function (ev) {
+    const btn = ev.currentTarget;
+    const ready = startTimeGaps().filter(e => stFound[e.id] && !stFound[e.id].error);
+    if (!ready.length) {
+      showMessage("ad-st-msg", "Nothing read yet — press Read all first.", "err");
+      return;
+    }
+    if (!confirm("Apply " + ready.length + " start time" + (ready.length === 1 ? "" : "s") +
+                 "? Members who said they are going will be emailed two hours before each.")) return;
+    btn.disabled = true;
+    let saved = 0;
+    for (const e of ready) if (await stApply(e)) saved++;
+    await loadEvents();
+    stRender();
+    btn.disabled = false;
+    showMessage("ad-st-msg", saved + " saved.", "info");
+  });
 
   document.getElementById("src-manual").addEventListener("click", function () {
     showStep("form");

@@ -154,6 +154,30 @@ function runWiring(f, report) {
   report("the importer hands both back to the form",
     /start_time_local: evt\.start_time_local/.test(f.importer) &&
     /time_zone: evt\.time_zone/.test(f.importer));
+
+  // ---- the backfill panel, which no test can click ----
+  //
+  // ⚠ These are static on purpose and it is a real limitation: the panel lives
+  // behind a staff session, so nothing here proves it works — only that its
+  // invariants are still written down in code. Said plainly rather than left to
+  // look like coverage.
+  report("the backfill panel exists",
+    /id="ad-st-back"/.test(f.form) && /function startTimeGaps/.test(f.form));
+  report("it offers only UPCOMING events with a source link",
+    /e\.event_date >= today && !e\.starts_at && e\.register_link/.test(f.form),
+    "a past event's start time changes nothing and a model call would be wasted");
+  report("APPLYING WRITES ONLY THE TWO COLUMNS",
+    /update\(\{ start_time_local: f\.start_time_local, time_zone: f\.time_zone \}\)/.test(f.form),
+    "an importer read is not a mandate to rewrite an event somebody edited by hand");
+  report("nothing is written without a press",
+    !/stRead[\s\S]{0,800}?\.update\(/.test(f.form),
+    "reading must propose, not save");
+  report("reads are sequential, not a burst",
+    !/Promise\.all\([\s\S]{0,200}?stRead/.test(f.form),
+    "thirty concurrent reads is a burst at somebody else's site and at OpenAI");
+  report("the missing count ignores the search filter",
+    /const missing = startTimeGaps\(\)/.test(f.form),
+    "counting the filtered rows would hide the gap behind a search box");
 }
 
 // ---- The column the whole thing fires on ----------------------------------
@@ -253,6 +277,18 @@ mustCatch("the importer's time clamp loosened to a clip",
 mustCatch("setZone removed",
   (r) => runWiring({ ...FILES, form: FILES.form.replace(/function setZone/g, "function unusedZone") }, r),
   "an unlisted zone is added rather than silently becoming Dubai");
+
+// The backfill quietly turning into an auto-apply.
+mustCatch("the backfill writes a whole event instead of two columns",
+  (r) => runWiring({ ...FILES, form: FILES.form.replace(
+    /update\(\{ start_time_local: f\.start_time_local, time_zone: f\.time_zone \}\)/,
+    "update(payload)") }, r),
+  "APPLYING WRITES ONLY THE TWO COLUMNS");
+
+// The count hiding behind the search box.
+mustCatch("the missing count computed from filtered rows",
+  (r) => runWiring({ ...FILES, form: FILES.form.replace("const missing = startTimeGaps()", "const missing = rows") }, r),
+  "the missing count ignores the search filter");
 
 // The kind losing its email channel — the reminder becomes in-app only, silently.
 mustCatch("the kind loses the email channel",
