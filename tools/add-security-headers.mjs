@@ -35,6 +35,27 @@ const ROOT = "C:\\sctools\\scpush";
 // Every origin the site actually uses, gathered by grepping the source rather
 // than guessed — a CSP built from memory is a CSP that breaks something.
 const SUPABASE = "https://sobxhcsgtimtiqtvqbag.supabase.co";
+
+// ⚠ THE CUSTOM AUTH DOMAIN IS LISTED ALONGSIDE THE PROJECT HOST, NOT INSTEAD
+// OF IT, AND THAT IS THE WHOLE POINT OF ADDING IT EARLY.
+//
+// Ahmed, 11 Aug 2026: Google's sign-in prompt reads "to continue to
+// sobxhcsgtimtiqtvqbag.supabase.co", which does not look like Sahaba Club to
+// somebody signing up. The fix is a custom domain — and the trap is that the
+// project host is named in the CSP of every page. Point auth at a new host
+// without listing it here and the browser blocks every auth call: the site
+// fails closed, silently, for everyone at once.
+//
+// Listing both means there is no flag day. This can ship weeks before the
+// domain exists (a CSP source that nothing connects to costs nothing), the
+// switch itself becomes one line in `lib/supabase-client.js`, and if the
+// domain is ever rolled back the old host is still allowed.
+//
+// ⚠ REMOVING THE SUPABASE.CO HOST LATER IS A SEPARATE, LATER DECISION. Storage
+// URLs already written into `profiles.avatar_url` and `events.image_url` point
+// at it, and those rows outlive any DNS change. `img-src` is `https:` so
+// pictures are unaffected, but do not assume the same of anything else.
+const AUTH_DOMAIN = "https://auth.sahabaclub.ai";
 const CSP = [
   "default-src 'self'",
   // esm.sh serves the Supabase client; googletagmanager only after consent.
@@ -45,7 +66,7 @@ const CSP = [
   // data: and blob: are used for the local resize before upload.
   "img-src 'self' data: blob: https: ",
   // Supabase REST/auth/realtime/storage, plus GA4's collect endpoint.
-  `connect-src 'self' ${SUPABASE} wss://sobxhcsgtimtiqtvqbag.supabase.co https://www.google-analytics.com https://region1.google-analytics.com https://esm.sh`,
+  `connect-src 'self' ${SUPABASE} wss://sobxhcsgtimtiqtvqbag.supabase.co ${AUTH_DOMAIN} wss://auth.sahabaclub.ai https://www.google-analytics.com https://region1.google-analytics.com https://esm.sh`,
   // The EduHackAI demo videos.
   "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
   "media-src 'self' blob:",
