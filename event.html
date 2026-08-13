@@ -414,13 +414,27 @@
            '</span><span class="evp-fact-v">' + v + "</span></div>";
   }
 
+  // ⚠ THIS USED TO LEAVE THE SITE. The chip linked to `o.website`, so pressing
+  // an organiser's name — the obvious thing to press when you want more of
+  // their events — sent the reader to a third party's home page, which is the
+  // one place their OTHER Sahaba Club events are not. Ahmed, 13 Aug: it should
+  // go to a page of everything we list from them.
+  //
+  // It now points at organizer.html, and that page carries the outbound website
+  // link. Nothing is lost and the reader stays on the club's site.
+  //
+  // ⚠ `slug` is what organizer.html looks up. 0056 generates it by trigger, so
+  // every row has one — but an organiser inserted before that trigger existed
+  // could still be null, and a chip linking to `?o=null` is worse than a chip
+  // that is not a link. Falls back to plain text.
   function organizerChip(o) {
     var logo = o.logo_url
       ? '<img src="' + esc(o.logo_url) + '" alt="" loading="lazy">'
       : '<span class="evp-org-initial" aria-hidden="true">' + esc((o.name || "?").slice(0, 1)) + "</span>";
     var inner = logo + "<span>" + esc(o.name) + "</span>";
-    return o.website
-      ? '<a class="evp-org" href="' + esc(o.website) + '" target="_blank" rel="noopener">' + inner + "</a>"
+    return o.slug
+      ? '<a class="evp-org" href="organizer.html?o=' + encodeURIComponent(o.slug) +
+        '" aria-label="All events from ' + esc(o.name) + '">' + inner + "</a>"
       : '<span class="evp-org">' + inner + "</span>";
   }
 

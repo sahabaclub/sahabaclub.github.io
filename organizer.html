@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://esm.sh https://www.googletagmanager.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https: ; connect-src 'self' https://sobxhcsgtimtiqtvqbag.supabase.co wss://sobxhcsgtimtiqtvqbag.supabase.co https://auth.sahabaclub.ai wss://auth.sahabaclub.ai https://www.google-analytics.com https://region1.google-analytics.com https://esm.sh; frame-src https://www.youtube.com https://www.youtube-nocookie.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta name="color-scheme" content="dark light">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Organizer — Sahaba Club</title>
+
+<!-- ⚠ The title, description and share image below are GENERIC and stay that
+     way when the page is shared. This is a static host: the HTML is identical
+     for every event and the real one is fetched by JavaScript, but WhatsApp,
+     LinkedIn and Slack read the raw HTML and never run it. So a shared link
+     previews as "AI Events — Sahaba Club" whatever event it points at.
+
+     The page itself sets document.title once the event loads, which fixes the
+     browser tab and the reading list — just not the unfurl.
+
+     Fixing the unfurl properly needs either a real server, or a build step
+     that pre-renders one HTML file per event and re-runs on every event
+     change. Ahmed chose slugs over static pages knowing this; it is recorded
+     here so nobody re-discovers it as a bug. -->
+<meta name="description" content="An organizer on Sahaba Club — who they are and every event of theirs we list.">
+<meta property="og:title" content="Event organizers — Sahaba Club">
+<meta property="og:description" content="Hackathons, meetups and conferences from across the AI universe. Free to join, open to everyone building with AI.">
+<!-- ⚠ 1200×630. The old value was assets/icon-512.png — a SQUARE app icon, so
+     LinkedIn and Facebook rendered it as a small thumbnail beside a line of
+     text rather than as a card. Every unfurl of this site looked unbranded for
+     that one reason. og-events.jpg is the club's own artwork at the ratio both
+     networks actually lay out. -->
+<meta property="og:image" content="https://www.sahabaclub.ai/assets/og-events.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Sahaba Club — AI Events across the AI universe">
+<meta property="og:site_name" content="Sahaba Club">
+<meta property="og:type" content="website">
+<!-- Without this, X and several chat apps fall back to the small-thumbnail
+     layout even when the image is the right shape. -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Event organizers — Sahaba Club">
+<meta name="twitter:description" content="Hackathons, meetups and conferences from across the AI universe.">
+<meta name="twitter:image" content="https://www.sahabaclub.ai/assets/og-events.jpg">
+
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  .org-wrap { max-width: 1000px; margin: 0 auto; padding: 40px 20px 96px; }
+  .org-back { display: inline-block; font-size: 14px; color: var(--text-secondary); margin-bottom: 18px; }
+  .org-back:hover { color: var(--text); }
+  .org-state { color: var(--text-secondary); }
+
+  /* The identity block. Same shape whether or not there is a logo, so a row of
+     organizers does not shift about as artwork loads or fails. */
+  .org-head { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+  .org-logo, .org-logo-fallback {
+    width: 88px; height: 88px; border-radius: 18px; flex: 0 0 auto;
+    background: var(--glass); border: 1px solid var(--glass-border);
+  }
+  .org-logo { object-fit: contain; padding: 8px; }
+  .org-logo-fallback {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 34px; font-weight: 700; color: var(--text-secondary);
+  }
+  .org-name { margin: 0 0 8px; font-size: 32px; line-height: 1.2; }
+  .org-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .org-chip {
+    font-size: 13px; padding: 5px 11px; border-radius: 999px;
+    background: var(--glass); border: 1px solid var(--glass-border); color: var(--text-secondary);
+  }
+  /* #155e75 rather than --cyan: the same measurement the NEW badge needed —
+     light mode's --cyan on a filled chip is 3.88:1, under the 4.5:1 that small
+     bold text requires. This is 5.26:1. */
+  .org-partner { font-size: 11px; font-weight: 700; letter-spacing: .04em;
+                 text-transform: uppercase; color: #155e75; }
+  html.dark-mode .org-partner, :root:not(.light-mode) .org-partner { color: #67e8f9; }
+  .org-site { font-size: 14px; }
+
+  .org-section { margin: 40px 0 0; }
+  .org-section h2 { font-size: 20px; margin: 0 0 4px; }
+  .org-section-sub { margin: 0 0 16px; color: var(--text-muted); font-size: 14px; }
+
+  .org-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+  .org-card {
+    display: flex; flex-direction: column; border-radius: var(--radius);
+    background: var(--glass); border: 1px solid var(--glass-border); overflow: hidden;
+  }
+  .org-card:hover { border-color: var(--text-muted); }
+  /* Fixed aspect on both the picture and its stand-in, so a grid where only
+     some events have artwork keeps one baseline across the row. */
+  .org-card-art, .org-card-art-fallback { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; }
+  .org-card-art-fallback {
+    display: flex; align-items: center; justify-content: center;
+    font-size: 34px; background: var(--glass-border);
+  }
+  .org-card-body { padding: 12px 14px 14px; }
+  .org-card-when { margin: 0 0 4px; font-size: 12.5px; color: var(--text-muted); }
+  .org-card-title { margin: 0; font-size: 15px; line-height: 1.35; }
+  .org-card-where { margin: 6px 0 0; font-size: 12.5px; color: var(--text-secondary); }
+  .org-past .org-card-art, .org-past .org-card-art-fallback { opacity: .55; }
+
+  @media (max-width: 640px) {
+    .org-name { font-size: 25px; }
+    .org-logo, .org-logo-fallback { width: 64px; height: 64px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="stars" aria-hidden="true"></canvas>
+<div class="nebula-bg" aria-hidden="true"></div>
+<div class="noise-bg" aria-hidden="true"></div>
+
+<header class="nav has-drawer">
+  <div class="nav-inner">
+    <a href="index.html" class="logo" aria-label="Sahaba Club — home">
+      <img src="assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
+      <img src="assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
+    </a>
+    <div class="nav-actions">
+      <a href="app/dashboard.html" class="nav-link member-only">Dashboard</a>
+      <a href="app/inbox.html" class="nav-link member-only">Messages</a>
+      <a href="app/connect.html" class="nav-link">Connect</a>
+      <a href="events.html" class="nav-link">Events</a>
+      <a href="hackathons.html" class="nav-link">EduHackAI</a>
+      <a href="podcast.html" class="nav-link">Podcast</a>
+      <a href="app/admin/index.html" class="nav-link admin-hidden" id="nav-admin-link">Admin</a>
+      <a href="app/settings.html" class="nav-link member-only">Settings</a>
+      <a href="index.html" class="nav-link">Home</a>
+
+
+
+
+      <a href="login.html" class="btn btn-glow" data-identity-join>Join free</a>
+    </div>
+    <p class="nav-slogan" aria-label="The First AI Universe on the Earth">
+      <span>The First AI Universe</span>
+      <span>on the Earth</span>
+    </p>
+    <div class="nav-compact">
+      <!-- Signed out: the Join CTA, straight to the signup page. Signed in:
+           the member's avatar and name, linking to the dashboard. Which one
+           shows is decided by header-identity.js before the page paints. -->
+      <div class="nav-identity">
+        <a href="login.html" class="btn btn-glow nav-identity-join" data-identity-join>Join the Club</a>
+        <a href="app/dashboard.html" class="nav-identity-me" data-identity-me aria-label="Your dashboard">
+          <span class="nav-identity-avatar" data-identity-avatar aria-hidden="true"></span>
+          <span class="nav-identity-name" data-identity-name></span>
+        </a>
+      </div>
+      <button class="nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Runs synchronously, before first paint, so a signed-in member never sees
+     the Join CTA flash before their avatar. See the file for why not a module. -->
+<script src="header-identity.js?v=4c6535f7ff"></script>
+
+<!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
+<div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
+<nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
+  <div class="mobile-menu-panel">
+    <a class="mobile-menu-item" href="login.html" data-signin-link data-identity-join><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5M15 12H3"/></svg><span>Sign in</span></a>
+    <a class="mobile-menu-item is-primary" href="login.html" data-identity-join><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5M15 12H3"/></svg><span>Join the Club</span></a>
+    <a class="mobile-menu-item" href="index.html">Home</a>
+    <a class="mobile-menu-item member-only" href="app/dashboard.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></svg><span>Dashboard</span></a>
+    <a class="mobile-menu-item member-only" href="app/inbox.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.5 9.5 0 0 1-2.9-.4L4 21l1.4-4a8.1 8.1 0 0 1-1.4-4.5A8.4 8.4 0 0 1 12.6 3 8.4 8.4 0 0 1 21 11.5z"/></svg><span>Messages</span></a>
+    <a class="mobile-menu-item" href="app/connect.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="2.2"/><circle cx="5" cy="17" r="2.2"/><circle cx="19" cy="17" r="2.2"/><path d="M10.4 6.7 6.4 14.9M13.6 6.7l4 8.2M7.2 17h9.6"/></svg><span>Connect</span></a>
+    <a class="mobile-menu-item" href="events.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.4"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Events</span></a>
+    <a class="mobile-menu-item" href="hackathons.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 2.5 8.5 12 13l9.5-4.5L12 4z"/><path d="M6.5 10.8V15c0 1.6 2.5 2.9 5.5 2.9s5.5-1.3 5.5-2.9v-4.2"/><circle cx="12" cy="8.5" r="1"/></svg><span>EduHackAI</span></a>
+    <a class="mobile-menu-item" href="podcast.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v1M8 8v8M12 5v14M16 8v8M20 12v1"/></svg><span>Podcast</span></a>
+    <a class="mobile-menu-item admin-hidden" id="nav-admin-link-mobile" href="app/admin/index.html"><svg class="menu-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/></svg><span>Admin</span></a>
+
+    <button class="mobile-menu-item mobile-menu-expand" type="button" aria-expanded="false" aria-controls="submenu-settings">
+      <span>Settings</span>
+      <span class="mobile-menu-chevron" aria-hidden="true">&#9662;</span>
+    </button>
+    <div class="mobile-submenu" id="submenu-settings" hidden>
+      <div class="theme-choice-row">
+        <span class="theme-choice-label">Appearance</span>
+        <div class="theme-choice" role="group" aria-label="Appearance">
+          <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+          <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+        </div>
+      </div>
+      <div class="mobile-submenu-langs" role="group" aria-label="Language">
+        <span class="theme-choice-label">Language</span>
+        <button class="mobile-submenu-item is-active" type="button" data-lang="en">English</button>
+        <button class="mobile-submenu-item" type="button" data-lang="ar">
+          العربية <span class="mobile-soon">soon</span>
+        </button>
+      </div>
+      <label class="mobile-switch">
+        <span>Reduce motion</span>
+        <input type="checkbox" id="setting-reduce-motion">
+        <span class="mobile-switch-track" aria-hidden="true"><span class="mobile-switch-thumb"></span></span>
+      </label>
+      <p class="mobile-setting-note">Turns off the moving starfield and scrolling photo strip.</p>
+      <a class="mobile-submenu-item member-only" href="app/settings.html">All settings &rarr;</a>
+    </div>
+  </div>
+</nav>
+
+
+<main class="org-wrap">
+  <a class="org-back" href="events.html">&larr; All events</a>
+  <div id="org-root">
+    <p class="org-state">Loading&hellip;</p>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="footer-top">
+    <div class="footer-links">
+      <a href="index.html#about">About</a>
+      <a href="events.html">Events</a>
+      <a href="membership.html">Membership</a>
+      <a href="mailto:info@sahabaclub.com">Contact</a>
+      <a href="privacy.html">Privacy</a>
+    </div>
+    <div class="footer-social">
+      <a href="https://www.linkedin.com/company/sahabaclub/" target="_blank" rel="noopener" aria-label="LinkedIn">LinkedIn</a>
+      <a href="https://youtube.com/@sahabaclub" target="_blank" rel="noopener" aria-label="YouTube">YouTube</a>
+      <a href="https://www.facebook.com/Sahabaclub" target="_blank" rel="noopener" aria-label="Facebook">Facebook</a>
+      <a href="https://www.instagram.com/sahaba_club/" target="_blank" rel="noopener" aria-label="Instagram">Instagram</a>
+      <a href="https://www.tiktok.com/@zoka_alex" target="_blank" rel="noopener" aria-label="TikTok">TikTok</a>
+    </div>
+  </div>
+  <div class="footer-theme">
+    <span class="footer-theme-label" id="footer-theme-label">Appearance</span>
+    <div class="theme-choice" role="group" aria-labelledby="footer-theme-label">
+      <button type="button" class="theme-choice-btn is-active" data-theme="dark">Dark</button>
+      <button type="button" class="theme-choice-btn" data-theme="light">Light</button>
+    </div>
+  </div>
+  <p class="footer-signature">The First AI Universe on the Earth</p>
+  <p class="footer-watermark">Developed by Sahaba Club Technologies</p>
+</footer>
+
+
+<script type="module">
+  import { supabase } from "./lib/supabase-client.js?v=4c6535f7ff";
+
+  // ⚠ `var` throughout, and every binding declared before the first executing
+  // statement — the same rule event.html carries. There is a top-level await
+  // below, and a `const` after it would not exist while it ran.
+  var root = document.getElementById("org-root");
+  var params = new URLSearchParams(window.location.search);
+  var slug = (params.get("o") || "").trim();
+
+  var MONTHS = ["January","February","March","April","May","June",
+                "July","August","September","October","November","December"];
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function longDate(iso) {
+    if (!iso) return "";
+    var p = String(iso).split("-");
+    if (p.length < 3) return String(iso);
+    return parseInt(p[2], 10) + " " + MONTHS[parseInt(p[1], 10) - 1] + " " + p[0];
+  }
+
+  function state(html) { root.innerHTML = '<p class="org-state">' + html + "</p>"; }
+
+  function card(e, isPast) {
+    var art = e.image_url
+      ? '<img class="org-card-art" src="' + esc(e.image_url) + '" alt="" loading="lazy">'
+      : '<div class="org-card-art-fallback" aria-hidden="true">&#128197;</div>';
+    var where = e.mode === "Online" ? "Online" : (e.location || e.country || "");
+    return '<a class="org-card' + (isPast ? " org-past" : "") +
+           '" href="event.html?e=' + encodeURIComponent(e.slug) + '">' +
+           art +
+           '<div class="org-card-body">' +
+             '<p class="org-card-when">' + esc(longDate(e.event_date)) + "</p>" +
+             '<p class="org-card-title">' + esc(e.title) + "</p>" +
+             (where ? '<p class="org-card-where">' + esc(where) + "</p>" : "") +
+           "</div></a>";
+  }
+
+  function section(title, sub, list, isPast) {
+    if (!list.length) return "";
+    return '<section class="org-section"><h2>' + esc(title) + "</h2>" +
+           '<p class="org-section-sub">' + esc(sub) + "</p>" +
+           '<div class="org-grid">' + list.map(function (e) { return card(e, isPast); }).join("") +
+           "</div></section>";
+  }
+
+  function render(o, upcoming, past) {
+    document.title = o.name + " — events on Sahaba Club";
+
+    var logo = o.logo_url
+      ? '<img class="org-logo" src="' + esc(o.logo_url) + '" alt="">'
+      : '<div class="org-logo-fallback" aria-hidden="true">' +
+        esc((o.name || "?").slice(0, 1).toUpperCase()) + "</div>";
+
+    // ⚠ The organiser's own site opens in a new tab and is NOT the page title
+    // link. This page exists precisely because clicking an organiser used to
+    // leave the club's site entirely; sending them straight back out would
+    // undo it.
+    var site = o.website
+      ? '<a class="org-site" href="' + esc(o.website) +
+        '" target="_blank" rel="noopener">Visit their website &rarr;</a>'
+      : "";
+
+    var total = upcoming.length + past.length;
+    var count = total === 0
+      ? "No events listed yet"
+      : total + (total === 1 ? " event" : " events") + " on Sahaba Club";
+
+    root.innerHTML =
+      '<div class="org-head">' + logo +
+        "<div>" +
+          '<h1 class="org-name">' + esc(o.name) + "</h1>" +
+          '<div class="org-meta">' +
+            (o.category ? '<span class="org-chip">' + esc(o.category) + "</span>" : "") +
+            '<span class="org-chip">' + esc(count) + "</span>" +
+            (o.is_partner ? '<span class="org-partner">Club partner</span>' : "") +
+            site +
+          "</div>" +
+        "</div>" +
+      "</div>" +
+      section("Coming up", upcoming.length + (upcoming.length === 1 ? " event" : " events") +
+              " we know about", upcoming, false) +
+      section("Past events", past.length + (past.length === 1 ? " event" : " events") +
+              " already held", past, true) +
+      (total === 0
+        ? '<section class="org-section"><p class="org-state">Nothing from this organiser is ' +
+          'listed yet. <a href="events.html">Browse all events</a>.</p></section>'
+        : "");
+  }
+
+  // ---- Load ---------------------------------------------------------------
+
+  if (!slug) {
+    state('No organiser was named in the link. <a href="events.html">Browse all events</a>.');
+  } else {
+    var orgRes = await supabase
+      .from("organizers")
+      .select("id, slug, name, logo_url, website, category, is_partner")
+      .eq("slug", slug)
+      .maybeSingle();
+
+    if (orgRes.error) {
+      state("Couldn't load this organiser just now. Refreshing usually sorts it.");
+    } else if (!orgRes.data) {
+      state('That organiser isn\'t here — the link may be out of date. ' +
+            '<a href="events.html">Browse all events</a>.');
+    } else {
+      var org = orgRes.data;
+
+      // Two flat reads and a join here rather than one nested query — the same
+      // choice event.html makes, and for the same reason: the shapes stay
+      // obvious, and a failure in the event list must not take the organiser's
+      // own details down with it.
+      var linkRes = await supabase
+        .from("event_organizers")
+        .select("event_id")
+        .eq("organizer_id", org.id);
+
+      var ids = (linkRes.data || []).map(function (r) { return r.event_id; });
+
+      var upcoming = [];
+      var past = [];
+
+      if (ids.length) {
+        var evRes = await supabase
+          .from("events")
+          .select("slug, title, event_date, mode, country, location, image_url")
+          .in("id", ids)
+          .eq("is_published", true)
+          .order("event_date", { ascending: false });
+
+        var today = new Date().toISOString().slice(0, 10);
+        (evRes.data || []).forEach(function (e) {
+          if (e.event_date >= today) upcoming.push(e); else past.push(e);
+        });
+        // Soonest first for what is ahead; most recent first for what is done.
+        // One `order` cannot express both, and reversing in the page is cheaper
+        // than a second round trip.
+        upcoming.reverse();
+      }
+
+      render(org, upcoming, past);
+    }
+  }
+</script>
+
+<script src="analytics.js?v=4c6535f7ff"></script>
+<script src="script.js?v=4c6535f7ff"></script>
+<script defer src="lib/back-to-top.js?v=4c6535f7ff"></script>
+</body>
+</html>
