@@ -616,7 +616,7 @@
   // to build the admin menu, so the link and the page it opens can no longer
   // disagree. A new role that is granted a section gets the link with no change
   // here; a role granted nothing never sees it.
-  import("./lib/supabase-client.js?v=44b5321453").then(function (mod) {
+  import("./lib/supabase-client.js?v=4c6535f7ff").then(function (mod) {
     if (!mod.isConfigured) return null;
     return mod.supabase.auth.getSession().then(function (res) {
       if (!res.data.session) return null;
@@ -673,7 +673,7 @@
   );
   if (!links.length) return;
 
-  import("./lib/supabase-client.js?v=44b5321453").then(function (mod) {
+  import("./lib/supabase-client.js?v=4c6535f7ff").then(function (mod) {
     if (mod.isConfigured) return;
     links.forEach(function (link) {
       link.href = "mailto:info@sahabaclub.com?subject=Sahaba%20Club%20sign%20in";
@@ -710,12 +710,12 @@
 
   var notifications = null;
 
-  import("./lib/supabase-client.js?v=44b5321453")
+  import("./lib/supabase-client.js?v=4c6535f7ff")
     .then(function (client) {
       // A repo published before its Supabase project exists has no counts to
       // read and no session to read them with.
       if (!client.isConfigured) return null;
-      return import("./lib/auth.js?v=44b5321453").then(function (auth) {
+      return import("./lib/auth.js?v=4c6535f7ff").then(function (auth) {
         return auth.getSession();
       });
     })
@@ -725,7 +725,7 @@
       // made to wait on a request that can only ever return nothing.
       if (!session || !session.user) return null;
 
-      return import("./lib/notifications.js?v=44b5321453").then(function (mod) {
+      return import("./lib/notifications.js?v=4c6535f7ff").then(function (mod) {
         notifications = mod;
         return mod.refreshNavBadges().then(function () {
           // Opening a section reads it. Without this the count a member just
@@ -750,7 +750,7 @@
           // again after switching it on. It is a no-op when push was never
           // enabled here, and it never prompts: reconcile() returns early
           // unless permission is already granted.
-          return import("./lib/push.js?v=44b5321453").then(function (push) {
+          return import("./lib/push.js?v=4c6535f7ff").then(function (push) {
             push.reconcile();
             push.listenForResubscribe();
           }).catch(function () {
