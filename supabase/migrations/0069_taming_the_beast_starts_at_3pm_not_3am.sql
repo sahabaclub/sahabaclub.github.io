@@ -1,0 +1,81 @@
+-- 0069 — a PM read as AM: 03:00 should be 15:00
+-- ============================================================
+--
+-- "Taming the Beast: AI Governance Crash Course" (20 Aug 2026) carried
+-- `start_time_local = 03:00` while its own `time_label` reads:
+--
+--     "3:00 PM – 5:00 PM UAE Time (GST, UTC+4)"
+--
+-- Twelve hours out. The zone was right (Asia/Dubai) and the label states the
+-- answer in plain text; only the hour was wrong. Entered by hand — the importer
+-- refuses this event's page (a Microsoft Teams link, which hides everything
+-- from a server-side fetch), so nothing machine-read it.
+--
+-- ⚠ FOUND BY READING THE OUTPUT, NOT THE INPUT. Nothing flagged it: the value
+-- is a legal time, in a legal zone, on a real event. It surfaced only when
+-- 0067's verification listed what each pending reminder would SAY, and
+-- "3:00 AM Dubai time" is not a thing a governance crash course does.
+--
+-- Consequence had it stood: **two members** who marked themselves going would
+-- have been emailed at **01:00 Dubai** — the two-hour reminder for a 3am start
+-- — for an event that begins at three in the afternoon.
+--
+-- ⚠ WHY THIS IS A MIGRATION AND NOT A QUICK UPDATE IN THE SQL EDITOR. The same
+-- shape can exist on any hand-entered event, and the next person to find one
+-- should be able to see that it has happened before and how it was fixed. §2
+-- is the sweep for the rest.
+
+update public.events
+   set start_time_local = '15:00'   -- label: "3:00 PM – 5:00 PM UAE Time (GST, UTC+4)"
+ where slug = 'taming-the-beast-ai-governance-crash-course-2026'
+   and start_time_local = '03:00';
+
+-- ⚠ `starts_at` is not written here; 0066's trigger recomputes it from
+-- event_date + start_time_local + time_zone. Expect 2026-08-20T11:00:00+00.
+
+-- ============================================================
+-- 2. The sweep for the same mistake elsewhere
+-- ============================================================
+--
+-- Run this, do not assume. Any upcoming event whose stored hour is before noon
+-- while its own label says PM is the same error. It returns nothing today —
+-- which is the point of running it, and worth repeating after any batch of
+-- hand entry:
+--
+--   select left(title, 44) as event,
+--          start_time_local, time_zone, time_label
+--     from public.events
+--    where is_published
+--      and event_date >= current_date
+--      and start_time_local is not null
+--      and start_time_local < time '12:00'
+--      and time_label ~* '(^|[^a-z])pm([^a-z]|$)'
+--      and time_label !~* '(^|[^a-z])am([^a-z]|$)'
+--    order by event_date;
+--
+-- ⚠ The second condition matters: a label like "9:00 AM Feb 1 - 6:00 PM Feb 3"
+-- legitimately contains PM as the END of a range while starting in the morning,
+-- so a naive PM search reports it as broken. Excluding labels that also say AM
+-- keeps that one out.
+--
+-- ============================================================
+-- Verification
+-- ============================================================
+--
+-- 1. The row now reads as its own page does (expect 3:00 PM, 11:00Z):
+--
+--   select to_char(starts_at at time zone time_zone, 'FMHH12:MI AM') as reads_as,
+--          start_time_local, time_zone, starts_at, time_label
+--     from public.events
+--    where slug = 'taming-the-beast-ai-governance-crash-course-2026';
+--
+-- 2. What its two attendees will actually be sent, and when:
+--
+--   select to_char(e.starts_at at time zone e.time_zone, 'FMHH12:MI AM') as reads_as,
+--          e.starts_at - interval '2 hours' as reminder_fires_about,
+--          count(*) as going
+--     from public.events e
+--     join public.event_registrations reg
+--       on reg.event_id = e.id and reg.status = 'registered'
+--    where e.slug = 'taming-the-beast-ai-governance-crash-course-2026'
+--    group by e.starts_at, e.time_zone;
