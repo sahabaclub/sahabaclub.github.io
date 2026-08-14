@@ -57,6 +57,7 @@ const FILES = {
   derive: read("supabase/migrations/0066_event_start_time_is_enterable.sql"),
   form: read("app/admin/events.html"),
   importer: read("supabase/functions/import-event/index.ts"),
+  css: read("app/admin/admin.css"),
 };
 
 // ---- The four sides still agree -------------------------------------------
@@ -178,6 +179,21 @@ function runWiring(f, report) {
   report("the missing count ignores the search filter",
     /const missing = startTimeGaps\(\)/.test(f.form),
     "counting the filtered rows would hide the gap behind a search box");
+
+  // ⚠ THE ONE THAT ALMOST SHIPPED WRONG. Caught on the first live read, 14 Aug:
+  // the importer returns "" for a zone the page never states, the panel
+  // defaulted it to the club's zone, and the row showed it as if it had been
+  // found. 49 events would have been stamped Dubai on one press, an Egyptian
+  // online meetup among them.
+  report("AN ASSUMED ZONE IS RECORDED AS ASSUMED",
+    /zoneAssumed: !d\.draft\.time_zone/.test(f.form),
+    "a defaulted zone that looks like a found one is a guess wearing evidence's clothes");
+  report("and it is visible in the row",
+    /ad-st-assumed/.test(f.form) && /ad-st-assumed/.test(f.css),
+    "the caveat has to be on screen, not just in the data");
+  report("BULK APPLY REFUSES AN ASSUMED ZONE",
+    /const ready = all\.filter\(e => !stFound\[e\.id\]\.zoneAssumed\)/.test(f.form),
+    "a guess applied fifty at a time is how every Egyptian event ends up an hour out");
 }
 
 // ---- The column the whole thing fires on ----------------------------------
@@ -277,6 +293,16 @@ mustCatch("the importer's time clamp loosened to a clip",
 mustCatch("setZone removed",
   (r) => runWiring({ ...FILES, form: FILES.form.replace(/function setZone/g, "function unusedZone") }, r),
   "an unlisted zone is added rather than silently becoming Dubai");
+
+// The regression that nearly shipped: a defaulted zone shown as a found one.
+mustCatch("an assumed zone stops being marked",
+  (r) => runWiring({ ...FILES, form: FILES.form.replace(/zoneAssumed: !d.draft.time_zone/, "") }, r),
+  "AN ASSUMED ZONE IS RECORDED AS ASSUMED");
+
+mustCatch("bulk apply stops excluding assumed zones",
+  (r) => runWiring({ ...FILES, form: FILES.form.replace(
+    "const ready = all.filter(e => !stFound[e.id].zoneAssumed)", "const ready = all") }, r),
+  "BULK APPLY REFUSES AN ASSUMED ZONE");
 
 // The backfill quietly turning into an auto-apply.
 mustCatch("the backfill writes a whole event instead of two columns",

@@ -152,6 +152,14 @@ td.ad-num, th.ad-num { text-align: right; font-variant-numeric: tabular-nums; }
 .ad-cell-strong { font-weight: 600; }
 .ad-cell-dim { color: var(--ad-text-3); font-size: 13px; }
 
+/* A start time whose ZONE the source page never stated, so it fell back to the
+   club's own. It has to read as a caveat rather than as a result — the whole
+   point is that it is distinguishable at a glance from a zone actually found.
+   #b45309 on the panel background measures 4.9:1, above the 4.5:1 that 12px
+   text needs; the lighter amber that reads better here fails it. */
+.ad-st-assumed { color: #b45309; font-size: 12px; margin-top: 2px; line-height: 1.35; }
+html.dark-mode .ad-st-assumed { color: #fbbf24; }
+
 /* ---- Pills: state shown as shape, not just colour ---- */
 .ad-pill {
   display: inline-flex; align-items: center; gap: 5px;

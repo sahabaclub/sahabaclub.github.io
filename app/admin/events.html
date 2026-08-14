@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=4c6535f7ff">
+<link rel="stylesheet" href="admin.css?v=f0eaba8a71">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -399,10 +399,10 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=4c6535f7ff";
-  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=4c6535f7ff";
+  import { supabase } from "../../lib/supabase-client.js?v=f0eaba8a71";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=f0eaba8a71";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js?v=4c6535f7ff";
+    from "../../lib/admin-guard.js?v=f0eaba8a71";
 
   const user = await requireStaff("events");
   if (!user) throw new Error("not staff");
@@ -706,8 +706,17 @@
         action = '<button class="ad-btn ad-btn-sm" data-st-read="' + e.id + '">Retry</button>';
       } else {
         found = "<strong>" + escapeHtml(f.start_time_local) + "</strong> " +
-                '<span class="ad-cell-dim">' + escapeHtml(f.time_zone) + "</span>";
-        action = '<button class="ad-btn ad-btn-sm ad-btn-primary" data-st-apply="' + e.id + '">Apply</button>';
+                '<span class="ad-cell-dim">' + escapeHtml(f.time_zone) + "</span>" +
+                (f.zoneAssumed
+                  ? '<div class="ad-st-assumed">zone not stated on the page — ' +
+                    'assumed. Check before applying.</div>'
+                  : "");
+        // ⚠ Still individually appliable. An assumed zone is often right — most
+        // of these events are UAE — and refusing the press outright would just
+        // send somebody to the form to type the same thing. What it must not be
+        // is applied FORTY-NINE AT A TIME without anybody reading it.
+        action = '<button class="ad-btn ad-btn-sm' + (f.zoneAssumed ? "" : " ad-btn-primary") +
+                 '" data-st-apply="' + e.id + '">Apply</button>';
       }
       return "<tr>" +
         '<td class="ad-cell-strong">' + escapeHtml(e.title) + "</td>" +
@@ -739,12 +748,24 @@
       } else if (!d.draft || !d.draft.start_time_local) {
         stFound[e.id] = { error: "no start time stated on the page" };
       } else {
+        // ⚠⚠ FOUND AND ASSUMED ARE DIFFERENT FACTS, AND THIS ROW MUST SAY WHICH.
+        //
+        // The importer returns "" for the zone when the page does not state one
+        // — it is instructed never to guess, and it honours that. The first
+        // version of this panel then defaulted to the club's zone and displayed
+        // the result as though the model had found it. Caught on the very first
+        // read, 14 Aug: an ONLINE meetup run by the Egypt Azure Community came
+        // back `time_zone: ""` and was shown as "19:00 Asia/Dubai" — an hour
+        // wrong, and indistinguishable on screen from a zone actually read off
+        // the page. Pressing "Apply all found" would have stamped 49 events
+        // that way.
+        //
+        // The default itself is kept — most of these events are UAE and a blank
+        // helps nobody — but it is now labelled, and bulk apply refuses it.
         stFound[e.id] = {
           start_time_local: d.draft.start_time_local,
-          // The importer returns "" when the city is unclear rather than
-          // guessing. The club's own zone is the honest default, and the person
-          // applying it can see the event's country in the row above.
           time_zone: d.draft.time_zone || "Asia/Dubai",
+          zoneAssumed: !d.draft.time_zone,
         };
       }
     } catch (err) {
@@ -997,20 +1018,33 @@
 
   document.getElementById("ad-st-applyall").addEventListener("click", async function (ev) {
     const btn = ev.currentTarget;
-    const ready = startTimeGaps().filter(e => stFound[e.id] && !stFound[e.id].error);
+    // ⚠ ASSUMED ZONES ARE EXCLUDED FROM BULK APPLY, deliberately. See stRead:
+    // a zone the page never stated is a guess, and a guess applied fifty at a
+    // time is how every Egyptian event ends up an hour out with nobody having
+    // read a single row. They stay appliable one at a time.
+    const all = startTimeGaps().filter(e => stFound[e.id] && !stFound[e.id].error);
+    const ready = all.filter(e => !stFound[e.id].zoneAssumed);
+    const assumed = all.length - ready.length;
     if (!ready.length) {
-      showMessage("ad-st-msg", "Nothing read yet — press Read all first.", "err");
+      showMessage("ad-st-msg", all.length
+        ? assumed + " read, but every one had NO time zone on the page. Apply those " +
+          "individually after checking each — bulk apply will not guess for you."
+        : "Nothing read yet — press Read all first.", "err");
       return;
     }
     if (!confirm("Apply " + ready.length + " start time" + (ready.length === 1 ? "" : "s") +
-                 "? Members who said they are going will be emailed two hours before each.")) return;
+                 " whose time zone was stated on the page?" +
+                 (assumed ? "\n\n" + assumed + " more had no zone stated and are NOT included — " +
+                            "apply those one at a time after checking." : "") +
+                 "\n\nMembers who said they are going will be emailed two hours before each.")) return;
     btn.disabled = true;
     let saved = 0;
     for (const e of ready) if (await stApply(e)) saved++;
     await loadEvents();
     stRender();
     btn.disabled = false;
-    showMessage("ad-st-msg", saved + " saved.", "info");
+    showMessage("ad-st-msg", saved + " saved." +
+      (assumed ? " " + assumed + " left for you: no time zone on the page." : ""), "info");
   });
 
   document.getElementById("src-manual").addEventListener("click", function () {
@@ -1272,6 +1306,6 @@
   // would otherwise see an empty list and save it as "no organizers".
   loadOrganizers().then(loadEvents);
 </script>
-<script defer src="../../lib/back-to-top.js?v=4c6535f7ff"></script>
+<script defer src="../../lib/back-to-top.js?v=f0eaba8a71"></script>
 </body>
 </html>
