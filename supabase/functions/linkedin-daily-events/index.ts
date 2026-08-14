@@ -52,13 +52,27 @@ const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "Sahaba Club <members@sahabac
 // rather than the service role key.
 const SENDER_TOKEN = Deno.env.get("SENDER_TOKEN") ?? "";
 
-// ⚠ RECIPIENTS ARE A SECRET, NOT A CONSTANT, and there is a specific reason.
-// `ghadir@sahabaclub.com` is the address Ahmed asked for and NOBODY HAS
-// CONFIRMED IT EXISTS — it is not in `ms365_accounts`, where every other club
-// mailbox is. Her verified address is the gmail one. Both are here so the
-// brief cannot vanish into a mailbox that was never created, and they are a
-// secret so that can be corrected in one command without a deploy.
-const BRIEF_TO = (Deno.env.get("BRIEF_TO") ?? "ghadir@sahabaclub.com,ghadeer.aldesouky@gmail.com")
+// ⚠⚠ RECIPIENTS ARE A SECRET, AND UNTIL 14 AUG THAT WAS ONLY HALF TRUE.
+//
+// The comment here said recipients were a secret "so they can be corrected in
+// one command without a deploy" — but `BRIEF_TO` had never actually been set,
+// so the fallback below WAS the live recipient list. And the fallback named a
+// colleague's PERSONAL GMAIL ADDRESS, in a repository that is public and
+// served from raw.githubusercontent.com. It was fetchable by anyone.
+//
+// `BRIEF_TO` is now set as a real secret (from a file outside the repo, then
+// deleted — never `secrets set KEY=value`, which persists in shell history).
+// The fallback is the club address ALONE: still a sane destination if the
+// secret is ever cleared, and not somebody's private mail.
+//
+// ⚠ DO NOT PUT A PERSONAL ADDRESS BACK HERE. If the brief needs to reach one,
+// it goes in the secret. A default in this file is published.
+//
+// ⚠ The original worry stands and is why both addresses are in the secret:
+// `ghadir@sahabaclub.com` is what Ahmed asked for and nobody has confirmed the
+// mailbox exists — it is not in `ms365_accounts`. The gmail guarantees delivery
+// until the tenant is checked; drop it from the secret once it is.
+const BRIEF_TO = (Deno.env.get("BRIEF_TO") ?? "ghadir@sahabaclub.com")
   .split(",").map((s) => s.trim()).filter(Boolean);
 const BRIEF_CC = (Deno.env.get("BRIEF_CC") ?? "ahmed@sahabaclub.com")
   .split(",").map((s) => s.trim()).filter(Boolean);

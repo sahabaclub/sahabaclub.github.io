@@ -311,12 +311,20 @@ naming other organisations' events is where a person should be.
 senders. Two more control the recipients, so an address can be changed in one
 command with no deploy:
 
+⚠ **Write the addresses to a file outside this repository and set from the
+file** — `secrets set KEY=value` puts them in your shell history, and this repo
+is public. A personal address in a `BRIEF_TO=` example is a personal address on
+GitHub.
+
 ```bash
-supabase secrets set \
-  BRIEF_TO=ghadir@sahabaclub.com,ghadeer.aldesouky@gmail.com \
-  BRIEF_CC=ahmed@sahabaclub.com \
-  --project-ref sobxhcsgtimtiqtvqbag
+supabase secrets set --env-file C:\sctools\brief.env --project-ref sobxhcsgtimtiqtvqbag
 ```
+
+…where `brief.env` holds `BRIEF_TO=…` and `BRIEF_CC=…`, one per line, and is
+deleted afterwards. `BRIEF_TO` **is set** as of 14 Aug; before that it was
+unset, so the fallback inside `linkedin-daily-events` was the live recipient
+list — and that fallback named a personal address, in public. It no longer
+does.
 
 ⚠ **Both of Ghadir's addresses are in `BRIEF_TO` on purpose.**
 `ghadir@sahabaclub.com` is the address Ahmed asked for and **nothing has
