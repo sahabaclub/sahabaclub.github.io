@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=4c6535f7ff">
+<link rel="stylesheet" href="../styles.css?v=f0eaba8a71">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -115,7 +115,7 @@
   </div>
 </nav>
 
-<script src="../header-identity.js?v=4c6535f7ff"></script>
+<script src="../header-identity.js?v=f0eaba8a71"></script>
 
 <main class="set-wrap">
   <div class="set-head">
@@ -263,15 +263,15 @@
 </main>
 
 <script type="module">
-  import { supabase } from "../lib/supabase-client.js?v=4c6535f7ff";
-  import { getSession, signOut } from "../lib/auth.js?v=4c6535f7ff";
+  import { supabase } from "../lib/supabase-client.js?v=f0eaba8a71";
+  import { getSession, signOut } from "../lib/auth.js?v=f0eaba8a71";
   import {
     fetchKinds, fetchOptOuts, setOptOut, refreshNavBadges,
-  } from "../lib/notifications.js?v=4c6535f7ff";
+  } from "../lib/notifications.js?v=f0eaba8a71";
   import {
     pushUnavailableReason, enablePush, disablePush, isSubscribedHere,
     deviceCount, reconcile, listenForResubscribe,
-  } from "../lib/push.js?v=4c6535f7ff";
+  } from "../lib/push.js?v=f0eaba8a71";
 
   var session = await getSession();
   if (!session) {
@@ -665,7 +665,7 @@
     paintMaster();
   })();
 </script>
-<script src="../script.js?v=4c6535f7ff"></script>
-<script defer src="../lib/back-to-top.js?v=4c6535f7ff"></script>
+<script src="../script.js?v=f0eaba8a71"></script>
+<script defer src="../lib/back-to-top.js?v=f0eaba8a71"></script>
 </body>
 </html>
