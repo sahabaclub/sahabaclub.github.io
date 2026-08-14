@@ -303,7 +303,7 @@ function renderTemplate(template: TemplateName, data: Record<string, unknown>) {
 
           <tr><td style="padding:30px 32px 26px;background:#12102b">
             <div style="font-size:19px;font-weight:700;color:#ffffff;letter-spacing:.2px">Sahaba Club</div>
-            <div style="font-size:12px;color:#a9a3d6;margin-top:5px">The First AI Universe on the Earth</div>
+            <div style="font-size:12px;color:#a9a3d6;margin-top:5px">The First AI Universe on Earth</div>
           </td></tr>
 
           <tr><td style="padding:34px 32px 8px">

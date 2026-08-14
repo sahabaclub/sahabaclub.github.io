@@ -1,7 +1,7 @@
 {
   "name": "Sahaba Club",
   "short_name": "Sahaba Club",
-  "description": "The First AI Universe on the Earth.",
+  "description": "The First AI Universe on Earth.",
   "id": "/",
   "start_url": "/app/dashboard.html",
   "scope": "/",
