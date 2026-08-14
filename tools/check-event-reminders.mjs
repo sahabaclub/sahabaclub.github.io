@@ -155,6 +155,10 @@ function runWiring(f, report) {
   report("the importer hands both back to the form",
     /start_time_local: evt\.start_time_local/.test(f.importer) &&
     /time_zone: evt\.time_zone/.test(f.importer));
+  report("THE ZONE IS LIFTED FROM THE PAGE, NOT INFERRED",
+    /const statedZone = tzMatch/.test(f.importer) &&
+    /Stated time zone \(IANA, taken from the page\)/.test(f.importer),
+    "schema.org gives only an offset, and +03:00 is Cairo, Riyadh, Nairobi and Moscow alike");
 
   // ---- the backfill panel, which no test can click ----
   //
@@ -293,6 +297,10 @@ mustCatch("the importer's time clamp loosened to a clip",
 mustCatch("setZone removed",
   (r) => runWiring({ ...FILES, form: FILES.form.replace(/function setZone/g, "function unusedZone") }, r),
   "an unlisted zone is added rather than silently becoming Dubai");
+
+mustCatch("the page-stated zone extraction removed",
+  (r) => runWiring({ ...FILES, importer: FILES.importer.replace(/const statedZone = tzMatch/, "const x = tzMatch") }, r),
+  "THE ZONE IS LIFTED FROM THE PAGE, NOT INFERRED");
 
 // The regression that nearly shipped: a defaulted zone shown as a found one.
 mustCatch("an assumed zone stops being marked",

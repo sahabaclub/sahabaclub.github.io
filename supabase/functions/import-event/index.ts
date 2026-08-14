@@ -174,8 +174,8 @@ const EVENT_SCHEMA = {
     // descriptions say "never guess" for that reason, and clampEvent throws
     // away anything that is not exactly the right shape — a half-read time is
     // worse than none, because none simply means no reminder.
-    start_time_local: { type: "string", description: "The START time only, as 24-hour HH:MM in the event's own local time, e.g. '18:30' for 6:30 PM. Take only the start of a range. Empty string if the page does not state a start time — never guess or round." },
-    time_zone: { type: "string", description: "The IANA time zone the start time is local to, inferred from the venue city, e.g. 'Asia/Dubai' for Dubai, 'Africa/Cairo' for Cairo. Empty string for an online event with no stated zone, or if the city is unclear — never guess." },
+    start_time_local: { type: "string", description: "The START time only, as 24-hour HH:MM, in the event's OWN local time. Take only the start of a range. If the structured data gives a startDate such as '2026-08-18T19:00:00+03:00', the answer is '19:00' — read the clock time as written and do NOT convert it to another zone. Empty string if the page does not state a start time — never guess or round." },
+    time_zone: { type: "string", description: "The IANA time zone that start_time_local is expressed in. FIRST look in the structured data: a schema.org Event carries a 'timezone' field such as 'Africa/Cairo', and its 'startDate' carries an offset such as '+03:00'. Use that whenever it is present — INCLUDING for online events, which usually state a zone even though they have no venue. Only if the structured data has neither, infer it from the venue city, e.g. 'Asia/Dubai' for Dubai. Empty string only when the page states nothing at all — never guess." },
     location: { type: "string", description: `Venue and area, e.g. 'Gate Avenue, DIFC'. Empty string for online events or if not stated. At most ${B.location} characters.` },
     country: { type: "string", description: `Country, e.g. 'UAE'. Empty string if not stated and not inferable from the venue. At most ${B.country} characters.` },
     mode: { type: "string", enum: ["In-Person", "Online"], description: "Online covers webinars and livestreams. Anything with a physical venue is In-Person." },
@@ -581,11 +581,30 @@ async function readPage(url: string) {
   let m: RegExpExecArray | null;
   while ((m = ldRe.exec(html)) !== null) jsonLd.push(m[1].trim());
 
+  // ⚠ THE TIME ZONE IS PULLED OUT BY REGEX, NOT LEFT TO THE MODEL, and this was
+  // measured rather than assumed (14 Aug). Meetup's schema.org block gives only
+  // `"startDate":"2026-08-18T19:00:00+03:00"` — an OFFSET. +03:00 is Cairo,
+  // Riyadh, Nairobi and Moscow alike, so naming an IANA zone from it is a guess,
+  // and the model correctly refused: it returned "" for 11 of 11 online events
+  // and the panel had to mark every one "assumed".
+  //
+  // The IANA name IS on the page, just not in the JSON-LD — it sits in the
+  // framework's own data blob as `"timezone":"Africa/Cairo"`. Lifting it with a
+  // regex turns a guess into a quoted fact, which is the whole difference
+  // between a reminder that arrives on time and one that is an hour out.
+  //
+  // Deliberately narrow: Area/City only, so a stray `"timezone":"local"` or a
+  // bare offset does not match and the field stays empty rather than wrong.
+  const tzMatch = html.match(/"time_?[zZ]one"\s*:\s*"([A-Za-z]+\/[A-Za-z0-9_+-]+)"/);
+  const statedZone = tzMatch ? tzMatch[1] : "";
+
   const parts = [
     meta(html, "og:title") ? "Title: " + meta(html, "og:title") : "",
     meta(html, "og:site_name") ? "Site: " + meta(html, "og:site_name") : "",
     meta(html, "og:description") ? "Summary: " + meta(html, "og:description") : "",
     meta(html, "description") ? "Description: " + meta(html, "description") : "",
+    // Stated ahead of the structured data so the model reads it as a given.
+    statedZone ? "Stated time zone (IANA, taken from the page): " + statedZone : "",
     jsonLd.length ? "Structured data:\n" + jsonLd.join("\n").slice(0, 12000) : "",
     "Page text:\n" + textOf(html),
   ].filter(Boolean);
