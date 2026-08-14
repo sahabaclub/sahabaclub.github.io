@@ -3,6 +3,17 @@
 //   node tools/apply-drawer.mjs          report
 //   node tools/apply-drawer.mjs --apply  write
 //
+// ⚠ RE-RUN UNTIL IT REPORTS 0. This tool is not idempotent in one pass: the
+// toggle-removal regex consumes the newline after </button> and the re-insert
+// puts one back in a slightly different place, so a page can settle over two or
+// three runs. Measured 14 Aug on the eight app/* pages: 8 changes, then 3, then
+// 0. It converges — it just does not converge immediately, and a single run
+// leaving "3 change(s)" is not a failure.
+//
+// ⚠ Every one of those changes was a BLANK LINE. If a run ever reports changes
+// that are not whitespace, read the diff before applying: that is real drift
+// between the tool and the pages, and it is worth knowing why.
+//
 // ============================================================
 // Why
 // ============================================================
