@@ -48,7 +48,10 @@ const SUPABASE_URL = "https://sobxhcsgtimtiqtvqbag.supabase.co";
 const PUBLISHABLE = "sb_publishable_uYzve3z4wfLF_-9fTH67Og_PJ6EhHm4";
 
 const FILES = {
-  sweep: read("supabase/migrations/0065_event_reminder_two_hours.sql"),
+  // ⚠ 0067, NOT 0065. Both define sweep_event_reminders() and the later one is
+  // what the database actually runs — asserting against 0065 would pass happily
+  // against a definition that has been replaced.
+  sweep: read("supabase/migrations/0067_reminder_speaks_the_event_s_own_zone.sql"),
   kinds: read("supabase/migrations/0044_notification_core.sql"),
   sender: read("supabase/functions/send-notification-emails/index.ts"),
   mailer: read("supabase/functions/send-transactional-email/index.ts"),
@@ -76,9 +79,12 @@ function runWiring(f, report) {
   report("the link goes to the event's own page",
     /'\/event\.html\?e=' \|\| r\.slug/.test(f.sweep),
     "a reminder landing on the events list wasted the click");
-  report("the local time is rendered in a NAMED zone",
-    /at time zone 'Asia\/Dubai'/.test(f.sweep) && /Dubai time/.test(f.sweep),
-    "to_char on a timestamptz uses the session zone — UTC under pg_cron");
+  report("the time is rendered in the EVENT's own zone, and named",
+    /at time zone v_zone/.test(f.sweep) && /split_part\(v_zone, '\/', -1\)/.test(f.sweep),
+    "the club's zone tells a Cairo attendee an hour later than the event's own page does");
+  report("a missing zone falls back to the club, never to UTC",
+    /coalesce\(nullif\(r\.time_zone, ''\), 'Asia\/Dubai'\)/.test(f.sweep),
+    "to_char with a null zone renders the session zone, which is UTC under pg_cron");
   report("the dedupe key is unchanged from 0045",
     /'event-soon:' \|\| r\.event_id::text/.test(f.sweep),
     "changing it re-reminds anyone already reminded under the old rule");
@@ -278,9 +284,15 @@ mustCatch("the events@ sender removed",
   "IT SENDS FROM events@sahabaclub.com");
 
 // Somebody "tidying" the zone conversion away, which reads as a UTC clock time.
-mustCatch("the time zone conversion removed",
-  (r) => runWiring({ ...FILES, sweep: FILES.sweep.replace(/ at time zone 'Asia\/Dubai'/g, "") }, r),
-  "the local time is rendered in a NAMED zone");
+// The regression this migration exists to prevent: back to the club's zone, so
+// a Cairo event's reminder reads an hour later than the event's own page.
+mustCatch("the reminder reverts to the club's zone",
+  (r) => runWiring({ ...FILES, sweep: FILES.sweep.replace(/at time zone v_zone/g, "at time zone 'Asia/Dubai'") }, r),
+  "the time is rendered in the EVENT's own zone, and named");
+
+mustCatch("the null-zone fallback removed",
+  (r) => runWiring({ ...FILES, sweep: FILES.sweep.replace(/coalesce\(nullif\(r\.time_zone, ''\), 'Asia\/Dubai'\)/, "r.time_zone") }, r),
+  "a missing zone falls back to the club, never to UTC");
 
 // The form quietly writing the derived column, which reads as working and is not.
 mustCatch("the form starts writing starts_at itself",
