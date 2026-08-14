@@ -39,3 +39,14 @@ vapid*.json
 # outside the repo, or accept that this line is what stands between you and
 # publishing a dependency tree.
 node_modules/
+
+# Generated email previews. `tools/preview-emails.mjs` renders every template to
+# emails/preview.html so a human can look at them.
+#
+# ⚠ IGNORED BECAUSE THIS REPO IS THE LIVE SITE. Anything committed here is
+# served from sahabaclub.ai, so a committed preview.html would publish the
+# club's transactional emails — including a sample Microsoft 365 credential
+# block — at a guessable URL. The templates themselves are worth reading in
+# source; the rendered output is regenerable in one command and does not belong
+# on the public web.
+emails/preview.html

@@ -61,6 +61,11 @@ const FILES = {
   form: read("app/admin/events.html"),
   importer: read("supabase/functions/import-event/index.ts"),
   css: read("app/admin/admin.css"),
+  // The link validation moved here on 14 Aug when the email frame was built.
+  // It used to be an inline regex inside the event_reminder template; it is now
+  // safeUrl() in the shared frame, which means it guards EVERY template rather
+  // than the two that happened to have remembered it.
+  frame: read("supabase/functions/_shared/email-frame.ts"),
 };
 
 // ---- The four sides still agree -------------------------------------------
@@ -122,9 +127,29 @@ function runWiring(f, report) {
   // would pass while this template trusted anything it was handed.
   const block = f.mailer.slice(f.mailer.indexOf('template === "event_reminder"'));
   const body = block.slice(0, block.indexOf("// \"welcome\""));
+  // ⚠ BOTH HALVES, because the validation now lives somewhere else.
+  //
+  // This used to assert on an inline `safePath` regex inside this template. On
+  // 14 Aug that moved into safeUrl() in _shared/email-frame.ts, so the old
+  // assertion failed while the behaviour was intact — and worse, asserting only
+  // that the template CALLS safeUrl would pass against a safeUrl that validated
+  // nothing. So: the template must call it, and it must actually reject.
   report("the reminder's link is validated, not trusted",
-    body !== "" && /safePath/.test(body) && /test\(rawHref\)/.test(body),
+    body !== "" && /safeUrl\(data\.href\)/.test(body),
     "this link carries the club's own DKIM signature");
+  // Substring checks, not regexes. The first version of this used a regex to
+  // match the source of another regex, and lost a backslash to escaping in
+  // every attempt. These fragments are distinctive and have nothing to escape.
+  const FRAME_MUST = [
+    ["export function safeUrl", "the shared validator exists at all"],
+    ["charCodeAt(i) <= 0x20", "control characters and spaces are rejected"],
+    ["return SITE + raw;", "a site-relative path is accepted"],
+    ["startsWith(`${SITE}/`)", "an absolute URL is accepted only on our own host"],
+  ];
+  report("and safeUrl actually rejects what is not ours",
+    FRAME_MUST.every(([frag]) => f.frame.includes(frag)) &&
+    f.frame.includes('return "";'),
+    "a safeUrl that returned its input unchanged would pass the check above");
 
   // ---- and something can actually put a start time in ----
 

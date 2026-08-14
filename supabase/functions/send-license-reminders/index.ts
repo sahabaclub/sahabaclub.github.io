@@ -24,6 +24,11 @@
 // Secrets: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, RESEND_FROM
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+// The club's one email design. This function used to carry its own — a light
+// card with a #7c3aed purple button, which matched neither the site nor the
+// other five senders. The local escapeHtml() went with it: the block builders
+// escape their own inputs, so there is one escaper now instead of three.
+import { bullets, callout, note, p, panel, renderEmail } from "../_shared/email-frame.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -146,65 +151,58 @@ function firstName(full?: string | null) {
 function renderReminder(d: { name: string; mailbox: string; days: number }) {
   const { name, mailbox, days } = d;
 
-  const when = days <= 1 ? "tomorrow"
-             : days <= 7 ? "in " + days + " days"
-             : "in " + days + " days";
+  const when = days <= 1 ? "tomorrow" : "in " + days + " days";
 
   const subject = days <= 1
     ? "Your Microsoft 365 account ends tomorrow"
-    : days <= 7
-      ? "Your Microsoft 365 account ends in " + days + " days"
-      : "Your free Microsoft 365 ends " + when;
+    : "Your Microsoft 365 account ends in " + days + " days";
 
-  // The pitch is what they lose and what they've built, not a discount code.
-  // Someone who has been using the mailbox for three months has files in it.
-  const urgency = days <= 7
-    ? `<p style="margin:0 0 16px;padding:12px 14px;background:#fff6e5;border-left:3px solid #e0a83e;">
-         After it ends, your files stay safe for another three months but you
-         won't be able to sign in. Upgrading any time before then keeps everything
-         exactly as it is.</p>`
-    : "";
+  // The pitch is what they lose and what they have built, not a discount code.
+  // Someone who has used the mailbox for three months has files in it.
+  const blocks = [
+    p("Hi " + firstName(name) + ","),
+    p("Your free Microsoft 365 account ends " + when + "."),
+    panel([{ label: "Mailbox", value: mailbox }, { label: "Ends", value: when }]),
+  ];
 
-  const html = `
-    <div style="font-family:-apple-system,Segoe UI,sans-serif;max-width:520px;color:#1a1d26;line-height:1.6;">
-      <p>Hi ${escapeHtml(name)},</p>
+  if (days <= 7) {
+    blocks.push(callout(
+      "After it ends, your files stay safe for another three months",
+      "but you will not be able to sign in. Upgrading any time before then keeps " +
+        "everything exactly as it is.",
+    ));
+  }
 
-      <p>Your free Microsoft 365 account — <strong>${escapeHtml(mailbox)}</strong> —
-         ends <strong>${when}</strong>.</p>
+  blocks.push(
+    p("Sahaba Club Premium is $10 a month and keeps it running, along with:"),
+    bullets([
+      { text: "Your Microsoft 365 account, for as long as you are a member" },
+      { text: "Discounts on paid events, hackathons and 1:1 coaching" },
+      { text: "Premium-only events and sessions" },
+    ]),
+    note(
+      "Not ready? That is fine — your Sahaba Club membership stays free forever, and you " +
+        "keep full access to events, your profile and the community.",
+    ),
+  );
 
-      ${urgency}
-
-      <p>Sahaba Club Premium is <strong>$10 a month</strong> and keeps it running, along with:</p>
-
-      <ul style="padding-left:18px;">
-        <li>Your Microsoft 365 account, for as long as you're a member</li>
-        <li>Discounts on paid events, hackathons and 1:1 coaching</li>
-        <li>Premium-only events and sessions</li>
-      </ul>
-
-      <p style="margin:26px 0;">
-        <a href="${SITE}/membership.html"
-           style="background:#7c3aed;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-weight:600;display:inline-block;">
-          Go Premium — $10/month
-        </a>
-      </p>
-
-      <p style="color:#5a6172;font-size:14px;">
-        Not ready? That's fine — your Sahaba Club membership stays free forever, and you
-        keep full access to events, your profile and the community.
-      </p>
-
-      <p style="color:#5a6172;font-size:14px;">— Sahaba Club</p>
-    </div>
-  `;
+  // ⚠ NOT MARKETING, despite the price in it. This goes only to members whose
+  // own licence is expiring, it is about their account rather than an offer,
+  // and there is nothing to unsubscribe from — the reminder stops when the
+  // licence does. Passing unsubscribeUrl here would demand a postal address and
+  // put an opt-out on a service notice, which is the wrong shape for both.
+  const html = renderEmail({
+    preheader: "Your free Microsoft 365 account ends " + when + ".",
+    eyebrow: "Membership",
+    title: subject,
+    blocks,
+    cta: { label: "Go Premium — $10/month", url: "/membership.html" },
+    footerReason:
+      "You are getting this because the free Microsoft 365 licence on your Sahaba Club " +
+      "membership is close to its end date.",
+  });
 
   return { subject, html };
-}
-
-function escapeHtml(s: string) {
-  return String(s).replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string)
-  );
 }
 
 function json(body: unknown, status = 200) {

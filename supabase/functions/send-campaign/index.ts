@@ -18,6 +18,10 @@
 //   RESEND_API_KEY, RESEND_FROM
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+// The club's one email design. This function used to emit its own light-themed
+// wrapper with #111827 text and a grey hairline footer, matching neither the
+// site nor the other senders.
+import { canSendMarketing, paragraphs, renderEmail } from "../_shared/email-frame.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -100,6 +104,27 @@ Deno.serve(async (req) => {
 
     if (!RESEND_API_KEY) {
       return json({ error: "Email sending isn't configured. Set RESEND_API_KEY." }, 503);
+    }
+
+    // ⚠ ASKED HERE, BEFORE ANY ROW IS CLAIMED, and deliberately before the test
+    // branch too. A campaign is legally marketing, so the frame refuses to build
+    // one without a postal address. Left to renderEmail, that refusal would
+    // arrive per-recipient, AFTER the batch was claimed and marked 'sending' —
+    // every one failing with the same fixable cause, and the rows needing the
+    // ten-minute stale escape to recover.
+    //
+    // It gates the TEST send as well, which is the point rather than an
+    // oversight: a test passes no unsubscribe token, so it is not marketing, so
+    // it would render perfectly and tell you nothing — and the real send would
+    // then fail on all 900 people. Discovering it on the test is the entire job
+    // of the test.
+    if (!canSendMarketing()) {
+      return json({
+        error:
+          "No postal address is set, and marketing email legally requires one. " +
+          "Set the POSTAL_ADDRESS secret on the Supabase project and redeploy " +
+          "send-campaign. Nothing has been sent and no recipient was touched.",
+      }, 503);
     }
 
     const body = await req.json().catch(() => ({}));
@@ -430,20 +455,38 @@ async function sendOne(opts: {
     ? `${opts.text}\n\n—\nYou're receiving this because you registered for a Sahaba Club event.\nUnsubscribe: ${unsubUrl}`
     : opts.text;
 
-  const html = unsubUrl
-    ? `${toHtml(opts.text)}<hr style="border:none;border-top:1px solid #e5e7eb;margin:26px 0 14px;">` +
-      `<p style="font-size:12px;color:#6b7280;line-height:1.6;margin:0;">` +
-      `You're receiving this because you registered for a Sahaba Club event.<br>` +
-      `<a href="${unsubUrl}" style="color:#6b7280;">Unsubscribe</a></p>`
-    : toHtml(opts.text);
+  // ⚠ THE FRAME REFUSES TO BUILD THIS WITHOUT A POSTAL ADDRESS.
+  //
+  // Campaigns are the one kind of club mail that is legally marketing, so
+  // renderEmail() demands POSTAL_ADDRESS and throws when it is unset. That is
+  // deliberate: it turns a silent compliance defect into a loud, catchable send
+  // failure. The throw is caught by the caller and reported per-recipient like
+  // any other failure, so a missing address shows up as every recipient failing
+  // with the same reason rather than as a campaign that quietly went out wrong.
+  //
+  // ⚠ IF EVERY RECIPIENT FAILS WITH "POSTAL_ADDRESS is not set", NO CODE IS
+  // BROKEN. Set the secret on the project and redeploy. Do not "fix" it by
+  // dropping the unsubscribe URL to dodge the check — that removes the opt-out,
+  // which is the faster route to a blocked domain.
+  //
+  // The gold eyebrow is what tells a member at a glance that this is club news
+  // rather than a notification about their own account.
+  const html = renderEmail({
+    preheader: firstLine(opts.text) || opts.subject,
+    eyebrow: "Club news",
+    eyebrowTone: "gold",
+    title: opts.subject,
+    blocks: [paragraphs(opts.text)],
+    footerReason: "You're receiving this because you registered for a Sahaba Club event.",
+    unsubscribeUrl: unsubUrl ?? undefined,
+  });
 
   const payload: Record<string, unknown> = {
     from: opts.from,
     to: opts.to,
     subject: opts.subject,
     text,
-    html: `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;` +
-          `font-size:15px;line-height:1.65;color:#111827;max-width:560px;">${html}</div>`,
+    html,
   };
   if (opts.replyTo) payload.reply_to = opts.replyTo;
 
@@ -490,13 +533,15 @@ async function sendOne(opts: {
 // The drafts are plain text by design — they read like a person wrote them,
 // not like a template. This is the minimum needed to keep the paragraphs
 // apart in an HTML client.
-function toHtml(text: string) {
-  const escaped = text
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return escaped
-    .split(/\n{2,}/)
-    .map((p) => `<p style="margin:0 0 14px;">${p.replace(/\n/g, "<br>")}</p>`)
-    .join("");
+// The first line of the campaign, for the inbox preview. Trimmed to something
+// that fits: clients show roughly 90 characters and cut mid-word.
+//
+// This replaced toHtml(), which turned the campaign text into styled <p> tags.
+// paragraphs() in the frame does that job now, where the escape-then-mark-up
+// order is written down once instead of per sender.
+function firstLine(text: string) {
+  const first = String(text ?? "").split(/\n/).map((l) => l.trim()).filter(Boolean)[0] ?? "";
+  return first.length > 100 ? first.slice(0, 97).trimEnd() + "..." : first;
 }
 
 function json(body: unknown, status = 200) {
