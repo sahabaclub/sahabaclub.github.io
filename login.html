@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=f0eaba8a71">
+<link rel="stylesheet" href="styles.css?v=239a0c17c2">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -72,6 +72,10 @@
       <img src="assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
       <img src="assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
     </a>
+    <p class="nav-slogan" aria-label="The First AI Universe on Earth">
+      <span>The First AI Universe</span>
+      <span>on Earth</span>
+    </p>
     <div class="nav-actions">
       <a href="app/dashboard.html" class="nav-link member-only">Dashboard</a>
       <a href="app/inbox.html" class="nav-link member-only">Messages</a>
@@ -95,7 +99,7 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=f0eaba8a71"></script>
+<script src="header-identity.js?v=239a0c17c2"></script>
 
 <main class="auth-wrap">
   <!-- The heading covers both arrivals on purpose. Every gate on the site
@@ -201,7 +205,7 @@
   import { signInWithGoogle, signInWithMicrosoft, signInWithLinkedIn, sendPhoneCode, verifyPhoneCode,
            signUpWithEmail, signInWithEmail, sendPasswordReset, enabledProviders,
            getSession, hasCompletedOnboarding,
-           stashNextPath, takeNextPath } from "./lib/auth.js?v=f0eaba8a71";
+           stashNextPath, takeNextPath } from "./lib/auth.js?v=239a0c17c2";
 
   var statusEl = document.getElementById("auth-status");
   function clearStatus() {
@@ -526,8 +530,8 @@
 <!-- Analytics, page views only, and only after the visitor says yes. PUBLIC PAGES ONLY:
      never add this under app/ — those pages are behind a login and their URLs and
      titles describe real named members. The reasoning is in analytics.js. -->
-<script src="analytics.js?v=f0eaba8a71"></script>
-<script src="script.js?v=f0eaba8a71"></script>
-<script defer src="lib/back-to-top.js?v=f0eaba8a71"></script>
+<script src="analytics.js?v=239a0c17c2"></script>
+<script src="script.js?v=239a0c17c2"></script>
+<script defer src="lib/back-to-top.js?v=239a0c17c2"></script>
 </body>
 </html>

@@ -36,11 +36,11 @@
 // database with nothing on screen to say why. tools/check-dead-zone.mjs
 // enforces it, and it can see this file because it is a real .js module rather
 // than an inline <script type="module"> in the HTML.
-import { supabase } from "../../lib/supabase-client.js?v=f0eaba8a71";
-import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=f0eaba8a71";
+import { supabase } from "../../lib/supabase-client.js?v=239a0c17c2";
+import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=239a0c17c2";
 import {
   requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage,
-} from "../../lib/admin-guard.js?v=f0eaba8a71";
+} from "../../lib/admin-guard.js?v=239a0c17c2";
 
 // Exactly the six values the CHECK constraint in 0048 allows, in the order the
 // Events Hub filter shows them. Duplicated from the migration ONLY so a person

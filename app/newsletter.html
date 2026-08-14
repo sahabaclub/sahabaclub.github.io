@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=f0eaba8a71">
+<link rel="stylesheet" href="../styles.css?v=239a0c17c2">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -70,6 +70,10 @@
       <img src="../assets/logo.png" class="logo-img logo-img-dark" alt="Sahaba Club" width="185" height="120">
       <img src="../assets/logo-light.png" class="logo-img logo-img-light" alt="" aria-hidden="true" width="185" height="120">
     </a>
+    <p class="nav-slogan" aria-label="The First AI Universe on Earth">
+      <span>The First AI Universe</span>
+      <span>on Earth</span>
+    </p>
     <div class="nav-actions">
       <a href="dashboard.html" class="nav-link member-only">Dashboard</a>
       <a href="inbox.html" class="nav-link member-only">Messages</a>
@@ -170,8 +174,8 @@
 </main>
 
 <script type="module">
-  import { supabase } from "../lib/supabase-client.js?v=f0eaba8a71";
-  import { getSession } from "../lib/auth.js?v=f0eaba8a71";
+  import { supabase } from "../lib/supabase-client.js?v=239a0c17c2";
+  import { getSession } from "../lib/auth.js?v=239a0c17c2";
 
   function showStatus(elId, msg, kind) {
     document.getElementById(elId).innerHTML = '<div class="nl-status ' + kind + '">' + msg + "</div>";
@@ -257,7 +261,7 @@
       data.failed ? "info" : "ok");
   });
 </script>
-<script src="../script.js?v=f0eaba8a71"></script>
-<script defer src="../lib/back-to-top.js?v=f0eaba8a71"></script>
+<script src="../script.js?v=239a0c17c2"></script>
+<script defer src="../lib/back-to-top.js?v=239a0c17c2"></script>
 </body>
 </html>

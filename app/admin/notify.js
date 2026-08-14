@@ -18,10 +18,10 @@
 // rows are in people's dashboards the moment the call returns. Everything
 // below is built around making the last step deliberate: an explicit summary
 // of who is about to be written to, and a confirm that names the number.
-import { supabase } from "../../lib/supabase-client.js?v=f0eaba8a71";
+import { supabase } from "../../lib/supabase-client.js?v=239a0c17c2";
 import {
   requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage,
-} from "../../lib/admin-guard.js?v=f0eaba8a71";
+} from "../../lib/admin-guard.js?v=239a0c17c2";
 
 // ⚠ Every module-level binding is declared HERE, above the first line that
 // runs. `const` is not hoisted the way `function` is, and a binding declared

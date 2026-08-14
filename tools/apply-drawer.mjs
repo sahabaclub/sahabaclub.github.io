@@ -161,8 +161,37 @@ for (const rel of MEMBER_PAGES) {
     /(\n\s*<\/div>)(\s*\n\s*<\/div>\s*\n<\/header>)/,
     "$1\n" + TOGGLE + "$2"
   );
-  if (!/id="mobile-menu"/.test(src)) {
-    src = src.replace(/<\/header>/, "</header>\n\n" + drawerFor());
+  // ⚠⚠ BOTH OF THESE READ THE PAGE WITH COMMENTS STRIPPED, AND THE INSERT IS
+  // SCOPED TO THE BODY. Read this before simplifying either back.
+  //
+  // This wrote the entire drawer INTO AN HTML COMMENT on three pages —
+  // connect.html, member.html and promptarena.html — and nobody noticed for
+  // weeks. Each of them carries a head comment explaining the header-identity
+  // placement, and that prose contains the words "</header>". `String.replace`
+  // takes the FIRST match, which was the one inside the comment.
+  //
+  // The result is the worst kind of broken: the markup is in the file, it is in
+  // the served HTML, every grep for `id="mobile-menu"` finds it — and the
+  // parser throws it away, so the hamburger opens nothing. The `!test(src)`
+  // guard then saw the commented copy and declined to add a real one, so
+  // re-running the tool could never repair it either.
+  //
+  // liveSrc is what the PARSER keeps. bodyAt is where the document actually
+  // begins. Anchoring on prose is impossible from here.
+  const liveSrc = src.replace(/<!--[\s\S]*?-->/g, "");
+  if (!/id="mobile-menu"/.test(liveSrc)) {
+    const bodyAt = src.indexOf("<body");
+    if (bodyAt === -1) {
+      console.log("  ! no <body>, drawer skipped  " + rel);
+    } else {
+      const head = src.slice(0, bodyAt);
+      const body = src.slice(bodyAt);
+      if (!/<\/header>/.test(body)) {
+        console.log("  ! no </header> in body, drawer skipped  " + rel);
+      } else {
+        src = head + body.replace(/<\/header>/, "</header>\n\n" + drawerFor());
+      }
+    }
   }
 
   if (src !== before) {
