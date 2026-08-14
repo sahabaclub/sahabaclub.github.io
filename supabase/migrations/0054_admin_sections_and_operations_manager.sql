@@ -288,9 +288,29 @@ create policy "admin invites: staff read" on public.admin_invites
 revoke all on public.admin_invites from anon, authenticated;
 grant select on public.admin_invites to authenticated;
 
+-- ⚠⚠ THIS FILE NO LONGER MATCHES WHAT WAS APPLIED, AND THAT IS DELIBERATE.
+--
+-- The first row below originally carried a colleague's PERSONAL email address.
+-- This repository is public and served from raw.githubusercontent.com, so it
+-- was retrievable by anyone — a real person's private address, published
+-- alongside their full name, for four days.
+--
+-- On 14 Aug 2026 the git history of `main` was rewritten (`git filter-branch`,
+-- index-filter over a single blob) to replace it with `redacted@example.invalid`
+-- in all 194 commits. `.invalid` is the reserved TLD that can never resolve.
+--
+-- ⚠ THE DATABASE STILL HOLDS THE REAL ADDRESS. This migration is applied; the
+-- `admin_invites` row is live and correct, and the invite works. Only the file
+-- was redacted. **Do not re-run this migration to "fix" the mismatch** — it
+-- would overwrite a working invite with an address that cannot receive mail.
+--
+-- ⚠ If this migration is ever replayed against a fresh database, that one row
+-- will be wrong and the operations_manager invite must be re-seeded by hand.
+-- The second row (the club mailbox) is unaffected and still grants the role.
 insert into public.admin_invites (email, role, full_name, note) values
   ('redacted@example.invalid', 'operations_manager', 'Ghadir Kamal Aldesouky',
-   'Personal address — the one she will most likely sign up with.'),
+   'Personal address, REDACTED from the file — see the note above. The live row '
+   'in the database still carries the real address.'),
   ('ghadir@sahabaclub.com',      'operations_manager', 'Ghadir Kamal Aldesouky',
    'Club mailbox. Listed so either route claims the same role.')
 on conflict (email) do update set
