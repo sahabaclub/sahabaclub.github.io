@@ -4,9 +4,20 @@
 // sends each row through send-transactional-email, and stamps `emailed_at` so
 // nothing is delivered twice.
 //
-// ⚠ THIS FUNCTION HAS NEVER RUN. It was written without Deno on the machine
-// that produced it, so it has had no typecheck and no execution. Run it with
-// ?dry=1 FIRST and read the count before letting it send anything.
+// ⚠ IT RUNS. The line here read "THIS FUNCTION HAS NEVER RUN" until 14 Aug 2026
+// and was wrong by then — 0052 scheduled it, and the warning outlived the fact.
+// Measured that day against the live project: pg_cron calls it every 5 minutes
+// and it answered HTTP 200 **70 times in six hours**, latest body
+// `{"ok":true,"queued":0,"sent":0,"failed":0}` (read from `net._http_response`,
+// because a green `cron.job_run_details` row only means the STATEMENT ran —
+// pg_net posts asynchronously and the HTTP result is not in there).
+//
+// ⚠⚠ WHAT IS STILL UNPROVEN IS A SEND. Every one of those runs found an empty
+// queue, so `sent` has never been anything but 0: the loop below, the call to
+// send-transactional-email, and `mark_emailed` have never once handled a real
+// row. "It runs" and "it delivers" are different claims and only the first is
+// evidenced. Run it with `?dry=1` and read the count before assuming a queue
+// with rows in it behaves.
 //
 // ============================================================
 // What this deliberately does NOT decide
