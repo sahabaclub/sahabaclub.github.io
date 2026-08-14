@@ -190,6 +190,19 @@ function runWiring(f, report) {
     /const missing = startTimeGaps\(\)/.test(f.form),
     "counting the filtered rows would hide the gap behind a search box");
 
+  // ⚠ THE GAP THAT REOPENED THE SAME DAY IT WAS CLOSED. On 14 Aug, hours after
+  // 0068 gave all 49 events a start time, a new one arrived with time_label
+  // "1:00 AM" and Starts at blank. Backfilling rows does not stop that; the
+  // form has to say something at the moment it happens.
+  report("SAVING A STATED HOUR WITH NO START TIME IS INTERRUPTED",
+    /function statedHourButNoStartTime/.test(f.form) &&
+    /\\d\\s\*\[:\.\]\\s\*\\d/.test(f.form),
+    "an event with a time on the label and none in the field gets no reminder, silently");
+  report("and it interrupts rather than blocks",
+    /if \(!ok\) return;/.test(f.form),
+    "a hard refusal teaches people to type something wrong to get past it, and a " +
+    "wrong start time mails everybody at the wrong hour");
+
   // ⚠ THE ONE THAT ALMOST SHIPPED WRONG. Caught on the first live read, 14 Aug:
   // the importer returns "" for a zone the page never states, the panel
   // defaulted it to the club's zone, and the row showed it as if it had been
@@ -323,6 +336,10 @@ mustCatch("bulk apply stops excluding assumed zones",
   (r) => runWiring({ ...FILES, form: FILES.form.replace(
     "const ready = all.filter(e => !stFound[e.id].zoneAssumed)", "const ready = all") }, r),
   "BULK APPLY REFUSES AN ASSUMED ZONE");
+
+mustCatch("the stated-hour warning removed",
+  (r) => runWiring({ ...FILES, form: FILES.form.replace(/function statedHourButNoStartTime/, "function unusedGuard") }, r),
+  "SAVING A STATED HOUR WITH NO START TIME IS INTERRUPTED");
 
 // The backfill quietly turning into an auto-apply.
 mustCatch("the backfill writes a whole event instead of two columns",

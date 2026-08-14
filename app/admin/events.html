@@ -1199,8 +1199,41 @@
     if (ev.key === "Escape" && !modal.classList.contains("ad-hidden")) closeEditor();
   });
 
+  // ⚠ A STATED HOUR WITH NO MACHINE-READABLE TIME IS THE GAP THAT KEEPS
+  // REOPENING. "Time" is display text and no job can act on it; "Starts at" is
+  // what the two-hour reminder fires on (0065). An event saved with the first
+  // and not the second silently gets no reminder, and nothing anywhere says so.
+  //
+  // It happened on 14 Aug, hours after 0068 had filled in all 49 events: a new
+  // Meetup event arrived with time_label "1:00 AM" and Starts at blank, and the
+  // count started creeping back up the same day it reached zero.
+  //
+  // ⚠ INTERRUPTS, DOES NOT BLOCK. Sometimes the label really is unusable — "8:00
+  // AM onwards", a date range, a time nobody can pin down — and a hard refusal
+  // would just teach people to type something wrong into the field to get past
+  // it. A wrong start time is worse than none: none means silence, wrong means
+  // everybody attending is emailed at the wrong hour.
+  function statedHourButNoStartTime() {
+    const label = F.time.value.trim();
+    if (!label) return false;
+    if (F.start.value) return false;
+    // A clock time: 19:00, 7:30, 6.45. Bare "2026" or "5 – 7 Oct" must not match.
+    return /\d\s*[:.]\s*\d/.test(label);
+  }
+
   document.getElementById("ad-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
+
+    if (statedHourButNoStartTime()) {
+      const ok = confirm(
+        'The Time field says "' + F.time.value.trim() + '" but "Starts at" is empty.\n\n' +
+        "Only \"Starts at\" can send the two-hour email reminder — the Time field is " +
+        "display text, so nobody attending this event will be reminded.\n\n" +
+        "Cancel to go back and fill it in, or OK to save without a reminder."
+      );
+      if (!ok) return;   // ⚠ before saveBtn is disabled, or the form locks up
+    }
+
     const saveBtn = document.getElementById("f-save");
     saveBtn.disabled = true;
     showMessage("ad-form-msg", "Saving…", "info");
