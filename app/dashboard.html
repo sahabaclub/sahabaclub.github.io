@@ -274,6 +274,87 @@
   .dash-event-meta { font-size: 12.5px; color: var(--text-muted); }
   .dash-event-why { font-size: 12.5px; color: var(--cyan); }
 
+  /* ---- My events: the calendar ----------------------------------------
+     Replaced the three stacked lists (Saved / I'm going / Recommended) on
+     19 Aug. Ahmed: "start fresh" — the lists are gone rather than kept
+     alongside, so there is one place a member looks for their events.
+
+     ⚠ COLOUR IS NEVER THE ONLY SIGNAL. Four bands distinguished only by hue
+     is four grey dots to anybody colour-blind, and roughly one man in twelve
+     is. Every chip also carries a letter — G/W/S/R — and the legend prints
+     the same letter beside the same colour, so the mapping is learnable
+     without seeing hue at all. The letter is not decoration; do not remove it
+     to make the chips tidier. */
+  .cal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .cal-title { font-size: 16px; font-weight: 700; margin: 0; min-width: 168px; }
+  .cal-nav { display: flex; gap: 6px; margin-left: auto; }
+  .cal-btn {
+    background: var(--glass); border: 1px solid var(--glass-border); color: var(--text);
+    border-radius: 8px; padding: 5px 11px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .cal-btn:hover, .cal-btn:focus-visible { border-color: var(--cyan); color: var(--cyan); }
+
+  .cal-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 14px; padding: 0; list-style: none; }
+  .cal-legend li { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-muted); }
+  .cal-key {
+    width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center;
+    font-size: 10.5px; font-weight: 800; color: #05070d;
+  }
+  .cal-key.is-going { background: #22d3ee; }
+  .cal-key.is-went  { background: #838ba4; }
+  .cal-key.is-saved { background: #e0a83e; }
+  .cal-key.is-rec   { background: #8b5cf6; color: #fff; }
+
+  /* minmax(0,1fr), NOT 1fr. 1fr means minmax(auto,1fr), and auto floors each column
+     at its min-content width — so one long event title widens its whole weekday
+     column. Measured: cells ranged 88-247px while the weekday header row stayed a
+     uniform 141px, meaning MON/TUE no longer sat above the columns they label.
+     minmax(0,...) lets the chip ellipsis do its job instead. */
+  .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+  .cal-dow {
+    font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-muted); text-align: center; padding: 4px 0;
+  }
+  .cal-cell {
+    min-height: 86px; border: 1px solid var(--glass-border); border-radius: 9px;
+    padding: 5px 5px 6px; background: var(--glass); display: flex; flex-direction: column; gap: 3px;
+  }
+  .cal-cell.is-outside { opacity: .38; }
+  .cal-cell.is-today { border-color: var(--cyan); box-shadow: inset 0 0 0 1px var(--cyan); }
+  .cal-daynum { font-size: 11.5px; font-weight: 700; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+  .cal-cell.is-today .cal-daynum { color: var(--cyan); }
+
+  .cal-chip {
+    display: flex; align-items: center; gap: 4px; text-decoration: none;
+    font-size: 11.5px; line-height: 1.25; padding: 2px 4px; border-radius: 5px;
+    color: var(--text); background: rgba(255,255,255,.05); border-left: 3px solid transparent;
+    overflow: hidden;
+  }
+  .cal-chip:hover, .cal-chip:focus-visible { background: rgba(255,255,255,.12); }
+  .cal-chip-letter { font-weight: 800; font-size: 9.5px; flex: none; }
+  .cal-chip-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-chip.is-going { border-left-color: #22d3ee; } .cal-chip.is-going .cal-chip-letter { color: #22d3ee; }
+  .cal-chip.is-went  { border-left-color: #838ba4; } .cal-chip.is-went  .cal-chip-letter { color: #838ba4; }
+  .cal-chip.is-saved { border-left-color: #e0a83e; } .cal-chip.is-saved .cal-chip-letter { color: #e0a83e; }
+  .cal-chip.is-rec   { border-left-color: #8b5cf6; } .cal-chip.is-rec   .cal-chip-letter { color: #a78bfa; }
+  .cal-more {
+    background: none; border: none; color: var(--text-muted); font-size: 11px;
+    text-align: left; padding: 1px 4px; cursor: pointer;
+  }
+  .cal-more:hover { color: var(--cyan); }
+
+  /* The agenda. ⚠ BOTH VIEWS ARE ALWAYS IN THE DOM and CSS chooses — no JS
+     breakpoint, no resize listener, nothing to go stale when a phone rotates.
+     A 7-column grid at 375px gives ~45px cells, which is unusable for both
+     reading and tapping, so below 760px the grid goes and this takes over. */
+  .cal-agenda { display: none; }
+  .cal-day-h { font-size: 12.5px; font-weight: 700; color: var(--text-secondary); margin: 14px 0 6px; }
+  .cal-agenda .cal-chip { font-size: 13.5px; padding: 8px 9px; border-left-width: 4px; }
+  @media (max-width: 760px) {
+    .cal-grid, .cal-dow { display: none; }
+    .cal-agenda { display: block; }
+  }
+
   /* ---- Mobile: sidebar becomes a bottom bar --------------------------- */
   .dash-more { display: none; }
   @media (max-width: 860px) {
@@ -821,21 +902,26 @@
     <!-- ---- My events ---- -->
     <section class="dash-section" id="section-events">
       <div class="dash-card">
-        <div class="dash-group">
-          <h3>Saved</h3>
-          <p class="dash-group-sub">Events you've favourited.</p>
-          <div id="events-saved"><p class="dash-empty">Loading…</p></div>
+        <div class="cal-head">
+          <h3 class="cal-title" id="cal-title">&nbsp;</h3>
+          <div class="cal-nav">
+            <button type="button" class="cal-btn" id="cal-today">Today</button>
+            <button type="button" class="cal-btn" id="cal-prev" aria-label="Previous month">&lsaquo;</button>
+            <button type="button" class="cal-btn" id="cal-next" aria-label="Next month">&rsaquo;</button>
+          </div>
         </div>
-        <div class="dash-group">
-          <h3>I'm going</h3>
-          <p class="dash-group-sub">Events you've registered for.</p>
-          <div id="events-going"><p class="dash-empty">Loading…</p></div>
-        </div>
-        <div class="dash-group">
-          <h3>Recommended for you</h3>
-          <p class="dash-group-sub">From the topics, cities and formats you go for.</p>
-          <div id="events-recommended"><p class="dash-empty">Loading…</p></div>
-        </div>
+
+        <ul class="cal-legend">
+          <li><span class="cal-key is-going">G</span> Going</li>
+          <li><span class="cal-key is-went">W</span> Went</li>
+          <li><span class="cal-key is-saved">S</span> Saved</li>
+          <li><span class="cal-key is-rec">R</span> Recommended</li>
+        </ul>
+
+        <div class="cal-grid" id="cal-dow" aria-hidden="true"></div>
+        <div class="cal-grid" id="cal-grid" role="grid" aria-labelledby="cal-title"></div>
+        <div class="cal-agenda" id="cal-agenda"></div>
+        <p class="dash-empty" id="cal-empty" hidden></p>
         <p style="margin-top:18px;"><a class="dash-link" href="../events.html">Browse all events &rarr;</a></p>
       </div>
     </section>
@@ -894,6 +980,10 @@
   }
 
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  // The calendar heading wants the full month; the agenda wants a weekday.
+  var MONTHS_LONG = ["January","February","March","April","May","June",
+                     "July","August","September","October","November","December"];
+  var DAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   function shortDate(iso) {
     var p = String(iso).split("-");
     return parseInt(p[2], 10) + " " + MONTHS[parseInt(p[1], 10) - 1];
@@ -1906,6 +1996,9 @@
   function fromRow(row) {
     return {
       id: row.id,
+      // ⚠ slug, not id, is what event.html?e= takes. Without it every chip on
+      // the calendar would link to nothing.
+      slug: row.slug,
       title: row.title,
       country: row.country,
       location: row.location,
@@ -1916,34 +2009,100 @@
     };
   }
 
-  function eventRow(e, why) {
-    var where = e.mode === "Online" ? "Online" : (e.location || e.country || "");
-    return '<div class="dash-event">' +
-      '<span class="dash-event-date">' + esc(shortDate(e.date)) + "</span>" +
-      '<span class="dash-event-main">' +
-        '<span class="dash-event-title">' + esc(e.title) + "</span>" +
-        '<span class="dash-event-meta">' + esc([e.time, where].filter(Boolean).join(" · ")) + "</span>" +
-        (why ? '<span class="dash-event-why">' + esc("Because you like " + why) + "</span>" : "") +
-      "</span>" +
-    "</div>";
+  // ---- The calendar -----------------------------------------------------
+  // ⚠ ONE EVENT, ONE BAND, IN THIS ORDER. An event can qualify for several at
+  // once — a saved event you then registered for is both — and drawing two
+  // chips for one event makes a day look twice as busy as it is. Going beats
+  // Saved because it is the more committed state and the one with a
+  // consequence attached (a reminder fires). Recommended is last: it is a
+  // suggestion, and it must never outrank something the member chose.
+  var BANDS = { going: "G", went: "W", saved: "S", rec: "R" };
+  var BAND_WORD = { going: "Going", went: "Went", saved: "Saved", rec: "Recommended" };
+
+  var CAL = { cursor: null, byDate: {} };
+
+  function isoOf(d) {
+    // Local parts, not toISOString(): the latter converts to UTC first, which
+    // lands on the previous day for anyone west of Greenwich and would shift
+    // every event by one square.
+    return d.getFullYear() + "-" +
+      String(d.getMonth() + 1).padStart(2, "0") + "-" +
+      String(d.getDate()).padStart(2, "0");
   }
 
-  function renderGroup(hostId, items, emptyMsg) {
-    var host = document.getElementById(hostId);
-    if (!items.length) {
-      host.innerHTML = '<p class="dash-empty">' + emptyMsg + "</p>";
-      return;
-    }
-    host.innerHTML = items.map(function (x) { return eventRow(x.event || x, x.why); }).join("");
+  function chipHtml(it, withMeta) {
+    var label = BAND_WORD[it.band] + ": " + it.title;
+    return '<a class="cal-chip is-' + it.band + '" href="../event.html?e=' +
+      encodeURIComponent(it.slug) + '" title="' + esc(label) + '" aria-label="' + esc(label) + '">' +
+      '<span class="cal-chip-letter" aria-hidden="true">' + BANDS[it.band] + "</span>" +
+      '<span class="cal-chip-text">' + esc(it.title) +
+      (withMeta && it.meta ? " · " + esc(it.meta) : "") + "</span></a>";
   }
+
+  function renderCalendar() {
+    var cur = CAL.cursor;
+    var y = cur.getFullYear(), m = cur.getMonth();
+    document.getElementById("cal-title").textContent = MONTHS_LONG[m] + " " + y;
+
+    var dowHost = document.getElementById("cal-dow");
+    if (!dowHost.childElementCount) {
+      // Monday first. The UAE working week has run Monday–Friday since 2022,
+      // so a Sunday-first grid would put the weekend in the middle.
+      dowHost.innerHTML = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+        .map(function (d) { return '<div class="cal-dow">' + d + "</div>"; }).join("");
+    }
+
+    var first = new Date(y, m, 1);
+    var lead = (first.getDay() + 6) % 7;          // Monday = 0
+    var start = new Date(y, m, 1 - lead);
+    var todayIso = isoOf(new Date());
+
+    var cells = [];
+    for (var i = 0; i < 42; i++) {
+      var d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      var iso = isoOf(d);
+      var items = CAL.byDate[iso] || [];
+      var cls = "cal-cell" + (d.getMonth() !== m ? " is-outside" : "") +
+                (iso === todayIso ? " is-today" : "");
+      var shown = items.slice(0, 3).map(function (it) { return chipHtml(it, false); }).join("");
+      var extra = items.length > 3
+        ? '<button type="button" class="cal-more" data-day="' + iso + '">+' +
+          (items.length - 3) + " more</button>"
+        : "";
+      cells.push('<div class="' + cls + '" data-day="' + iso + '">' +
+        '<span class="cal-daynum">' + d.getDate() + "</span>" + shown + extra + "</div>");
+    }
+    document.getElementById("cal-grid").innerHTML = cells.join("");
+  }
+
+  function renderAgenda() {
+    // Every day that has something, across every month — the phone view is a
+    // list, so paging it by month would hide things for no benefit.
+    var days = Object.keys(CAL.byDate).sort();
+    var host = document.getElementById("cal-agenda");
+    if (!days.length) { host.innerHTML = ""; return; }
+    host.innerHTML = days.map(function (iso) {
+      var d = new Date(iso + "T12:00:00");
+      var head = DAYS_SHORT[d.getDay()] + " " + d.getDate() + " " + MONTHS_LONG[d.getMonth()].slice(0, 3);
+      return '<div class="cal-day-h">' + esc(head) + "</div>" +
+        CAL.byDate[iso].map(function (it) { return chipHtml(it, true); }).join("");
+    }).join("");
+  }
+
+  function paintCalendar() { renderCalendar(); renderAgenda(); }
 
   async function loadEvents() {
-    var todayIso = new Date().toISOString().slice(0, 10);
+    var todayIso = isoOf(new Date());
     var uid = session.user.id;
 
     var [evRes, favRes, regRes, viewRes] = await Promise.all([
+      // ⚠ NO DATE FILTER ANY MORE. This used to be `.gte("event_date", today)`,
+      // which is why "Went" could not exist: past events were never fetched, so
+      // there was nothing to show a member about what they had been to. The
+      // whole published table is ~130 rows, so pulling it costs nothing and
+      // saves a second round trip.
       supabase.from("events").select("*")
-        .eq("is_published", true).gte("event_date", todayIso)
+        .eq("is_published", true)
         .order("event_date", { ascending: true }),
       supabase.from("event_favourites").select("event_id").eq("user_id", uid),
       supabase.from("event_registrations").select("event_id, status").eq("user_id", uid),
@@ -1960,24 +2119,85 @@
     var viewCounts = {};
     (viewRes.error ? [] : (viewRes.data || [])).forEach(function (v) { viewCounts[v.event_id] = v.view_count; });
 
-    renderGroup("events-saved",
-      events.filter(function (e) { return favourites.has(e.id); }),
-      "Nothing saved yet. Tap the heart on an event and it'll show up here.");
+    // ⚠ RECOMMENDATIONS ARE SCORED ON UPCOMING EVENTS ONLY. recommendEvents()
+    // has no date filter of its own — it weights soonness with
+    // `Math.max(0, 1 - days/90)`, which floors at 0 for anything past rather
+    // than excluding it. Feed it the whole table and it will happily suggest
+    // something that happened in 2023.
+    var upcoming = events.filter(function (e) { return e.date >= todayIso; });
+    var rec = recommendEvents(upcoming, favourites, registrations, viewCounts, 6);
+    var recIds = {};
+    if (!rec.needsSignal) rec.items.forEach(function (r) { recIds[r.event.id] = true; });
 
-    renderGroup("events-going",
-      events.filter(function (e) { return registrations[e.id] === "registered"; }),
-      "You're not signed up for anything yet.");
+    // One band per event, highest commitment first — see BANDS above.
+    var byDate = {};
+    events.forEach(function (e) {
+      var band = null;
+      if (registrations[e.id] === "registered") band = e.date >= todayIso ? "going" : "went";
+      else if (favourites.has(e.id)) band = "saved";
+      else if (recIds[e.id]) band = "rec";
+      if (!band) return;
+      var where = e.mode === "Online" ? "Online" : (e.location || e.country || "");
+      (byDate[e.date] = byDate[e.date] || []).push({
+        slug: e.slug, title: e.title, band: band,
+        meta: [e.time, where].filter(Boolean).join(" · "),
+      });
+    });
+    CAL.byDate = byDate;
 
-    var rec = recommendEvents(events, favourites, registrations, viewCounts, 4);
-    if (rec.needsSignal) {
-      document.getElementById("events-recommended").innerHTML =
-        '<p class="dash-empty">Save a few events you like and we\'ll start suggesting others that fit — ' +
-        "based on the topics, cities and formats you go for.</p>";
+    var counts = { going: 0, went: 0, saved: 0, rec: 0 };
+    Object.keys(byDate).forEach(function (d) {
+      byDate[d].forEach(function (it) { counts[it.band]++; });
+    });
+    var total = counts.going + counts.went + counts.saved + counts.rec;
+
+    // Open on the month with the member's next commitment, not blindly on
+    // today: somebody whose next event is in October should not have to press
+    // the arrow twice to find out they have one.
+    var nextGoing = Object.keys(byDate).filter(function (d) {
+      return d >= todayIso && byDate[d].some(function (it) { return it.band === "going"; });
+    }).sort()[0];
+    var open = nextGoing ? new Date(nextGoing + "T12:00:00") : new Date();
+    CAL.cursor = new Date(open.getFullYear(), open.getMonth(), 1);
+
+    var empty = document.getElementById("cal-empty");
+    if (!total) {
+      empty.hidden = false;
+      empty.textContent = rec.needsSignal
+        ? "Nothing here yet. Save an event or register for one, and it will appear on your calendar — " +
+          "once we can see what you like, we'll start suggesting others."
+        : "Nothing here yet. Save an event or register for one and it will appear on your calendar.";
     } else {
-      renderGroup("events-recommended", rec.items,
-        "Nothing new to suggest right now — you've already saved the ones that fit.");
+      empty.hidden = true;
     }
+
+    paintCalendar();
   }
+
+  // ---- Calendar controls ------------------------------------------------
+  function stepMonth(n) {
+    CAL.cursor = new Date(CAL.cursor.getFullYear(), CAL.cursor.getMonth() + n, 1);
+    renderCalendar();
+  }
+  document.getElementById("cal-prev").addEventListener("click", function () { stepMonth(-1); });
+  document.getElementById("cal-next").addEventListener("click", function () { stepMonth(1); });
+  document.getElementById("cal-today").addEventListener("click", function () {
+    var n = new Date();
+    CAL.cursor = new Date(n.getFullYear(), n.getMonth(), 1);
+    renderCalendar();
+  });
+
+  // "+N more" expands that one day in place. Delegated, because the grid is
+  // rebuilt on every month change and per-button listeners would be lost.
+  document.getElementById("cal-grid").addEventListener("click", function (ev) {
+    var b = ev.target.closest ? ev.target.closest(".cal-more") : null;
+    if (!b) return;
+    var iso = b.getAttribute("data-day");
+    var items = CAL.byDate[iso] || [];
+    var cell = b.parentNode;
+    var num = cell.querySelector(".cal-daynum").outerHTML;
+    cell.innerHTML = num + items.map(function (it) { return chipHtml(it, false); }).join("");
+  });
 
   // ---- Sign out ---------------------------------------------------------
   document.getElementById("btn-sign-out").addEventListener("click", async function () {
