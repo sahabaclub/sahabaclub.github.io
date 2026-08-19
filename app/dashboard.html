@@ -350,6 +350,7 @@
   .cal-agenda { display: none; }
   .cal-day-h { font-size: 12.5px; font-weight: 700; color: var(--text-secondary); margin: 14px 0 6px; }
   .cal-agenda .cal-chip { font-size: 13.5px; padding: 8px 9px; border-left-width: 4px; }
+  .cal-none { color: var(--text-muted); font-size: 13.5px; margin: 14px 0 4px; }
   @media (max-width: 760px) {
     .cal-grid, .cal-dow { display: none; }
     .cal-agenda { display: block; }
@@ -2076,11 +2077,32 @@
   }
 
   function renderAgenda() {
-    // Every day that has something, across every month — the phone view is a
-    // list, so paging it by month would hide things for no benefit.
-    var days = Object.keys(CAL.byDate).sort();
+    // ⚠ FILTERED TO THE MONTH ON SCREEN, exactly like the grid above it.
+    //
+    // This used to list every month at once, on the reasoning that a phone
+    // shows a list anyway so paging it by month "would hide things for no
+    // benefit". That was wrong twice. The heading names a month, so a list
+    // starting in August underneath "October 2026" is simply false. And the
+    // grid is display:none below 760px, so prev/next moved the cursor, redrew
+    // a hidden grid, and changed nothing a phone user could see — the arrows
+    // did not look broken on mobile, they were broken on mobile.
     var host = document.getElementById("cal-agenda");
-    if (!days.length) { host.innerHTML = ""; return; }
+    var y = CAL.cursor.getFullYear();
+    var m = CAL.cursor.getMonth();
+    var prefix = y + "-" + String(m + 1).padStart(2, "0") + "-";
+    var days = Object.keys(CAL.byDate).filter(function (iso) {
+      return iso.slice(0, 8) === prefix;
+    }).sort();
+
+    if (!days.length) {
+      // A month with nothing in it still has to say so. A blank panel under
+      // arrows that just moved reads as a page that failed to load, not as an
+      // empty month.
+      host.innerHTML = '<p class="cal-none">Nothing in ' +
+        esc(MONTHS_LONG[m] + " " + y) + ".</p>";
+      return;
+    }
+
     host.innerHTML = days.map(function (iso) {
       var d = new Date(iso + "T12:00:00");
       var head = DAYS_SHORT[d.getDay()] + " " + d.getDate() + " " + MONTHS_LONG[d.getMonth()].slice(0, 3);
@@ -2175,16 +2197,22 @@
   }
 
   // ---- Calendar controls ------------------------------------------------
+  // ⚠ ALWAYS paintCalendar(), NEVER renderCalendar() ALONE. Both views are in
+  // the DOM at once and CSS picks between them, so redrawing only the grid
+  // leaves the agenda showing the month you just navigated away from. Below
+  // 760px the grid is hidden entirely, which is how these buttons shipped
+  // doing nothing at all on a phone: the cursor moved, the invisible grid
+  // redrew, and the only view the member could see never changed.
   function stepMonth(n) {
     CAL.cursor = new Date(CAL.cursor.getFullYear(), CAL.cursor.getMonth() + n, 1);
-    renderCalendar();
+    paintCalendar();
   }
   document.getElementById("cal-prev").addEventListener("click", function () { stepMonth(-1); });
   document.getElementById("cal-next").addEventListener("click", function () { stepMonth(1); });
   document.getElementById("cal-today").addEventListener("click", function () {
     var n = new Date();
     CAL.cursor = new Date(n.getFullYear(), n.getMonth(), 1);
-    renderCalendar();
+    paintCalendar();
   });
 
   // "+N more" expands that one day in place. Delegated, because the grid is
