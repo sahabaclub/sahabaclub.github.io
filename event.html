@@ -380,7 +380,7 @@
   var COLUMNS =
     "id, slug, title, description, event_date, starts_at, time_label, duration_minutes, " +
     "mode, country, location, price_label, tags, register_link, maps_link, image_url, " +
-    "brand, tier_required, is_published, presenter, recording_url";
+    "brand, tier_required, is_published, presenter, recording_url, live_link";
 
   var MONTHS = ["January","February","March","April","May","June",
                 "July","August","September","October","November","December"];
@@ -669,10 +669,25 @@
         actions.push('<a class="btn btn-glow" href="' + signInHref(e) +
           '">Join free to register</a>');
       } else if (myStatus === "registered") {
-        // Already told us they are going. The list drops the Register button
-        // for exactly this case and shows the chip instead; this page used to
-        // keep asking somebody to register for something they had confirmed.
-        actions.push('<span class="ev-status is-going">Going</span>');
+        // Already told us they are going, so this stops asking them to register
+        // for something they have confirmed. It used to stop there — a
+        // `<span>`, no href, nothing to click — which left the one screen they
+        // come back to on the day with no way to actually get in.
+        //
+        // ⚠ THE FALLBACK IS register_link, NEVER THIS PAGE. Ahmed, 19 Aug.
+        // `live_link` is null on almost every event and always will be for the
+        // ones we do not run, so the fallback is the common case, not the edge:
+        // sending them to event.html from event.html would be a button that
+        // reloads what they are already reading. Every published event has a
+        // register_link (measured: 67 of 67), so this always goes somewhere.
+        //
+        // The word "Going" stays. Turning it into a link would otherwise throw
+        // away the only confirmation on the page that they said yes.
+        actions.push('<a class="btn ev-going-link" href="' +
+          esc(e.live_link || e.register_link) + '" target="_blank" rel="noopener">' +
+          'Going <span class="ev-going-arrow" aria-hidden="true">&rarr;</span>' +
+          '<span class="sr-only"> — open ' +
+          (e.live_link ? 'the live link' : 'the event page') + '</span></a>');
       } else {
         // ⚠ STAYS AN <a href>, where the list uses a <button> + window.open().
         // The difference is deliberate and this is the better half: it is a

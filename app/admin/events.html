@@ -236,6 +236,17 @@
           <input type="url" id="f-register" placeholder="https://…">
         </div>
         <div class="ad-field">
+          <label for="f-live">Live link <span class="ad-hint">where to go when it starts</span></label>
+          <input type="url" id="f-live" placeholder="https://… (meeting URL, or the venue page)">
+          <p class="ad-note">Shown behind the <strong>Going</strong> button once a member says
+            they are attending. The meeting URL for an online event, the map or venue page for an
+            in-person one. Leave it empty and Going falls back to the registration link — that is
+            the normal case, not a mistake. <strong>https only.</strong></p>
+        </div>
+      </div>
+
+      <div class="ad-row-2">
+        <div class="ad-field">
           <label for="f-maps">Google Maps link</label>
           <input type="url" id="f-maps" placeholder="https://…">
           <span class="ad-hint">In-person events only</span>
@@ -424,6 +435,7 @@
     price: document.getElementById("f-price"),
     tags: document.getElementById("f-tags"),
     register: document.getElementById("f-register"),
+    live: document.getElementById("f-live"),
     maps: document.getElementById("f-maps"),
     image: document.getElementById("f-image"),
     brand: document.getElementById("f-brand"),
@@ -888,6 +900,7 @@
     F.price.value = e ? (e.price_label || "Free") : "Free";
     F.tags.value = e && e.tags ? e.tags.join(", ") : "";
     F.register.value = e ? (e.register_link || "") : "";
+    F.live.value = e ? (e.live_link || "") : "";
     F.maps.value = e ? (e.maps_link || "") : "";
     F.image.value = e ? (e.image_url || "") : "";
     F.brand.value = e ? (e.brand || "") : "";
@@ -1176,6 +1189,7 @@
     F.price.value = d.price_label || "Free";
     F.tags.value = (d.tags || []).join(", ");
     F.register.value = d.register_link || "";
+    F.live.value = d.live_link || "";
     F.maps.value = "";
     F.image.value = d.image_url || "";
     F.brand.value = d.brand || "";
@@ -1254,6 +1268,10 @@
       price_label: F.price.value.trim() || "Free",
       tags: F.tags.value.split(",").map(s => s.trim()).filter(Boolean),
       register_link: F.register.value.trim() || null,
+      // ⚠ https only, and the DATABASE enforces it too (events_live_link_https).
+      // This value becomes an href on a page we serve, so the form is the
+      // convenience and the constraint is the guarantee.
+      live_link: F.live.value.trim() || null,
       // An online event has no venue to navigate to, so drop any stale map link
       // rather than leaving a Find Location button that makes no sense.
       maps_link: F.mode.value === "Online" ? null : (F.maps.value.trim() || null),

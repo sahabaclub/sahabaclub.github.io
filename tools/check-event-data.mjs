@@ -26,7 +26,7 @@ const warn = (m) => warns.push(m);
 const FIELDS = [
   "slug", "title", "event_date", "start_time_local", "time_zone", "time_label",
   "mode", "country", "location", "image_url", "register_link", "description",
-  "is_published", "is_featured",
+  "is_published", "is_featured", "live_link",
 ].join(",");
 
 let rows;
@@ -72,6 +72,19 @@ for (const e of upcoming) {
   if (!e.country) continue;
   if (e.country === "Online" || e.country.includes("/")) {
     err(`${e.event_date}  ${e.slug}\n          country is "${e.country}" — that is a mode or a timezone, not a country. Online events use NULL.`);
+  }
+}
+
+// ── 2b. live_link must be a plain https URL ───────────────────────────────
+// ⚠ THIS ONE IS ABOUT AN href ON A PAGE WE SERVE, not tidiness. 0074 renders
+// live_link behind the "Going" button, so a `javascript:` value would execute
+// in the member's session. The database constrains it too
+// (events_live_link_https) — this is the second lock, and it is here because a
+// constraint can be dropped by a migration nobody reads carefully.
+for (const e of upcoming) {
+  if (!e.live_link) continue; // null is normal: Going falls back to register_link
+  if (!/^https:\/\/[^\s]+$/.test(e.live_link)) {
+    err(`${e.event_date}  ${e.slug}\n          live_link is not a plain https URL. It is rendered as an href behind the Going button.`);
   }
 }
 

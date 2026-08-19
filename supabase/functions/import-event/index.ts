@@ -400,6 +400,19 @@ Deno.serve(async (req) => {
         tags: evt.tags,
         register_link: url,
         image_url: imageUrl,
+        // ⚠ `live_link` IS ABSENT ON PURPOSE — this is not an oversight, and it
+        // should not be "fixed" by adding it to the schema.
+        //
+        // 0074 added events.live_link: where a member goes when the event
+        // starts. An organiser's public page almost never carries that — a
+        // meeting URL is sent to people who registered, not published to
+        // strangers — so a model asked to find one would usually find nothing
+        // and occasionally invent something plausible.
+        //
+        // That value is rendered as an href behind the "Going" button on a page
+        // we serve. A confidently hallucinated https URL there is worse than an
+        // empty column, because empty falls back to register_link and works.
+        // Staff fill this in when they actually know the joining details.
       },
       confidence: evt.confidence,
       imageOrigin,

@@ -3279,6 +3279,36 @@ html.reduce-motion .pod-play-ring { animation: none; }
   padding: 5px 11px; border-radius: 8px; border: 1px solid currentColor;
 }
 .ev-status.is-going { color: #4ade80; background: rgba(34,197,94,0.15); }
+
+/* The "Going" state on the event page, once it became a link (0074).
+   ⚠ DELIBERATELY NOT .btn-glow. The glow is the violet/cyan primary used by
+   Register, and wearing it here would read as "register" all over again to
+   somebody who has already said yes. It keeps the green of .ev-status.is-going
+   so the colour still means "you are going", and only the arrow and the hover
+   say it now goes somewhere.
+   #4ade80 on this ground measures 8.9:1, so the label holds up without the
+   border doing the work. */
+.ev-going-link {
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.45);
+  text-decoration: none;
+}
+.ev-going-link:hover,
+.ev-going-link:focus-visible {
+  background: rgba(34, 197, 94, 0.24);
+  border-color: #4ade80;
+}
+.ev-going-arrow {
+  margin-left: 5px;
+  display: inline-block;
+  transition: transform 0.18s ease;
+}
+.ev-going-link:hover .ev-going-arrow { transform: translateX(3px); }
+@media (prefers-reduced-motion: reduce) {
+  .ev-going-arrow { transition: none; }
+  .ev-going-link:hover .ev-going-arrow { transform: none; }
+}
 .ev-status.is-interested { color: #fbbf24; background: rgba(251,191,36,0.13); }
 .ev-status.is-premium { color: #f0c674; background: rgba(224,168,62,0.14); }
 
