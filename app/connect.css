@@ -943,3 +943,47 @@ body.cx-zoom-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .cx-avatar-zoom { transition: none; }
 }
+
+/* ============================================================
+   Corner badge, and smaller labelled tag rows  (19 Aug, revised)
+   ============================================================ */
+
+/* ⚠ The card and the profile card must be positioned for this to land in
+   their corner. .cx-member already is in most themes; asserting it here means
+   the badge cannot silently escape to the nearest positioned ancestor and
+   appear in the corner of the whole results grid. */
+.cx-member { position: relative; }
+.cx-card-badged { position: relative; }
+
+.cx-corner-badge {
+  position: absolute;
+  top: 10px; right: 12px;
+  z-index: 2;
+}
+/* The name must not run under the badge. Roughly the width of the widest
+   word it can hold ("Premium") plus its padding. */
+.cx-member .cx-member-name { padding-right: 74px; }
+.cx-card-badged .cx-name { padding-right: 86px; }
+
+/* ⚠ SMALLER — Ahmed, 19 Aug: the chips read as buttons at the old size. These
+   are labels on a card, not controls, and they should sit under the name
+   without competing with it. */
+.cx-tags .cx-tag,
+.cx-head-tags .cx-tag,
+.cx-open-to .cx-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 7px;
+}
+.cx-badge { font-size: 10px; padding: 2px 8px; }
+
+/* "Interests:" and "Open to:" — the same treatment, because they are the same
+   kind of thing: a word that says what the row after it is. */
+.cx-tags { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.cx-tags-label,
+.cx-open-to-label {
+  font-size: 11px; font-weight: 700; color: var(--text-muted);
+  letter-spacing: .02em; margin-right: 1px;
+}
+.cx-open-to { gap: 5px; margin-top: 6px; }
+.cx-head-tags { gap: 5px; align-items: center; }

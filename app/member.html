@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=7748bdbeaa">
-<link rel="stylesheet" href="connect.css?v=7748bdbeaa">
+<link rel="stylesheet" href="../styles.css?v=bf67066856">
+<link rel="stylesheet" href="connect.css?v=bf67066856">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -35,7 +35,7 @@
      a guest/member split of its own (Inbox against Home and Join free).
      Running first means that split is decided before the header is laid out,
      rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=7748bdbeaa"></script>
+<script src="../header-identity.js?v=bf67066856"></script>
 </head>
 <body>
 
@@ -192,7 +192,7 @@
     roundsWithPlacings, hackathonRecord, engagementBreakdown, RECORD,
     summarise, escapeHtml, initialOf, linkList, placeOf,
     experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
-  } from "../lib/connect.js?v=7748bdbeaa";
+  } from "../lib/connect.js?v=bf67066856";
 
   var root = document.getElementById("member-root");
   var me = null;
@@ -311,9 +311,9 @@
     // thing this whole distinction exists to keep straight.
     if (isProspect) return "";
     var role = ROLE_BADGE[member.role];
-    if (role) return '<span class="cx-badge ' + role.cls + '">' + role.text + "</span>";
+    if (role) return '<span class="cx-badge cx-corner-badge ' + role.cls + '">' + role.text + "</span>";
     var premium = String(member.tier || "").toLowerCase() === "premium";
-    return '<span class="cx-badge ' + (premium ? "is-premium" : "is-member") + '">' +
+    return '<span class="cx-badge cx-corner-badge ' + (premium ? "is-premium" : "is-member") + '">' +
       (premium ? "Premium" : "Member") + "</span>";
   }
 
@@ -324,9 +324,10 @@
     var openTo = (member.open_to || []).filter(Boolean).slice(0, 4);
     var out = "";
     if (interests.length) {
-      out += '<div class="cx-head-tags">' + interests.map(function (t) {
-        return '<span class="cx-tag cx-tag-topic" dir="auto">' + escapeHtml(t) + "</span>";
-      }).join("") + "</div>";
+      out += '<div class="cx-head-tags"><span class="cx-tags-label">Interests:</span>' +
+        interests.map(function (t) {
+          return '<span class="cx-tag cx-tag-topic" dir="auto">' + escapeHtml(t) + "</span>";
+        }).join("") + "</div>";
     }
     if (openTo.length) {
       out += '<div class="cx-open-to"><span class="cx-open-to-label">Open to:</span>' +
@@ -527,17 +528,16 @@
     // which date it was.
 
     var html =
-      '<div class="cx-card">' +
+      '<div class="cx-card cx-card-badged">' +
+        // Pinned to the card corner, the same place the Connect card puts it.
+        badgeHtml(member, isProspect) +
         '<div class="cx-head">' +
           avatarHtml(member) +
           '<div class="cx-head-text">' +
             // A member's own name and their own headline. dir="auto" or an
             // Arabic name renders left-to-right with its punctuation thrown
             // to the wrong end — see the rule in lib/promptarena.js.
-            '<div class="cx-name-row">' +
-              '<h1 class="cx-name glow-text" dir="auto">' + escapeHtml(name) + "</h1>" +
-              badgeHtml(member, isProspect) +
-            "</div>" +
+            '<h1 class="cx-name glow-text" dir="auto">' + escapeHtml(name) + "</h1>" +
             (member.headline ? '<p class="cx-headline" dir="auto">' + escapeHtml(member.headline) + "</p>" : "") +
             (meta.length ? '<div class="cx-meta">' + meta.join("") + "</div>" : "") +
             chipsHtml(member) +
@@ -906,7 +906,7 @@
     render(memberRes.data, activityRes.data || null, await placingsFor(memberRes.data));
   })();
 </script>
-<script src="../script.js?v=7748bdbeaa"></script>
-<script defer src="../lib/back-to-top.js?v=7748bdbeaa"></script>
+<script src="../script.js?v=bf67066856"></script>
+<script defer src="../lib/back-to-top.js?v=bf67066856"></script>
 </body>
 </html>

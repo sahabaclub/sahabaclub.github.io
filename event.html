@@ -48,7 +48,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=7748bdbeaa">
+<link rel="stylesheet" href="styles.css?v=bf67066856">
 <style>
   .evp-wrap { max-width: 1000px; margin: 0 auto; padding: 40px 20px 96px; }
   .evp-back { display: inline-block; font-size: 14px; color: var(--text-secondary); margin-bottom: 18px; }
@@ -269,7 +269,7 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=7748bdbeaa"></script>
+<script src="header-identity.js?v=bf67066856"></script>
 
 <!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
@@ -352,11 +352,11 @@
 </footer>
 
 <script type="module">
-  import { supabase } from "./lib/supabase-client.js?v=7748bdbeaa";
-  import { relatedEvents } from "./lib/event-related.js?v=7748bdbeaa";
+  import { supabase } from "./lib/supabase-client.js?v=bf67066856";
+  import { relatedEvents } from "./lib/event-related.js?v=bf67066856";
   // ⚠ A static import, not a `const` — imports are hoisted, so this one is
   // exempt from the dead-zone trap described immediately below.
-  import { createRegisterPrompt, rememberPending } from "./lib/register-prompt.js?v=7748bdbeaa";
+  import { createRegisterPrompt, rememberPending } from "./lib/register-prompt.js?v=bf67066856";
 
   // ⚠ `var` throughout, and every binding declared before the first executing
   // statement. There is a top-level await below, and a `const` after it would
@@ -820,7 +820,7 @@
   // event-social.js is loaded on demand rather than up front: most people open
   // this page for the date and the venue and never touch any of it.
   function social(fn) {
-    import("./lib/event-social.js?v=7748bdbeaa").then(fn).catch(function () {});
+    import("./lib/event-social.js?v=bf67066856").then(fn).catch(function () {});
   }
 
   function renderCurrent() {
@@ -1030,8 +1030,8 @@
   }
 </script>
 
-<script src="analytics.js?v=7748bdbeaa"></script>
-<script src="script.js?v=7748bdbeaa"></script>
-<script defer src="lib/back-to-top.js?v=7748bdbeaa"></script>
+<script src="analytics.js?v=bf67066856"></script>
+<script src="script.js?v=bf67066856"></script>
+<script defer src="lib/back-to-top.js?v=bf67066856"></script>
 </body>
 </html>

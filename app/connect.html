@@ -14,8 +14,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=7748bdbeaa">
-<link rel="stylesheet" href="connect.css?v=7748bdbeaa">
+<link rel="stylesheet" href="../styles.css?v=bf67066856">
+<link rel="stylesheet" href="connect.css?v=bf67066856">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -33,7 +33,7 @@
      a guest/member split of its own (Dashboard and Inbox against Home and
      Join free). Running first means that split is decided before the header
      is laid out, rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=7748bdbeaa"></script>
+<script src="../header-identity.js?v=bf67066856"></script>
 </head>
 <body>
 
@@ -227,7 +227,7 @@
     shortSummary, escapeHtml, initialOf, placeOf, experienceLabel,
     subjectHref,
     CONNECT_OFF_MESSAGE, DIRECTORY_CAP,
-  } from "../lib/connect.js?v=7748bdbeaa";
+  } from "../lib/connect.js?v=bf67066856";
 
   var results = document.getElementById("results");
   var countEl = document.getElementById("count");
@@ -328,9 +328,17 @@
     var act = activityOf(m);
     var topics = (act && act.top_topics) || [];
     var place = placeOf(m);
+    // ⚠ YEARS ONLY WHEN THERE IS A NUMBER. null means nobody counted, which is
+    // true of most profiles and is not the same as zero — printing "0 yrs exp"
+    // about somebody whose CV simply had no dates on it would be the card
+    // asserting something nobody measured.
+    var yrs = Number(m.years_experience);
+    var yearsText = (m.years_experience != null && m.years_experience !== "" && yrs > 0)
+      ? yrs + (yrs === 1 ? " yr exp" : " yrs exp")
+      : "";
     var sub = m.is_member
-      ? [shortSummary(m, act), place].filter(Boolean).join(" · ")
-      : place;
+      ? [shortSummary(m, act), yearsText, place].filter(Boolean).join(" · ")
+      : [yearsText, place].filter(Boolean).join(" · ");
     var isMe = me && m.is_member && m.member_user_id === me.id;
     var href = subjectHref(m);
 
@@ -345,9 +353,11 @@
           return '<span class="cx-tag" dir="auto">' + escapeHtml(t) + "</span>";
         });
 
-    // ⚠ THE BADGE LEADS. It is the corner Ahmed pointed at, and it answers
-    // "who is this to the club" — which outranks "did they join this week".
-    var flags = badgeHtml(m);
+    // ⚠ THE BADGE IS NOT IN THIS ROW. It is pinned to the top-right corner of
+    // the card (see .cx-corner-badge) because that is where Ahmed drew it, and
+    // because it answers a different question from these flags: who this
+    // person is to the club, not what happened to them recently.
+    var flags = "";
     // ⚠ NEW IS FIRST, and it is MEMBERS ONLY. Ahmed, 10 Aug 2026: mark people
     // for their first seven days. A prospect's `listed_since` is the date the
     // club imported them, not a date they did anything — calling an imported
@@ -370,6 +380,12 @@
     if (!m.is_member) flags += '<span class="cx-notyet">Hasn’t joined yet</span>';
 
     return '<article class="cx-member' + (m.is_member ? "" : " is-notyet") + '">' +
+      // ⚠ OUTSIDE THE <a>, not inside it. The card body is one big link, and a
+      // badge nested in it becomes part of that link's accessible name — every
+      // card would then announce as "Member, Ahmed, Regional Sales Leader…".
+      // It is also why the badge is positioned against the article rather than
+      // against the link.
+      badgeHtml(m) +
       '<a class="cx-member-link" href="' + href + '">' +
         avatarHtml(m) +
         // dir="auto" on everything a member wrote or the club imported for
@@ -385,7 +401,14 @@
         "</div>" +
       "</a>" +
       (flags ? '<div class="cx-flags">' + flags + "</div>" : "") +
-      (chips.length ? '<div class="cx-tags">' + chips.join("") + "</div>" : "") +
+      // ⚠ LABELLED "Interests:" — Ahmed, 19 Aug. Unlabelled, three bare words
+      // under a name could be skills, topics or tags; the row below says
+      // "Open to:" and these two read as the same kind of thing until one of
+      // them says what it is.
+      (chips.length
+        ? '<div class="cx-tags"><span class="cx-tags-label">Interests:</span>' +
+          chips.join("") + "</div>"
+        : "") +
       openToHtml(m) +
       '<div class="cx-member-foot">' +
         '<a class="cx-btn cx-btn-sm" href="' + href + '">View profile</a>' +
@@ -440,13 +463,13 @@
 
     var role = ROLE_BADGE[meta.role];
     if (role) {
-      return '<span class="cx-badge ' + role.cls + '">' + role.text + "</span>";
+      return '<span class="cx-badge cx-corner-badge ' + role.cls + '">' + role.text + "</span>";
     }
     // Everyone else is a member; the tier decides the colour. An unknown or
     // missing tier reads as standard rather than as nothing — a member with a
     // broken subscription row is still a member.
     var premium = String(meta.tier || "").toLowerCase() === "premium";
-    return '<span class="cx-badge ' + (premium ? "is-premium" : "is-member") + '">' +
+    return '<span class="cx-badge cx-corner-badge ' + (premium ? "is-premium" : "is-member") + '">' +
       (premium ? "Premium" : "Member") + "</span>";
   }
 
@@ -755,7 +778,7 @@
     }
   })();
 </script>
-<script src="../script.js?v=7748bdbeaa"></script>
-<script defer src="../lib/back-to-top.js?v=7748bdbeaa"></script>
+<script src="../script.js?v=bf67066856"></script>
+<script defer src="../lib/back-to-top.js?v=bf67066856"></script>
 </body>
 </html>
