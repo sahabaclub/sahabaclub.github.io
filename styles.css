@@ -819,11 +819,119 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
   margin: 0 auto 30px;
 }
 .lead .lead-line1 { display: block; color: var(--text); font-weight: 600; font-size: 1.05em; margin-bottom: 8px; }
-.lead .lead-line2 { display: block; color: var(--text-secondary); font-size: 0.9em; }
-/* The activities list. Same muted treatment as line 2, which reads as its
-   lead-in ("We do all activities:"), with a little air between them so the
-   colon does not look like a wrapped line. */
-.lead .lead-line3 { display: block; color: var(--text-secondary); font-size: 0.9em; margin-top: 4px; }
+
+/* ============================================================
+   "We do all activities" — a titled block, not a run-on sentence
+   ============================================================ */
+
+.activities { margin: 26px auto 30px; max-width: 720px; }
+
+/* Deliberately not styled like the lead above it: small, spaced capitals with
+   a rule running out to either side, so it reads as a heading over the list
+   rather than as another line of the paragraph. */
+.activities-title {
+  display: flex; align-items: center; gap: 14px;
+  margin: 0 0 14px;
+  font-size: 12.5px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--cyan);
+}
+.activities-title::before,
+.activities-title::after {
+  content: ""; flex: 1 1 auto; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--glass-border), transparent);
+}
+
+/* ⚠ Four fixed columns, not flex-wrap. "Two lines" is the brief, and wrapping
+   would give three rows at one width and two at another. */
+.activities-list {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px; margin: 0; padding: 0; list-style: none;
+}
+.activities-list li {
+  padding: 9px 10px; border-radius: 10px;
+  border: 1px solid var(--glass-border); background: var(--glass);
+  font-size: 13.5px; font-weight: 600; color: var(--text);
+  text-align: center;
+}
+@media (max-width: 720px) {
+  /* Two columns and four rows. Eight columns of shredded words is worse than
+     more rows, so the brief loses to legibility here. */
+  .activities-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ============================================================
+   We Talk What You Talk — the seven-language player
+   ============================================================ */
+
+.talk-section { max-width: 900px; margin: 0 auto; padding: 40px 20px 60px; text-align: center; }
+.talk-title { font-size: clamp(26px, 5vw, 40px); margin: 0 0 10px; }
+.talk-sub { max-width: 560px; margin: 0 auto 22px; color: var(--text-secondary); font-size: 15px; }
+
+.talk-langs {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 10px; margin: 0 0 22px;
+}
+
+/* Each label carries its flag as a stripe under the word. ⚠ The stripe is a
+   decoration and never the only signal — the language is written on the
+   button, and the selected one is marked by aria-selected, a brighter border
+   and a lift, so this works in greyscale and to a screen reader. */
+.lang {
+  position: relative;
+  padding: 10px 18px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text);
+  font: inherit; font-size: 14px; font-weight: 600;
+  cursor: pointer;
+  transition: transform .15s ease, border-color .15s ease, background .15s ease;
+}
+.lang::after {
+  content: "";
+  position: absolute; left: 16px; right: 16px; bottom: 7px;
+  height: 3px; border-radius: 2px;
+  background: var(--flag, var(--glass-border));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+}
+.lang:hover { border-color: var(--cyan); transform: translateY(-1px); }
+.lang:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.lang[aria-selected="true"] {
+  border-color: var(--cyan);
+  background: rgba(34, 211, 238, .12);
+  transform: translateY(-2px);
+}
+.lang[aria-selected="true"]::after { height: 4px; bottom: 6px; }
+
+/* Flag colours as hard-edged stripes. Percentages are the real proportions
+   where they matter (Pakistan's white bar is a quarter, Türkiye's crescent
+   side is not a stripe at all so it is approximated). */
+.lang-en { --flag: linear-gradient(90deg, #012169 0 33.3%, #ffffff 33.3% 66.6%, #c8102e 66.6%); }
+.lang-ar { --flag: linear-gradient(90deg, #007a3d 0 25%, #ffffff 25% 50%, #000000 50% 75%, #ce1126 75%); }
+.lang-hi { --flag: linear-gradient(90deg, #ff9933 0 33.3%, #ffffff 33.3% 66.6%, #138808 66.6%); }
+.lang-de { --flag: linear-gradient(90deg, #000000 0 33.3%, #dd0000 33.3% 66.6%, #ffce00 66.6%); }
+.lang-fr { --flag: linear-gradient(90deg, #0055a4 0 33.3%, #ffffff 33.3% 66.6%, #ef4135 66.6%); }
+.lang-ur { --flag: linear-gradient(90deg, #ffffff 0 25%, #01411c 25%); }
+.lang-tr { --flag: linear-gradient(90deg, #e30a17 0 72%, #ffffff 72%); }
+
+/* ⚠ A Short is 9:16. Giving the frame that ratio explicitly is what stops the
+   page reflowing when the iframe loads, and keeps the phone-shaped video
+   phone-shaped instead of letterboxed inside a widescreen box. */
+.talk-player {
+  width: min(320px, 82vw);
+  margin: 0 auto;
+  aspect-ratio: 9 / 16;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--glass-border);
+  background: #000;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+}
+.talk-player iframe { display: block; width: 100%; height: 100%; border: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lang, .lang:hover, .lang[aria-selected="true"] { transition: none; transform: none; }
+}
 .hero-actions {
   display: flex;
   justify-content: center;

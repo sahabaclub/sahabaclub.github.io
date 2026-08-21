@@ -31,7 +31,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=239a0c17c2">
+<link rel="stylesheet" href="styles.css?v=9eac91b2c9">
 <script>
   // Apply saved theme before first paint so the page never flashes dark.
   try {
@@ -109,7 +109,7 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=239a0c17c2"></script>
+<script src="header-identity.js?v=9eac91b2c9"></script>
 
 <!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
@@ -175,14 +175,79 @@
     <h1 class="glow-text corp-only">Power Platform, agentic AI, and training — delivered by a Microsoft partner.</h1>
     <p class="lead indiv-only">
       <span class="lead-line1">Sahaba Club is the First Virtual Club for AI and Cloud Dreamers</span>
-      <span class="lead-line2">We do all activities:</span>
-      <span class="lead-line3">Events, Coaching, Training, Hackathons, Start-ups support, Communities Hub, Tech Podcast, Meetups, We Talk What You Talk</span>
     </p>
+    <!-- Eight activities, laid out as two rows of four. The grid fixes four
+         columns rather than letting flex-wrap decide, because "two lines" is
+         the brief and wrapping would give a different number of rows at every
+         viewport width. Below 720px it becomes two columns — four rows, but
+         legible, which beats eight columns of shredded text. -->
+    <div class="activities indiv-only">
+      <h2 class="activities-title">We do all activities</h2>
+      <ul class="activities-list">
+        <li>Events</li>
+        <li>Coaching</li>
+        <li>Training</li>
+        <li>Hackathons</li>
+        <li>Start-ups support</li>
+        <li>Communities Hub</li>
+        <li>Tech Podcast</li>
+        <li>Meetups</li>
+      </ul>
+    </div>
     <p class="lead corp-only">We help GCC companies scale with Power Apps, Power Automate, Copilot Studio, and Azure AI — backed by hands-on training so your team keeps building after we're done.</p>
     <div class="hero-actions">
       <a href="login.html" class="btn btn-glow btn-lg indiv-only">Join The Club</a>
       <a href="#join" class="btn btn-glow btn-lg corp-only">Request a consultation</a>
       <a href="#universe" class="btn btn-outline btn-lg">Discover The AI Universe</a>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       We Talk What You Talk — one introduction, seven languages.
+       ============================================================
+
+       This is the AI capability demo on the front page: the same person,
+       the same script, voiced in seven languages. The point is made by
+       letting a visitor hear their own language in one tap, not by
+       claiming anything in prose.
+
+       ⚠ The player is youtube-nocookie.com. The CSP in <head> allows both
+       youtube.com and youtube-nocookie.com in frame-src; the no-cookie
+       host is the one that does not write tracking cookies before a
+       visitor has pressed anything, which matters on a page that also
+       asks for analytics consent.
+
+       ⚠ NO autoplay on first paint — the src here carries none. A page
+       that starts talking at you is a page people close. talk.js adds
+       autoplay=1 only when a language is actually clicked, which is a
+       real user gesture and therefore also the only case a browser
+       would honour. -->
+  <section class="talk-section" id="we-talk">
+    <h2 class="talk-title glow-text">We Talk What You Talk</h2>
+    <p class="talk-sub">
+      One introduction, seven languages — the same voice in every one of them, made with AI.
+      Pick yours and hear it.
+    </p>
+
+    <div class="talk-langs" role="tablist" aria-label="Choose a language">
+      <button type="button" class="lang lang-en" role="tab" id="lang-en" aria-selected="true"  aria-controls="talk-panel" tabindex="0"  data-video="oUPQWksOLJY" data-label="English">English</button>
+      <button type="button" class="lang lang-ar" role="tab" id="lang-ar" aria-selected="false" aria-controls="talk-panel" tabindex="-1" data-video="MqK5WMlqcMo" data-label="Arabic">Arabic</button>
+      <button type="button" class="lang lang-hi" role="tab" id="lang-hi" aria-selected="false" aria-controls="talk-panel" tabindex="-1" data-video="xKZ9Y3FbXP4" data-label="Hindi">Hindi</button>
+      <button type="button" class="lang lang-de" role="tab" id="lang-de" aria-selected="false" aria-controls="talk-panel" tabindex="-1" data-video="8i_xUY9mMdM" data-label="German">German</button>
+      <button type="button" class="lang lang-fr" role="tab" id="lang-fr" aria-selected="false" aria-controls="talk-panel" tabindex="-1" data-video="olZ8A_5Chxk" data-label="French">French</button>
+      <button type="button" class="lang lang-ur" role="tab" id="lang-ur" aria-selected="false" aria-controls="talk-panel" tabindex="-1" data-video="ZX0L-hE-3NM" data-label="Urdu">Urdu</button>
+      <button type="button" class="lang lang-tr" role="tab" id="lang-tr" aria-selected="false" aria-controls="talk-panel" tabindex="-1" data-video="HL6aRysXCYQ" data-label="Türkiye">Türkiye</button>
+    </div>
+
+    <div class="talk-player" id="talk-panel" role="tabpanel" aria-labelledby="lang-en">
+      <iframe
+        id="talk-frame"
+        src="https://www.youtube-nocookie.com/embed/oUPQWksOLJY?rel=0&amp;playsinline=1&amp;modestbranding=1"
+        title="Sahaba Club introduction in English"
+        allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allowfullscreen
+        loading="lazy"></iframe>
     </div>
   </section>
 
@@ -486,8 +551,9 @@
 <!-- Analytics, page views only, and only after the visitor says yes. PUBLIC PAGES ONLY:
      never add this under app/ — those pages are behind a login and their URLs and
      titles describe real named members. The reasoning is in analytics.js. -->
-<script src="analytics.js?v=239a0c17c2"></script>
-<script src="script.js?v=239a0c17c2"></script>
-<script defer src="lib/back-to-top.js?v=239a0c17c2"></script>
+<script src="analytics.js?v=9eac91b2c9"></script>
+<script src="script.js?v=9eac91b2c9"></script>
+<script defer src="lib/back-to-top.js?v=9eac91b2c9"></script>
+<script defer src="talk.js?v=9eac91b2c9"></script>
 </body>
 </html>
