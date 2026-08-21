@@ -27,8 +27,8 @@
 
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=d684ef7c0d">
-<link rel="stylesheet" href="promptarena-admin.css?v=d684ef7c0d">
+<link rel="stylesheet" href="admin.css?v=7748bdbeaa">
+<link rel="stylesheet" href="promptarena-admin.css?v=7748bdbeaa">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -193,9 +193,9 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=d684ef7c0d";
-  import { requireStaff, renderShell } from "../../lib/admin-guard.js?v=d684ef7c0d";
-  import { loadSources, buildModel, renderDashboard, wireTabs } from "./promptarena-admin.js?v=d684ef7c0d";
+  import { supabase } from "../../lib/supabase-client.js?v=7748bdbeaa";
+  import { requireStaff, renderShell } from "../../lib/admin-guard.js?v=7748bdbeaa";
+  import { loadSources, buildModel, renderDashboard, wireTabs } from "./promptarena-admin.js?v=7748bdbeaa";
 
   const user = await requireStaff("promptarena");
   if (user) {
@@ -232,6 +232,6 @@
     }
   }
 </script>
-<script defer src="../../lib/back-to-top.js?v=d684ef7c0d"></script>
+<script defer src="../../lib/back-to-top.js?v=7748bdbeaa"></script>
 </body>
 </html>

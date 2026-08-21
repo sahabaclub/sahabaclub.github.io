@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=d684ef7c0d">
-<link rel="stylesheet" href="connect.css?v=d684ef7c0d">
+<link rel="stylesheet" href="../styles.css?v=7748bdbeaa">
+<link rel="stylesheet" href="connect.css?v=7748bdbeaa">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -35,7 +35,7 @@
      a guest/member split of its own (Inbox against Home and Join free).
      Running first means that split is decided before the header is laid out,
      rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=d684ef7c0d"></script>
+<script src="../header-identity.js?v=7748bdbeaa"></script>
 </head>
 <body>
 
@@ -192,7 +192,7 @@
     roundsWithPlacings, hackathonRecord, engagementBreakdown, RECORD,
     summarise, escapeHtml, initialOf, linkList, placeOf,
     experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
-  } from "../lib/connect.js?v=d684ef7c0d";
+  } from "../lib/connect.js?v=7748bdbeaa";
 
   var root = document.getElementById("member-root");
   var me = null;
@@ -267,11 +267,74 @@
 
   function avatarHtml(member) {
     if (member.avatar_url) {
-      return '<img class="cx-avatar" src="' + escapeHtml(member.avatar_url) +
-             '" alt="" loading="lazy">';
+      // ⚠ A BUTTON, NOT AN IMG, when there is a picture to enlarge. Ahmed
+      // asked for a click-to-enlarge; making the control a real <button> is
+      // what gets it keyboard focus and Enter/Space for free. A bare <img>
+      // with a click handler is reachable by mouse only.
+      //
+      // The alt stays empty: the name is right beside it in an <h1>, and a
+      // screen reader announcing "photo of X" immediately before "X" is
+      // noise. The BUTTON carries the label instead, which is the thing a
+      // reader actually needs to know is pressable.
+      return '<button type="button" class="cx-avatar-btn" id="avatar-open" ' +
+             'aria-label="' + escapeHtml("See " + (member.full_name || "this member") + "'s photo larger") + '">' +
+             '<img class="cx-avatar" src="' + escapeHtml(member.avatar_url) +
+             '" alt="" loading="lazy">' +
+             '<span class="cx-avatar-zoom" aria-hidden="true">' +
+               '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">' +
+                 '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5M11 8v6M8 11h6"/>' +
+               "</svg>" +
+             "</span>" +
+             "</button>";
     }
+    // No picture, nothing to enlarge — an initial in a circle stays inert
+    // rather than becoming a button that opens a bigger initial.
     return '<span class="cx-avatar cx-avatar-initial" aria-hidden="true">' +
            escapeHtml(initialOf(member.full_name)) + "</span>";
+  }
+
+  // ---- Role and tier badge ----------------------------------------------
+  //
+  // Same mapping and the same reasoning as connect.html — see the note there
+  // about "Founder" being a label over global_admin rather than a role of its
+  // own, and about Coach waiting for the coaching system.
+  var ROLE_BADGE = {
+    global_admin: { text: "Founder", cls: "is-founder" },
+    admin: { text: "Staff", cls: "is-staff" },
+    staff: { text: "Staff", cls: "is-staff" },
+    operations_manager: { text: "Staff", cls: "is-staff" },
+  };
+
+  function badgeHtml(member, isProspect) {
+    // A prospect has no account, so no role and no plan. Saying "Member"
+    // about somebody who has not joined would be the page asserting the one
+    // thing this whole distinction exists to keep straight.
+    if (isProspect) return "";
+    var role = ROLE_BADGE[member.role];
+    if (role) return '<span class="cx-badge ' + role.cls + '">' + role.text + "</span>";
+    var premium = String(member.tier || "").toLowerCase() === "premium";
+    return '<span class="cx-badge ' + (premium ? "is-premium" : "is-member") + '">' +
+      (premium ? "Premium" : "Member") + "</span>";
+  }
+
+  // The three interest chips, then what they are open to — the same pair the
+  // Connect card shows, so a profile and its card do not disagree.
+  function chipsHtml(member) {
+    var interests = (member.interests || []).filter(Boolean).slice(0, 3);
+    var openTo = (member.open_to || []).filter(Boolean).slice(0, 4);
+    var out = "";
+    if (interests.length) {
+      out += '<div class="cx-head-tags">' + interests.map(function (t) {
+        return '<span class="cx-tag cx-tag-topic" dir="auto">' + escapeHtml(t) + "</span>";
+      }).join("") + "</div>";
+    }
+    if (openTo.length) {
+      out += '<div class="cx-open-to"><span class="cx-open-to-label">Open to:</span>' +
+        openTo.map(function (t) {
+          return '<span class="cx-tag cx-tag-open" dir="auto">' + escapeHtml(t) + "</span>";
+        }).join("") + "</div>";
+    }
+    return out;
   }
 
   // ---- Reading jsonb safely ---------------------------------------------
@@ -471,9 +534,13 @@
             // A member's own name and their own headline. dir="auto" or an
             // Arabic name renders left-to-right with its punctuation thrown
             // to the wrong end — see the rule in lib/promptarena.js.
-            '<h1 class="cx-name glow-text" dir="auto">' + escapeHtml(name) + "</h1>" +
+            '<div class="cx-name-row">' +
+              '<h1 class="cx-name glow-text" dir="auto">' + escapeHtml(name) + "</h1>" +
+              badgeHtml(member, isProspect) +
+            "</div>" +
             (member.headline ? '<p class="cx-headline" dir="auto">' + escapeHtml(member.headline) + "</p>" : "") +
             (meta.length ? '<div class="cx-meta">' + meta.join("") + "</div>" : "") +
+            chipsHtml(member) +
           "</div>" +
         "</div>" +
         // `summarise` counts events and a membership date, and a prospect has
@@ -648,6 +715,69 @@
 
     var btn = document.getElementById("btn-follow");
     if (btn) wireFollow(btn, member.user_id);
+
+    wireAvatarZoom(member);
+  }
+
+  // ---- The photo, larger --------------------------------------------------
+  //
+  // Ahmed, 19 Aug: clicking the picture should open it big and round in the
+  // middle of the screen.
+  //
+  // ⚠ Built here rather than sitting in the page markup, because the whole
+  // profile is replaced by innerHTML above — a lightbox in the static HTML
+  // would be wiped on every render, and one built inside `html` would be
+  // rebuilt (and its listeners lost) every time too. This appends to <body>,
+  // outside the region that gets replaced.
+  //
+  // ⚠ Escape closes it and focus goes back to the button that opened it.
+  // Without that a keyboard reader is left with focus on a removed element,
+  // which lands them back at the top of the document with no idea why.
+  function wireAvatarZoom(member) {
+    var opener = document.getElementById("avatar-open");
+    if (!opener || !member.avatar_url) return;
+
+    var overlay = null;
+
+    function close() {
+      if (!overlay) return;
+      overlay.remove();
+      overlay = null;
+      document.removeEventListener("keydown", onKey);
+      document.body.classList.remove("cx-zoom-open");
+      opener.focus();
+    }
+
+    function onKey(ev) {
+      if (ev.key === "Escape") { ev.preventDefault(); close(); }
+    }
+
+    opener.addEventListener("click", function () {
+      if (overlay) return;
+      overlay = document.createElement("div");
+      overlay.className = "cx-zoom";
+      // role/aria-modal so a screen reader treats it as a dialog rather than
+      // as more page content that appeared from nowhere.
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      overlay.setAttribute("aria-label",
+        (member.full_name || "Member") + " — photo");
+      overlay.innerHTML =
+        '<button type="button" class="cx-zoom-close" aria-label="Close">&times;</button>' +
+        '<img class="cx-zoom-img" src="' + escapeHtml(member.avatar_url) + '" alt="">';
+
+      // Clicking the backdrop closes; clicking the picture does not, or the
+      // first thing a reader does after opening it shuts it again.
+      overlay.addEventListener("click", function (ev) {
+        if (ev.target === overlay || ev.target.classList.contains("cx-zoom-close")) close();
+      });
+
+      document.body.appendChild(overlay);
+      document.body.classList.add("cx-zoom-open");
+      document.addEventListener("keydown", onKey);
+      var closeBtn = overlay.querySelector(".cx-zoom-close");
+      if (closeBtn) closeBtn.focus();
+    });
   }
 
   function paintFollow(btn) {
@@ -776,7 +906,7 @@
     render(memberRes.data, activityRes.data || null, await placingsFor(memberRes.data));
   })();
 </script>
-<script src="../script.js?v=d684ef7c0d"></script>
-<script defer src="../lib/back-to-top.js?v=d684ef7c0d"></script>
+<script src="../script.js?v=7748bdbeaa"></script>
+<script defer src="../lib/back-to-top.js?v=7748bdbeaa"></script>
 </body>
 </html>

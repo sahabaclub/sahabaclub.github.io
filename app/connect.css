@@ -452,6 +452,59 @@ html.light-mode .cx-role { background: rgba(0, 0, 0, 0.04); }
 
 .cx-flags { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
 
+/* ============================================================
+   Role and tier badges  (0075 / 19 Aug)
+   ============================================================
+
+   ⚠ COLOUR IS NEVER THE ONLY SIGNAL. Blue standard against gold premium is
+   the brief, but the badge always says the word too — a member who cannot
+   tell the two hues apart reads "Member" or "Premium" either way, and so
+   does a screen reader. */
+.cx-badge {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; letter-spacing: .04em;
+  border: 1px solid transparent; white-space: nowrap;
+}
+/* Founder — the club's own accent, used nowhere else on a card. */
+.cx-badge.is-founder {
+  color: #0b0f18; border-color: transparent;
+  background: linear-gradient(135deg, #a78bfa, #22d3ee);
+}
+/* Staff — present but quiet. It marks who works here, not who matters. */
+.cx-badge.is-staff {
+  color: #c4b5fd; border-color: rgba(167, 139, 250, .45);
+  background: rgba(167, 139, 250, .12);
+}
+.cx-badge.is-member {
+  color: #7dd3fc; border-color: rgba(56, 189, 248, .40);
+  background: rgba(56, 189, 248, .10);
+}
+.cx-badge.is-premium {
+  color: #1a1508; border-color: transparent;
+  background: linear-gradient(135deg, #fbbf24, #e0a83e);
+}
+html.light-mode .cx-badge.is-staff { color: #5b21b6; }
+html.light-mode .cx-badge.is-member { color: #075985; }
+
+/* "Open to:" — an invitation, not a topic. Labelled so it cannot be read as
+   four more interest chips. */
+.cx-open-to {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  margin-top: 8px;
+}
+.cx-open-to-label {
+  font-size: 11.5px; font-weight: 700; color: var(--text-muted);
+  letter-spacing: .02em;
+}
+.cx-tag-open {
+  border-color: rgba(74, 222, 128, .38);
+  background: rgba(74, 222, 128, .10);
+  color: #86efac;
+}
+html.light-mode .cx-tag-open { color: #166534; }
+
+
 /* The same violet plate as .cx-badge.is-coach, whose text colours are already
    measured. Sentence case rather than the badges' uppercase: this is a
    sentence about the reader, not a label.
@@ -829,3 +882,64 @@ html.light-mode .cx-unread { color: #ffffff; }
 /* The phone shows one pane at a time; JS toggles cx-is-hidden, and the
    min-width rule above overrides it back on once both fit. */
 .cx-is-hidden { display: none; }
+
+/* ============================================================
+   Profile header extras and the photo lightbox  (19 Aug)
+   ============================================================ */
+
+.cx-name-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cx-name-row .cx-name { margin: 0; }
+.cx-head-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+/* The avatar becomes a control when there is a photo behind it. The zoom
+   glyph is the affordance — without it nothing says the picture is
+   pressable, and a control nobody knows about is not a feature. */
+.cx-avatar-btn {
+  position: relative; padding: 0; border: 0; background: none;
+  cursor: zoom-in; border-radius: 50%; line-height: 0;
+  flex: none;
+}
+.cx-avatar-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+.cx-avatar-zoom {
+  position: absolute; right: 2px; bottom: 2px;
+  width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(11, 15, 24, .82); color: #e7ecf5;
+  border: 1px solid var(--glass-border);
+  opacity: 0; transition: opacity .15s ease;
+}
+.cx-avatar-zoom svg { width: 13px; height: 13px; }
+.cx-avatar-btn:hover .cx-avatar-zoom,
+.cx-avatar-btn:focus-visible .cx-avatar-zoom { opacity: 1; }
+/* ⚠ On a touch screen there is no hover to reveal it, so it is simply always
+   there. Otherwise the only hint that the picture opens is invisible on the
+   devices most people read this on. */
+@media (hover: none) { .cx-avatar-zoom { opacity: 1; } }
+
+.cx-zoom {
+  position: fixed; inset: 0; z-index: 120;
+  display: grid; place-items: center; padding: 24px;
+  background: rgba(3, 5, 10, .86);
+  backdrop-filter: blur(6px);
+}
+/* Round, because that is how the avatar is shown everywhere else — a photo
+   that squares off on zoom looks like a different picture. */
+.cx-zoom-img {
+  width: min(440px, 82vw); height: min(440px, 82vw);
+  border-radius: 50%; object-fit: cover;
+  border: 3px solid rgba(255, 255, 255, .12);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .6);
+}
+.cx-zoom-close {
+  position: absolute; top: 18px; right: 20px;
+  width: 42px; height: 42px; border-radius: 50%;
+  border: 1px solid var(--glass-border); background: rgba(11, 15, 24, .8);
+  color: #e7ecf5; font-size: 26px; line-height: 1; cursor: pointer;
+}
+.cx-zoom-close:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+/* The page behind must not scroll while the photo is open. */
+body.cx-zoom-open { overflow: hidden; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cx-avatar-zoom { transition: none; }
+}

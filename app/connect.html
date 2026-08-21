@@ -14,8 +14,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=d684ef7c0d">
-<link rel="stylesheet" href="connect.css?v=d684ef7c0d">
+<link rel="stylesheet" href="../styles.css?v=7748bdbeaa">
+<link rel="stylesheet" href="connect.css?v=7748bdbeaa">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -33,7 +33,7 @@
      a guest/member split of its own (Dashboard and Inbox against Home and
      Join free). Running first means that split is decided before the header
      is laid out, rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=d684ef7c0d"></script>
+<script src="../header-identity.js?v=7748bdbeaa"></script>
 </head>
 <body>
 
@@ -167,6 +167,21 @@
       <select class="cx-select" id="f-industry"><option value="">Any industry</option></select>
       <label class="sr-only" for="f-experience">Experience level</label>
       <select class="cx-select" id="f-experience"><option value="">Any experience</option></select>
+      <!-- ⚠ SORT, NOT A FILTER. It sits in the same row because that is where
+           a reader looks, but it changes the ORDER of what is already shown
+           and never what is shown — so it is deliberately not part of
+           `matches()` and clearing the filters does not reset it.
+
+           Default is "Last updated": a member who has just filled their
+           profile in is the one worth meeting, and it rewards keeping a
+           profile current. Ahmed, 19 Aug. -->
+      <label class="sr-only" for="f-sort">Sort</label>
+      <select class="cx-select" id="f-sort">
+        <option value="updated" selected>Last updated</option>
+        <option value="joined">Recently joined</option>
+        <option value="match">AI match</option>
+        <option value="name">First name (A–Z)</option>
+      </select>
       <!-- ⚠ There was a Topic filter here until 11 Aug 2026 (Ahmed). It is
            gone, not hidden. The topic CHIPS on each card stay — they are what
            a member actually reads, and they come from the same
@@ -208,11 +223,11 @@
 
 <script type="module">
   import {
-    currentUser, listConnect, getActivityFor, myFollowing, follow, unfollow,
+    currentUser, listConnect, getActivityFor, getDirectoryMetaFor, myFollowing, follow, unfollow,
     shortSummary, escapeHtml, initialOf, placeOf, experienceLabel,
     subjectHref,
     CONNECT_OFF_MESSAGE, DIRECTORY_CAP,
-  } from "../lib/connect.js?v=d684ef7c0d";
+  } from "../lib/connect.js?v=7748bdbeaa";
 
   var results = document.getElementById("results");
   var countEl = document.getElementById("count");
@@ -225,6 +240,7 @@
   // event history — and nowhere else.
   var people = [];
   var activity = {};
+  var meta = {};
   var followingSet = new Set();
 
   function state(title, text, actionsHtml) {
@@ -329,7 +345,9 @@
           return '<span class="cx-tag" dir="auto">' + escapeHtml(t) + "</span>";
         });
 
-    var flags = "";
+    // ⚠ THE BADGE LEADS. It is the corner Ahmed pointed at, and it answers
+    // "who is this to the club" — which outranks "did they join this week".
+    var flags = badgeHtml(m);
     // ⚠ NEW IS FIRST, and it is MEMBERS ONLY. Ahmed, 10 Aug 2026: mark people
     // for their first seven days. A prospect's `listed_since` is the date the
     // club imported them, not a date they did anything — calling an imported
@@ -368,6 +386,7 @@
       "</a>" +
       (flags ? '<div class="cx-flags">' + flags + "</div>" : "") +
       (chips.length ? '<div class="cx-tags">' + chips.join("") + "</div>" : "") +
+      openToHtml(m) +
       '<div class="cx-member-foot">' +
         '<a class="cx-btn cx-btn-sm" href="' + href + '">View profile</a>' +
         (m.is_member && !isMe ? followButtonHtml(m.member_user_id) : "") +
@@ -392,6 +411,125 @@
     var age = Date.now() - joined;
     // A clock skewed into the future would otherwise read as "not new".
     return age < NEW_FOR_MS && age > -NEW_FOR_MS;
+  }
+
+  // ---- Badges -----------------------------------------------------------
+  //
+  // ⚠ ROLE FIRST, TIER ONLY FOR PLAIN MEMBERS. Ahmed, 19 Aug: he is Founder,
+  // Ghadir is Staff, everybody else is a Member — blue on the standard plan,
+  // gold on premium. Coach is in the enum and deliberately NOT rendered yet:
+  // it arrives with the coaching system, and a badge for a role nobody holds
+  // is a promise the site cannot keep.
+  //
+  // ⚠ "Founder" IS A LABEL, NOT A ROLE. There is no `founder` in member_role;
+  // global_admin is the closest thing and there is exactly one of them today
+  // (measured, 19 Aug). If a second global_admin is ever created they will
+  // read as a second founder — at which point this wants a real column rather
+  // than a mapping.
+  var ROLE_BADGE = {
+    global_admin: { text: "Founder", cls: "is-founder" },
+    admin: { text: "Staff", cls: "is-staff" },
+    staff: { text: "Staff", cls: "is-staff" },
+    operations_manager: { text: "Staff", cls: "is-staff" },
+  };
+
+  function badgeHtml(m) {
+    if (!m.is_member) return "";
+    var meta = metaOf(m);
+    if (!meta) return "";
+
+    var role = ROLE_BADGE[meta.role];
+    if (role) {
+      return '<span class="cx-badge ' + role.cls + '">' + role.text + "</span>";
+    }
+    // Everyone else is a member; the tier decides the colour. An unknown or
+    // missing tier reads as standard rather than as nothing — a member with a
+    // broken subscription row is still a member.
+    var premium = String(meta.tier || "").toLowerCase() === "premium";
+    return '<span class="cx-badge ' + (premium ? "is-premium" : "is-member") + '">' +
+      (premium ? "Premium" : "Member") + "</span>";
+  }
+
+  // What they said they want from the club, under the interest chips.
+  //
+  // ⚠ A DIFFERENT KIND OF FACT FROM THE CHIPS ABOVE IT, which is why it is
+  // labelled rather than just being four more tags. The chips are topics —
+  // what they are into. This is an invitation: mentoring, hiring, collaborating.
+  // Unlabelled they read as the same thing and the invitation is lost.
+  //
+  // Members only: it comes from `member_directory`, and a prospect has no
+  // profile in which to have answered.
+  function openToHtml(m) {
+    var meta = metaOf(m);
+    var list = (meta && meta.open_to) || [];
+    if (!list.length) return "";
+    var tags = list.filter(Boolean).slice(0, 4).map(function (t) {
+      return '<span class="cx-tag cx-tag-open" dir="auto">' + escapeHtml(t) + "</span>";
+    });
+    return '<div class="cx-open-to"><span class="cx-open-to-label">Open to:</span>' +
+      tags.join("") + "</div>";
+  }
+
+  // ---- Sorting ----------------------------------------------------------
+  //
+  // ⚠ SORTED IN THE BROWSER, NOT THE QUERY. The whole directory is already in
+  // memory — listConnect pages it in and caps it — so re-ordering is free and
+  // instant, and it means changing the order never costs a round trip or a
+  // loading state. It also keeps "you are always first" working, which is a
+  // fact about this browser that no query should know.
+  var SORTS = {
+    // The default. Falls back to when they joined for anyone whose profile has
+    // never been edited, so those people sit in a sensible place rather than
+    // all landing together at the bottom in id order.
+    updated: function (a, b) {
+      return timeOf(metaOf(b), "profile_updated_at", b.listed_since) -
+             timeOf(metaOf(a), "profile_updated_at", a.listed_since);
+    },
+    joined: function (a, b) {
+      return (Date.parse(b.listed_since) || 0) - (Date.parse(a.listed_since) || 0);
+    },
+    // 0028's relevance band: 1 is closest to you, 8 is furthest. Ascending.
+    // ⚠ Prospects and members are mixed here on purpose — "who is most
+    // relevant to me" is a different question from "who has joined", and the
+    // members-first rule belongs to the other sorts.
+    match: function (a, b) {
+      var d = (a.relevance == null ? 99 : a.relevance) - (b.relevance == null ? 99 : b.relevance);
+      return d || SORTS.joined(a, b);
+    },
+    // ⚠ localeCompare, not <. This directory has Arabic names in it, and
+    // byte order puts every one of them after every Latin name regardless of
+    // letter. Empty names sort last rather than first.
+    name: function (a, b) {
+      var an = String(a.full_name || "").trim();
+      var bn = String(b.full_name || "").trim();
+      if (!an) return bn ? 1 : 0;
+      if (!bn) return -1;
+      return an.localeCompare(bn, undefined, { sensitivity: "base" });
+    },
+  };
+
+  function timeOf(meta, key, fallback) {
+    var t = meta && meta[key] ? Date.parse(meta[key]) : NaN;
+    if (!isNaN(t)) return t;
+    var f = Date.parse(fallback);
+    return isNaN(f) ? 0 : f;
+  }
+
+  function sortedForDisplay(list) {
+    var how = document.getElementById("f-sort").value || "updated";
+    var cmp = SORTS[how] || SORTS.updated;
+    // A copy: `people` holds the pinned-first order and the load path owns it.
+    var out = list.slice().sort(cmp);
+
+    // ⚠ You stay first whatever the sort says — the same rule the load path
+    // applies, re-applied because sorting has just undone it. Except under
+    // "AI match", where you are band 7 and pinning yourself to the top of a
+    // list about who is closest to you is noise.
+    if (me && how !== "match") {
+      var i = out.findIndex(function (p) { return p.is_member && p.member_user_id === me.id; });
+      if (i > 0) out.unshift(out.splice(i, 1)[0]);
+    }
+    return out;
   }
 
   function followButtonHtml(userId) {
@@ -423,11 +561,22 @@
     // which the caption deliberately does not spell out: it is one card, it
     // says "(you)" on it, and a sentence explaining it would be longer than the
     // thing it explains.
-    return head + " · members first, newest first";
+    // ⚠ THE CAPTION NAMES THE ORDER ON SCREEN. It has been wrong before: it
+    // read "closest to you first" for four days after the ordering changed
+    // underneath it. Now that a reader can choose the order, the only safe
+    // version is one derived from the same value the sort reads.
+    var ORDER_TEXT = {
+      updated: "recently updated first",
+      joined: "newest first",
+      match: "closest to you first",
+      name: "by first name",
+    };
+    var how = document.getElementById("f-sort").value || "updated";
+    return head + " · " + (ORDER_TEXT[how] || ORDER_TEXT.updated);
   }
 
   function render() {
-    var shown = people.filter(matches);
+    var shown = sortedForDisplay(people.filter(matches));
     countEl.hidden = false;
     countEl.textContent = countText(shown.length);
 
@@ -483,7 +632,11 @@
   // same moment its <select> was, on 11 Aug 2026, for exactly that reason.
   var FILTER_IDS = ["f-kind", "f-country", "f-industry", "f-experience"];
 
-  ["q"].concat(FILTER_IDS).forEach(function (id) {
+  // ⚠ f-sort is wired here but is NOT in FILTER_IDS. That list is read by the
+  // "Clear filters" button, and resetting somebody's chosen order because they
+  // cleared a country filter is not clearing a filter — it is losing their
+  // place. Sorting and filtering are separate ideas on this page.
+  ["q", "f-sort"].concat(FILTER_IDS).forEach(function (id) {
     var el = document.getElementById(id);
     el.addEventListener("input", render);
     el.addEventListener("change", render);
@@ -495,6 +648,13 @@
   // one lookup that has to know which kind of row it was handed.
   function activityOf(m) {
     return m && m.is_member ? activity[m.member_user_id] : null;
+  }
+
+  // Role, tier and when the profile last changed. Members only — a missing
+  // key means a prospect, or a member the meta fetch could not reach, and
+  // both render without a badge rather than with a wrong one.
+  function metaOf(m) {
+    return m && m.is_member ? meta[m.member_user_id] : null;
   }
 
   (async function init() {
@@ -557,11 +717,19 @@
       return;
     }
 
-    var act = await getActivityFor(
-      people.filter(function (m) { return m.is_member; })
-            .map(function (m) { return m.member_user_id; })
-    );
+    var memberIds = people.filter(function (m) { return m.is_member; })
+                          .map(function (m) { return m.member_user_id; });
+
+    // ⚠ Both of these are extras. If either fails the directory still renders
+    // — activity loses the topic chips and the summary, meta loses the badges
+    // and drops "Last updated" back onto join date. Neither is worth an empty
+    // page, and both return {} on failure rather than throwing.
+    var act = await getActivityFor(memberIds);
     activity = act.data || {};
+
+    var mt = await getDirectoryMetaFor(memberIds);
+    meta = mt.data || {};
+
     var fol = await myFollowing();
     followingSet = fol.data;
 
@@ -587,7 +755,7 @@
     }
   })();
 </script>
-<script src="../script.js?v=d684ef7c0d"></script>
-<script defer src="../lib/back-to-top.js?v=d684ef7c0d"></script>
+<script src="../script.js?v=7748bdbeaa"></script>
+<script defer src="../lib/back-to-top.js?v=7748bdbeaa"></script>
 </body>
 </html>
