@@ -1089,3 +1089,47 @@ html.light-mode .cx-sort-label { color: #0e7490; }
    kind of thing ships. */
 .cx-member .cx-member-headline { padding-right: 56px; }
 .cx-card-badged .cx-headline { padding-right: 76px; }
+
+/* ============================================================
+   Badge colours and trophy placement  (19 Aug, third revision)
+   ============================================================ */
+
+/* ⚠ FOUNDER NOW MATCHES STAFF — Ahmed, 19 Aug. It was a bright cyan-violet
+   gradient, which shouted next to everything else on the card. The two are
+   told apart by the WORD on the ribbon, which was always the real signal;
+   the colour was never carrying that job on its own. */
+.cx-badge.is-founder {
+  color: #c4b5fd;
+  border-color: rgba(167, 139, 250, .45);
+  background: rgba(167, 139, 250, .18);
+}
+
+/* Coach — its own colour, and deliberately warm rather than another blue or
+   purple. Member is blue, staff and founder are violet, premium is gold;
+   emerald is the one place left that nothing else occupies. */
+.cx-badge.is-coach {
+  color: #6ee7b7;
+  border-color: rgba(52, 211, 153, .5);
+  background: rgba(16, 185, 129, .20);
+}
+html.light-mode .cx-badge.is-coach { color: #065f46; }
+html.light-mode .cx-badge.is-founder { color: #5b21b6; }
+
+/* ⚠ THE RIBBON PAINTS ITS OWN BACKGROUND. Ribbon rules come later in this
+   file than the pill rules above, so these have to re-state the background
+   for the rotated band or the corner shows the pill treatment on a shape
+   that is not a pill. */
+.cx-corner-badge.is-founder { background: rgba(167, 139, 250, .95); color: #14101f; }
+.cx-corner-badge.is-staff { background: rgba(167, 139, 250, .95); color: #14101f; }
+.cx-corner-badge.is-coach { background: rgba(16, 185, 129, .95); color: #04231a; }
+.cx-corner-badge.is-member { background: rgba(56, 189, 248, .95); color: #04202b; }
+.cx-corner-badge.is-premium { background: linear-gradient(135deg, #fbbf24, #e0a83e); color: #1a1508; }
+
+/* ⚠ LOWER — Ahmed, 19 Aug: into the space under the name rather than tucked
+   against the bottom of the picture. It now hangs clear of the avatar, which
+   also stops the circle border and the trophy border touching. */
+.cx-trophy { bottom: -20px; }
+/* The wrapper has to allow it out: the avatar sits in a flex row and a trophy
+   hanging 20px below the circle needs that much room reserved, or the next
+   row of the card sits on top of it. */
+.cx-avatar-wrap { margin-bottom: 14px; }

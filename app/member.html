@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=184409188e">
-<link rel="stylesheet" href="connect.css?v=184409188e">
+<link rel="stylesheet" href="../styles.css?v=415d6c02c6">
+<link rel="stylesheet" href="connect.css?v=415d6c02c6">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -35,7 +35,7 @@
      a guest/member split of its own (Inbox against Home and Join free).
      Running first means that split is decided before the header is laid out,
      rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=184409188e"></script>
+<script src="../header-identity.js?v=415d6c02c6"></script>
 </head>
 <body>
 
@@ -192,7 +192,7 @@
     roundsWithPlacings, hackathonRecord, engagementBreakdown, RECORD,
     summarise, escapeHtml, initialOf, linkList, placeOf,
     experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
-  } from "../lib/connect.js?v=184409188e";
+  } from "../lib/connect.js?v=415d6c02c6";
 
   var root = document.getElementById("member-root");
   var me = null;
@@ -336,6 +336,10 @@
   // own, and about Coach waiting for the coaching system.
   var ROLE_BADGE = {
     global_admin: { text: "Founder", cls: "is-founder" },
+    // ⚠ COACH IS NOT STAFF. is_staff() is role in (staff, admin,
+    // global_admin) — a coach badge grants nothing, it only says what
+    // somebody does for the club. Four coaches as of 0076.
+    coach: { text: "Coach", cls: "is-coach" },
     admin: { text: "Staff", cls: "is-staff" },
     staff: { text: "Staff", cls: "is-staff" },
     operations_manager: { text: "Staff", cls: "is-staff" },
@@ -945,7 +949,7 @@
     render(memberRes.data, activityRes.data || null, await placingsFor(memberRes.data));
   })();
 </script>
-<script src="../script.js?v=184409188e"></script>
-<script defer src="../lib/back-to-top.js?v=184409188e"></script>
+<script src="../script.js?v=415d6c02c6"></script>
+<script defer src="../lib/back-to-top.js?v=415d6c02c6"></script>
 </body>
 </html>

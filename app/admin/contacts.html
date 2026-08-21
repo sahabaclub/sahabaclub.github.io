@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=184409188e">
+<link rel="stylesheet" href="admin.css?v=415d6c02c6">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -135,9 +135,9 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=184409188e";
+  import { supabase } from "../../lib/supabase-client.js?v=415d6c02c6";
   import { requireStaff, renderShell, escapeHtml, showMessage, clearMessage }
-    from "../../lib/admin-guard.js?v=184409188e";
+    from "../../lib/admin-guard.js?v=415d6c02c6";
 
   const user = await requireStaff("contacts");
   renderShell(user, "contacts.html");
@@ -462,6 +462,6 @@
 
   await load();
 </script>
-<script defer src="../../lib/back-to-top.js?v=184409188e"></script>
+<script defer src="../../lib/back-to-top.js?v=415d6c02c6"></script>
 </body>
 </html>

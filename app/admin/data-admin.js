@@ -23,9 +23,9 @@
 //     here does not stop the audit.
 //
 // Never move a check out of the database and rely on this file.
-import { supabase } from "../../lib/supabase-client.js?v=184409188e";
+import { supabase } from "../../lib/supabase-client.js?v=415d6c02c6";
 import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-  from "../../lib/admin-guard.js?v=184409188e";
+  from "../../lib/admin-guard.js?v=415d6c02c6";
 
 const DATASETS = {
   marketing_contacts: {
