@@ -731,9 +731,9 @@ html.light-mode .cx-tl-now { color: var(--violet); }
 
 /* ---- Inbox ---- */
 
-.cx-inbox { display: grid; grid-template-columns: 1fr; gap: 14px; }
+.cx-inbox { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 @media (min-width: 860px) {
-  .cx-inbox { grid-template-columns: 300px 1fr; align-items: start; }
+  .cx-inbox { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; }
   /* Above this width both panes are on screen at once, so the phone's
      one-at-a-time switching stops applying. */
   .cx-inbox .cx-pane { display: block !important; }
@@ -1128,8 +1128,49 @@ html.light-mode .cx-badge.is-founder { color: #5b21b6; }
 /* ⚠ LOWER — Ahmed, 19 Aug: into the space under the name rather than tucked
    against the bottom of the picture. It now hangs clear of the avatar, which
    also stops the circle border and the trophy border touching. */
-.cx-trophy { bottom: -20px; }
+.cx-trophy { bottom: -30px; }
 /* The wrapper has to allow it out: the avatar sits in a flex row and a trophy
    hanging 20px below the circle needs that much room reserved, or the next
    row of the card sits on top of it. */
-.cx-avatar-wrap { margin-bottom: 14px; }
+.cx-avatar-wrap { margin-bottom: 24px; }
+
+
+/* ⚠ Lowered again, 22 Aug (Ahmed, second ask). The trophy hangs 30px below
+   the avatar and the wrapper reserves 24px for it. Those two numbers move
+   TOGETHER: drop the trophy without growing the reserve and the next row of
+   the card — the Interests line — sits on top of it.
+   Verified by measuring the gap between the trophy and the card foot, not by
+   eye: an overlap of a few pixels reads as a rendering glitch rather than a
+   layout mistake, and is easy to look straight past. */
+
+
+/* ============================================================
+   Inbox on a phone  (22 Aug)
+   ============================================================
+
+   ⚠ minmax(0, 1fr) AND min-width:0 — NOT 1fr. This is the same trap that
+   widened the dashboard calendar's weekday columns, in a different file.
+   "1fr" means "minmax(auto, 1fr)", and "auto" floors a grid track at its
+   MIN-CONTENT width. The conversation header is a row of unbreakable things
+   — a back button, an avatar, a name, a Profile link — so the track grew to
+   fit them and the pane hung off the side of its own container.
+
+   Measured at 390px before the fix: .cx-inbox 362px wide with its right edge
+   at 376, while #pane-convo was 369px wide with its right edge at 383. The
+   pane, the header and every message bubble overhung the card by 7px, which
+   is what a member sees as a chat bubble running off the screen. The page
+   itself did NOT report horizontal overflow, because the body clipped it —
+   so a scrollWidth check would have called this page clean. */
+.cx-inbox > .cx-pane { min-width: 0; }
+
+/* The head is a flex row of fixed-size controls around one flexible name.
+   Without this the name refuses to ellipsis and pushes the row wide again,
+   re-creating the overflow one level down. */
+.cx-convo-head { min-width: 0; }
+.cx-convo-head > * { min-width: 0; }
+.cx-convo-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Belt and braces on the bubbles themselves: a single long unbroken token —
+   a pasted URL — must wrap rather than set the width of the column. */
+.cx-convo { min-width: 0; }
+.cx-bubble { max-width: min(84%, 100%); }

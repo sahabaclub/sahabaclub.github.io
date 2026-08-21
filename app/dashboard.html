@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=415d6c02c6">
+<link rel="stylesheet" href="../styles.css?v=90970f2d1d">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -931,20 +931,20 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../lib/supabase-client.js?v=415d6c02c6";
+  import { supabase } from "../lib/supabase-client.js?v=90970f2d1d";
   import {
     getSession, signOut, hasCompletedOnboarding, syncAvatar, sessionPhotoProviders,
-  } from "../lib/auth.js?v=415d6c02c6";
-  import { recommendEvents } from "../lib/event-social.js?v=415d6c02c6";
+  } from "../lib/auth.js?v=90970f2d1d";
+  import { recommendEvents } from "../lib/event-social.js?v=90970f2d1d";
   import {
     fetchList, markRead, markDepartmentRead, refreshNavBadges, subscribeToCounts,
     onCountsChange,
-  } from "../lib/notifications.js?v=415d6c02c6";
+  } from "../lib/notifications.js?v=90970f2d1d";
   import {
     loadCountries, loadTagSuggestions, suggestionsFor, fillCountrySelect,
     createTagPicker, connectHint, onConnectHintJump, createAvatarControl,
     avatarIsDrawing, mergeExtracted, saveErrorMessage, OPEN_TO, nullIfBlank, intOrNull,
-  } from "../lib/profile-form.js?v=415d6c02c6";
+  } from "../lib/profile-form.js?v=90970f2d1d";
 
   var session = null;
   var profileSource = null;   // set only when a document filled the form in
@@ -2233,7 +2233,7 @@
     window.location.href = "../login.html";
   });
 </script>
-<script src="../script.js?v=415d6c02c6"></script>
-<script defer src="../lib/back-to-top.js?v=415d6c02c6"></script>
+<script src="../script.js?v=90970f2d1d"></script>
+<script defer src="../lib/back-to-top.js?v=90970f2d1d"></script>
 </body>
 </html>
