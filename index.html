@@ -31,7 +31,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=9eac91b2c9">
+<link rel="stylesheet" href="styles.css?v=d684ef7c0d">
 <script>
   // Apply saved theme before first paint so the page never flashes dark.
   try {
@@ -109,7 +109,7 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=9eac91b2c9"></script>
+<script src="header-identity.js?v=d684ef7c0d"></script>
 
 <!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
@@ -176,23 +176,17 @@
     <p class="lead indiv-only">
       <span class="lead-line1">Sahaba Club is the First Virtual Club for AI and Cloud Dreamers</span>
     </p>
-    <!-- Eight activities, laid out as two rows of four. The grid fixes four
-         columns rather than letting flex-wrap decide, because "two lines" is
-         the brief and wrapping would give a different number of rows at every
-         viewport width. Below 720px it becomes two columns — four rows, but
-         legible, which beats eight columns of shredded text. -->
+    <!-- ⚠ WRITTEN AS TEXT, NOT CHIPS. This was a grid of bordered boxes and
+         read as a row of buttons people could press. Two plain lines of prose
+         is the brief: the split is hard-coded rather than wrapped, so it is
+         two lines at every width instead of however many the container
+         happens to produce. -->
     <div class="activities indiv-only">
       <h2 class="activities-title">We do all activities</h2>
-      <ul class="activities-list">
-        <li>Events</li>
-        <li>Coaching</li>
-        <li>Training</li>
-        <li>Hackathons</li>
-        <li>Start-ups support</li>
-        <li>Communities Hub</li>
-        <li>Tech Podcast</li>
-        <li>Meetups</li>
-      </ul>
+      <p class="activities-text">
+        <span>Events, Coaching, Training, Hackathons</span>
+        <span>Start-ups support, Communities Hub, Tech Podcast, Meetups</span>
+      </p>
     </div>
     <p class="lead corp-only">We help GCC companies scale with Power Apps, Power Automate, Copilot Studio, and Azure AI — backed by hands-on training so your team keeps building after we're done.</p>
     <div class="hero-actions">
@@ -269,7 +263,22 @@
        other public page, which all point at index.html#about. On this page it
        was href="#" — a link that scrolls to the top of the page you are
        already on. "Our story" is what About means on this site. -->
-  <section class="story" id="about">
+  <!-- ⚠ HIDDEN, NOT DELETED — Ahmed, 19 Aug. Removing the markup would have
+       thrown away the only copy of the club's origin story, and the id below
+       is still linked from nine pages.
+
+       ⚠ THE `hidden` ATTRIBUTE ALONE DID NOTHING HERE. `.story` sets
+       display:grid, and an author display declaration beats the browser's own
+       [hidden] { display: none } — the section stayed fully visible with the
+       attribute in place, and only measuring it caught that. The rule that
+       makes this work is `.story[hidden]` in styles.css; do not delete it
+       thinking it is redundant with the attribute.
+
+       ⚠ THE FOOTER "About" LINK ON EVERY PUBLIC PAGE POINTS AT index.html#about
+       AND NOW LANDS ON SOMETHING INVISIBLE. That is a dead link in nine files.
+       Either give About a real destination or bring this section back; leaving
+       it is the one loose end here. -->
+  <section class="story" id="about" hidden>
     <div class="story-text">
       <p class="kicker">Our story</p>
       <p>“Sahaba - سحابة” is the Arabic word for cloud. Founded in 2020, Sahaba Club grew from a community for tech dreamers into a Microsoft partner, an AI hackathon operator, and a home for anyone who wants to build in the AI universe — led by Zoka (Ahmed Abdel Razek), an ex-Microsoft AI and cloud strategist.</p>
@@ -492,14 +501,30 @@
     <p class="cta-title indiv-only">Join Sahaba Club, get Microsoft 365 free for 3 months.</p>
     <p class="cta-title corp-only">Let's talk about your Microsoft AI roadmap.</p>
 
-    <form id="individual-form" class="signup-form indiv-only" novalidate>
-      <input type="text" name="name" placeholder="Full name" required>
-      <input type="email" name="email" placeholder="Email" required>
-      <input type="tel" name="phone" placeholder="Phone (optional)">
-      <input type="text" name="how_heard" placeholder="How did you hear about us? (optional)">
-      <button type="submit" class="btn btn-glow">Join free</button>
-    </form>
-    <div id="individual-thanks" class="form-thanks indiv-only hidden">Thanks — we're reviewing your details now and will email your onboarding info, including your Microsoft 365 account access, shortly.</div>
+    <!-- ⚠ THE FOUR-FIELD FORM THAT USED TO BE HERE IS GONE — Ahmed, 19 Aug.
+         It asked for name, email, phone and "how did you hear about us" before
+         a visitor had any reason to trust the page. Signing up properly on
+         login.html collects the same things, once, in the place built for it.
+
+         script.js still calls wireForm("individual-form", …) and that is fine:
+         it starts `if (!form) return`. The corporate form below is untouched —
+         it is how companies reach sales and none of this applies to it.
+
+         The benefits are the ones the welcome email actually promises, so a
+         member is not told one thing here and another on arrival. ⚠ Events say
+         "worldwide", not "the Gulf and North Africa" as the email does: the
+         club's reach is worldwide (Ahmed's correction), and the email is what
+         is out of date. -->
+    <ul class="cta-benefits indiv-only">
+      <li><strong>Microsoft 365, free for 3 months</strong> — your own @sahabaclub.com mailbox, Office in the browser, 1 TB of OneDrive and Teams.</li>
+      <li><strong>Events and workshops</strong> — online and in person, worldwide.</li>
+      <li><strong>EduHackAI hackathons</strong> — four rounds run so far, and the next is open for registration.</li>
+      <li><strong>The member directory</strong> — so you can find people building the same things you are.</li>
+      <li><strong>The podcast and newsletter</strong> — conversations with people in the field, tailored to what is on your profile.</li>
+    </ul>
+    <div class="cta-actions indiv-only">
+      <a href="login.html" class="btn btn-glow btn-lg">Join The Club — it's free</a>
+    </div>
 
     <form id="corporate-form" class="signup-form corp-only" novalidate>
       <input type="text" name="name" placeholder="Full name" required>
@@ -551,9 +576,9 @@
 <!-- Analytics, page views only, and only after the visitor says yes. PUBLIC PAGES ONLY:
      never add this under app/ — those pages are behind a login and their URLs and
      titles describe real named members. The reasoning is in analytics.js. -->
-<script src="analytics.js?v=9eac91b2c9"></script>
-<script src="script.js?v=9eac91b2c9"></script>
-<script defer src="lib/back-to-top.js?v=9eac91b2c9"></script>
-<script defer src="talk.js?v=9eac91b2c9"></script>
+<script src="analytics.js?v=d684ef7c0d"></script>
+<script src="script.js?v=d684ef7c0d"></script>
+<script defer src="lib/back-to-top.js?v=d684ef7c0d"></script>
+<script defer src="talk.js?v=d684ef7c0d"></script>
 </body>
 </html>
