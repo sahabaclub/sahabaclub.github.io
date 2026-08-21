@@ -987,3 +987,105 @@ body.cx-zoom-open { overflow: hidden; }
 }
 .cx-open-to { gap: 5px; margin-top: 6px; }
 .cx-head-tags { gap: 5px; align-items: center; }
+
+/* ============================================================
+   The corner ribbon, the trophy, and the sort control
+   (19 Aug, second revision)
+   ============================================================ */
+
+/* ⚠ overflow:hidden IS WHAT MAKES THE RIBBON A RIBBON. The band is wider than
+   the corner it sits on and is rotated across it; without the card clipping,
+   it sticks out past both edges and reads as a stray diagonal bar. */
+.cx-member { position: relative; overflow: hidden; }
+.cx-card-badged { position: relative; overflow: hidden; }
+
+.cx-corner-badge {
+  position: absolute;
+  top: 16px;
+  right: -38px;
+  width: 140px;
+  transform: rotate(45deg);
+  display: block;
+  text-align: center;
+  padding: 4px 0;
+  border-radius: 0;
+  border: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+  pointer-events: none;
+}
+/* The name must clear the triangle the ribbon covers. */
+.cx-member .cx-member-name { padding-right: 64px; }
+.cx-card-badged .cx-name { padding-right: 76px; }
+
+/* ============================================================
+   EduHackAI winner trophy
+   ============================================================
+
+   ⚠ COLOUR IS NOT THE MESSAGE. Gold, silver and bronze are the decoration;
+   the title attribute and an sr-only span both say "First place — EduHackAI"
+   in words, so the meaning survives greyscale, colour blindness and a screen
+   reader. */
+.cx-avatar-wrap { position: relative; display: inline-block; line-height: 0; flex: none; }
+.cx-trophy {
+  position: absolute;
+  left: 50%;
+  bottom: -7px;
+  transform: translateX(-50%);
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  background: #0b0f18;
+  border: 1.5px solid currentColor;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .45);
+}
+.cx-trophy svg { width: 13px; height: 13px; }
+.cx-trophy.is-gold { color: #f5c542; }
+.cx-trophy.is-silver { color: #cbd5e1; }
+.cx-trophy.is-bronze { color: #cd7f32; }
+html.light-mode .cx-trophy { background: #ffffff; }
+
+/* ============================================================
+   Sort — deliberately not a filter
+   ============================================================
+
+   ⚠ IT LOOKS DIFFERENT BECAUSE IT DOES SOMETHING DIFFERENT. The four selects
+   beside it REMOVE people; this one only reorders them, and dressing the two
+   identically invited the reading that picking a sort would also narrow the
+   list. Ahmed, 19 Aug. It gets its own row, a visible "Sort" label, an accent
+   border and a chevron of its own. */
+.cx-sort {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 10px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(34, 211, 238, .35);
+  background: rgba(34, 211, 238, .07);
+}
+.cx-sort-label {
+  font-size: 11.5px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--cyan); white-space: nowrap;
+}
+.cx-sort .cx-select {
+  border: 0; background: transparent; box-shadow: none;
+  padding: 4px 26px 4px 4px; height: auto; min-height: 0;
+  font-size: 13.5px; font-weight: 600; color: var(--text);
+  border-radius: 999px;
+}
+.cx-sort .cx-select:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+html.light-mode .cx-sort-label { color: #0e7490; }
+
+/* ⚠ fit-content, or the flex/grid parent stretches this to the full row width
+   and it reads as a fifth filter — the exact thing the separate styling was
+   meant to stop. Measured in a render: it spanned the whole container. */
+.cx-sort { width: fit-content; align-self: flex-start; flex: 0 0 auto; }
+
+/* ⚠ The headline needs the same clearance as the name. Padding only the name
+   left a two-line headline running underneath the ribbon — visible on the
+   third card of the render, invisible on the first two, which is how this
+   kind of thing ships. */
+.cx-member .cx-member-headline { padding-right: 56px; }
+.cx-card-badged .cx-headline { padding-right: 76px; }

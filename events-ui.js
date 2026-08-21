@@ -520,7 +520,7 @@
 
   function loadEventsFromDatabase() {
     var client = null;
-    return import("./lib/supabase-client.js?v=bf67066856").then(function (mod) {
+    return import("./lib/supabase-client.js?v=184409188e").then(function (mod) {
       client = mod.supabase;
       var todayIso = new Date().toISOString().slice(0, 10);
       return client
@@ -574,7 +574,7 @@
   // Personal layer. Any failure here leaves the public list intact rather
   // than taking the page down with it.
   function loadSocial() {
-    return import("./lib/event-social.js?v=bf67066856").then(function (mod) {
+    return import("./lib/event-social.js?v=184409188e").then(function (mod) {
       social = mod;
       return mod.currentUserId();
     }).then(function (uid) {
@@ -601,9 +601,9 @@
   var ACCESS = { tier: "guest" };
 
   function refreshAccess() {
-    return import("./lib/supabase-client.js?v=bf67066856").then(function (client) {
+    return import("./lib/supabase-client.js?v=184409188e").then(function (client) {
       if (!client.isConfigured) return null;
-      return import("./lib/tier-gate.js?v=bf67066856").then(function (m) { return m.getAccessLevel(); });
+      return import("./lib/tier-gate.js?v=184409188e").then(function (m) { return m.getAccessLevel(); });
     }).then(function (level) {
       if (level) ACCESS.tier = level.tier;
     }).catch(function () {});
@@ -1169,7 +1169,7 @@
     // import() memoises on its own, but the promise is held anyway so a click
     // arriving before the first load finishes joins it instead of racing it.
     if (!registerPromptPromise) {
-      registerPromptPromise = import("./lib/register-prompt.js?v=bf67066856");
+      registerPromptPromise = import("./lib/register-prompt.js?v=184409188e");
     }
     return registerPromptPromise;
   }
