@@ -820,6 +820,10 @@ html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after 
 }
 .lead .lead-line1 { display: block; color: var(--text); font-weight: 600; font-size: 1.05em; margin-bottom: 8px; }
 .lead .lead-line2 { display: block; color: var(--text-secondary); font-size: 0.9em; }
+/* The activities list. Same muted treatment as line 2, which reads as its
+   lead-in ("We do all activities:"), with a little air between them so the
+   colon does not look like a wrapped line. */
+.lead .lead-line3 { display: block; color: var(--text-secondary); font-size: 0.9em; margin-top: 4px; }
 .hero-actions {
   display: flex;
   justify-content: center;
