@@ -259,13 +259,8 @@
     </nav>
   </section>
 
-  <!-- id="about" is the target of the footer's About link, here and on every
-       other public page, which all point at index.html#about. On this page it
-       was href="#" — a link that scrolls to the top of the page you are
-       already on. "Our story" is what About means on this site. -->
   <!-- ⚠ HIDDEN, NOT DELETED — Ahmed, 19 Aug. Removing the markup would have
-       thrown away the only copy of the club's origin story, and the id below
-       is still linked from nine pages.
+       thrown away the only copy of the club's origin story.
 
        ⚠ THE `hidden` ATTRIBUTE ALONE DID NOTHING HERE. `.story` sets
        display:grid, and an author display declaration beats the browser's own
@@ -274,10 +269,11 @@
        makes this work is `.story[hidden]` in styles.css; do not delete it
        thinking it is redundant with the attribute.
 
-       ⚠ THE FOOTER "About" LINK ON EVERY PUBLIC PAGE POINTS AT index.html#about
-       AND NOW LANDS ON SOMETHING INVISIBLE. That is a dead link in nine files.
-       Either give About a real destination or bring this section back; leaving
-       it is the one loose end here. -->
+       id="about" is now referenced by nothing: the footer About link on all
+       nine public pages points at membership.html instead (Ahmed, 19 Aug).
+       The id is kept so an old external link or bookmark to #about still
+       finds an element rather than nothing. If this section is ever
+       unhidden, that footer link is the thing to reconsider. -->
   <section class="story" id="about" hidden>
     <div class="story-text">
       <p class="kicker">Our story</p>
@@ -548,7 +544,7 @@
 <footer class="footer">
   <div class="footer-top">
     <div class="footer-links">
-      <a href="#about">About</a>
+      <a href="membership.html">About</a>
       <a href="events.html">Events</a>
       <a href="membership.html">Membership</a>
       <a href="mailto:info@sahabaclub.com">Contact</a>
