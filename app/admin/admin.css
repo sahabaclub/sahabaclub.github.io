@@ -338,6 +338,11 @@ select:focus-visible, textarea:focus-visible {
 .ad-speaker-hit:last-child { border-bottom: 0; }
 .ad-speaker-hit:hover { background: rgba(34,211,238,.10); }
 .ad-speaker-hit:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+/* A result that is shown so it can't be searched for in vain, but can't be
+   picked either. It is a span, not a disabled button — there is no action to
+   disable, and a disabled button invites clicking it to find out why. */
+.ad-speaker-hit.is-blocked { cursor: default; opacity: .62; }
+.ad-speaker-hit.is-blocked:hover { background: none; }
 .ad-speaker-chosen { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .ad-speaker-chip {
   display: inline-flex; align-items: center; gap: 8px;

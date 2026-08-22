@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=a05d5717f7">
+<link rel="stylesheet" href="admin.css?v=4bf9f935fb">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -532,10 +532,10 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=a05d5717f7";
-  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=a05d5717f7";
+  import { supabase } from "../../lib/supabase-client.js?v=4bf9f935fb";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=4bf9f935fb";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js?v=a05d5717f7";
+    from "../../lib/admin-guard.js?v=4bf9f935fb";
 
   const user = await requireStaff("events");
   if (!user) throw new Error("not staff");
@@ -648,11 +648,21 @@
     const mailboxes = {};
     (mbRes.data || []).forEach(r => { if (r.mailbox) mailboxes[r.user_id] = r.mailbox; });
 
-    memberIndex = (memRes.data || []).map(m => ({
-      user_id: m.user_id,
-      full_name: m.full_name || "(no name)",
-      mailbox: mailboxes[m.user_id] || "",
-    }));
+    // ⚠ A MEMBER WITH NO NAME ON THEIR PROFILE CANNOT BE CREDITED, and five of
+    // them exist today. They stay in the index and stay searchable by mailbox —
+    // dropping them would mean searching for a real member and being told
+    // "nobody matches that", which is a worse lie than the problem. They are
+    // offered as unpickable instead, with the reason, so whoever is filling the
+    // form knows to go and ask them for a name.
+    memberIndex = (memRes.data || []).map(m => {
+      const name = (m.full_name || "").trim();
+      return {
+        user_id: m.user_id,
+        full_name: name,
+        mailbox: mailboxes[m.user_id] || "",
+        nameless: !name,
+      };
+    });
 
     if (memRes.error) {
       // Say it rather than showing an empty search that looks like "no members".
@@ -707,10 +717,15 @@
     box.hidden = false;
     box.innerHTML = hits.length
       ? hits.map(m =>
-          '<button type="button" class="ad-speaker-hit" data-pick="' + escapeHtml(m.user_id) + '">' +
-            escapeHtml(m.full_name) +
-            (m.mailbox ? '<span class="ad-cell-dim"> · ' + escapeHtml(m.mailbox) + "</span>" : "") +
-          "</button>").join("")
+          m.nameless
+            ? '<span class="ad-speaker-hit is-blocked">' +
+                escapeHtml(m.mailbox || "This member") +
+                '<span class="ad-cell-dim"> · no name on their profile, so there is ' +
+                "nothing to credit them as yet</span></span>"
+            : '<button type="button" class="ad-speaker-hit" data-pick="' + escapeHtml(m.user_id) + '">' +
+                escapeHtml(m.full_name) +
+                (m.mailbox ? '<span class="ad-cell-dim"> · ' + escapeHtml(m.mailbox) + "</span>" : "") +
+              "</button>").join("")
       : '<p class="ad-note">Nobody matches that.</p>';
   });
 
@@ -737,7 +752,12 @@
       await loadMemberIndex();
       speakers = (data || []).map(r => {
         const m = memberIndex.find(x => x.user_id === r.user_id);
-        return { user_id: r.user_id, full_name: r.full_name || (m && m.full_name) || "(member)",
+        // Someone saved earlier can go nameless later, by clearing their own
+        // profile. Say that here rather than printing a tidy "(member)" — the
+        // public page drops them, and this panel is the only place anybody
+        // would find out.
+        return { user_id: r.user_id,
+                 full_name: r.full_name || (m && m.full_name) || "⚠ no name on their profile",
                  mailbox: (m && m.mailbox) || "" };
       });
     }
@@ -1862,6 +1882,6 @@
   // would otherwise see an empty list and save it as "no organizers".
   loadOrganizers().then(loadEvents);
 </script>
-<script defer src="../../lib/back-to-top.js?v=a05d5717f7"></script>
+<script defer src="../../lib/back-to-top.js?v=4bf9f935fb"></script>
 </body>
 </html>
