@@ -571,6 +571,22 @@ const hackRows = [
   const html = await renderPage(r);
   ok(html.length > 0, "the page rendered something");
 
+  // -- the Activities section (22 Aug). Ahmed: the rounds and the sessions
+  //    should be "clear icons clickable", each leading to its own page.
+  has(html, 'class="cx-block cx-activity"', "the Activities section renders");
+  has(html, '../hackathons.html#eduhackai-3',
+    "⚠ a round links to its own section on the hackathons page");
+  has(html, "Coached", "…tagged with what they actually did in it");
+  // ⚠ Newest round first. The fixture's rounds are 2, 1, 3, 4 in that order,
+  // so an unsorted render would put 2 first and this would catch it.
+  ok(html.indexOf("#eduhackai-4") < html.indexOf("#eduhackai-1"),
+    "…and the newest round comes first");
+  // ⚠ The name is present even though a logo is also emitted: wireRoundLogos()
+  // hides it only after an image really decodes, so a round with no mark still
+  // reads as itself. Asserting the text is here is asserting that fallback.
+  has(html, "cx-chip-fallback", "the round name is rendered as the logo's fallback");
+  has(html, "assets/eduhack/round-3-dark.png", "…with the round's own mark over it");
+
   // -- stats row
   has(html, 'class="cx-stats cx-stats-4"', "the stats row is the rebuilt one");
   has(html, ">engagements<", "tile 2 is the engagement total");
