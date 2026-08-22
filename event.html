@@ -48,7 +48,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=2bee541930">
+<link rel="stylesheet" href="styles.css?v=a05d5717f7">
 <style>
   .evp-wrap { max-width: 1000px; margin: 0 auto; padding: 40px 20px 96px; }
   .evp-back { display: inline-block; font-size: 14px; color: var(--text-secondary); margin-bottom: 18px; }
@@ -317,7 +317,7 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=2bee541930"></script>
+<script src="header-identity.js?v=a05d5717f7"></script>
 
 <!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
@@ -400,11 +400,11 @@
 </footer>
 
 <script type="module">
-  import { supabase } from "./lib/supabase-client.js?v=2bee541930";
-  import { relatedEvents } from "./lib/event-related.js?v=2bee541930";
+  import { supabase } from "./lib/supabase-client.js?v=a05d5717f7";
+  import { relatedEvents } from "./lib/event-related.js?v=a05d5717f7";
   // ⚠ A static import, not a `const` — imports are hoisted, so this one is
   // exempt from the dead-zone trap described immediately below.
-  import { createRegisterPrompt, rememberPending } from "./lib/register-prompt.js?v=2bee541930";
+  import { createRegisterPrompt, rememberPending } from "./lib/register-prompt.js?v=a05d5717f7";
 
   // ⚠ `var` throughout, and every binding declared before the first executing
   // statement. There is a top-level await below, and a `const` after it would
@@ -422,6 +422,7 @@
   var myFavourite = false;
   // render()'s other two arguments, kept so the personal layer can redraw the
   // page without refetching the organizers or rescoring the related list.
+  var LAST_SPEAKERS = [];
   var LAST_ORGANIZERS = [];
   var LAST_RELATED = [];
 
@@ -649,6 +650,38 @@
   // first two are usually in view on a phone; the other eighteen are not, and
   // twenty full-size images fetched at once on mobile data is the reason a cap
   // exists at all.
+  // ---- Speakers: club members who delivered this (0080) ------------------
+  //
+  // ⚠ NAMED EVEN WHEN NOT LINKABLE. `is_linkable` is false for a member who
+  // has turned discovery off or whose profile is incomplete — they still spoke
+  // at this event, so the name stays and only the link goes. Dropping the name
+  // would be rewriting what happened to match a preference about Connect.
+  function speakersHtml(list) {
+    var rows = (list || []).slice().sort(function (a, b) { return (a.slot || 0) - (b.slot || 0); });
+    if (!rows.length) return "";
+
+    var cards = rows.map(function (s) {
+      var name = esc(s.full_name || "Member");
+      var pic = s.avatar_url
+        ? '<img class="evp-speaker-pic" src="' + esc(s.avatar_url) + '" alt="" loading="lazy">'
+        : '<span class="evp-speaker-pic is-initial" aria-hidden="true">' +
+            esc((s.full_name || "?").trim().slice(0, 1)) + "</span>";
+      var inner = pic +
+        '<span class="evp-speaker-text">' +
+          '<span class="evp-speaker-name" dir="auto">' + name + "</span>" +
+          (s.headline ? '<span class="evp-speaker-role" dir="auto">' + esc(s.headline) + "</span>" : "") +
+        "</span>";
+      return s.is_linkable
+        ? '<a class="evp-speaker" href="app/member.html?u=' + encodeURIComponent(s.user_id) + '">' + inner + "</a>"
+        : '<span class="evp-speaker">' + inner + "</span>";
+    }).join("");
+
+    return '<section class="evp-section evp-speakers">' +
+      "<h2>" + (rows.length === 1 ? "Speaker" : "Speakers") + "</h2>" +
+      '<div class="evp-speaker-row">' + cards + "</div>" +
+      "</section>";
+  }
+
   function galleryHtml(e, isPast, isHub) {
     if (!isPast || !isHub) return "";
 
@@ -873,6 +906,8 @@
       // After the recording and before the description: somebody who came back
       // to a past event wants the video first, then what it looked like, then
       // the blurb they have already read.
+      // Who gave it comes before what it looked like.
+      speakersHtml(LAST_SPEAKERS) +
       galleryHtml(e, isPast, isHub) +
       (e.description ? '<div class="evp-body">' + esc(e.description) + "</div>" : "") +
       '<section class="evp-section"><h2>You might also like</h2>' + relHtml + "</section>";
@@ -949,7 +984,7 @@
   // event-social.js is loaded on demand rather than up front: most people open
   // this page for the date and the venue and never touch any of it.
   function social(fn) {
-    import("./lib/event-social.js?v=2bee541930").then(fn).catch(function () {});
+    import("./lib/event-social.js?v=a05d5717f7").then(fn).catch(function () {});
   }
 
   function renderCurrent() {
@@ -1125,6 +1160,16 @@
         .select("id, slug, title, event_date, mode, country, tags, presenter, is_published, image_url")
         .eq("is_published", true);
 
+      // ⚠ Speakers are fetched but never allowed to break the page. A missing
+      // 0080 (or a policy change) leaves LAST_SPEAKERS empty and the section
+      // simply does not render — the event itself is the thing a visitor came
+      // for, and it must survive any of its extras being unavailable.
+      var spkRes = await supabase
+        .from("event_speakers_public")
+        .select("user_id, slot, full_name, avatar_url, headline, is_linkable")
+        .eq("event_id", event.id);
+      LAST_SPEAKERS = spkRes.error ? [] : (spkRes.data || []);
+
       var linkRes = await supabase.from("event_organizers").select("event_id, organizer_id");
 
       var byEvent = {};
@@ -1162,8 +1207,8 @@
   }
 </script>
 
-<script src="analytics.js?v=2bee541930"></script>
-<script src="script.js?v=2bee541930"></script>
-<script defer src="lib/back-to-top.js?v=2bee541930"></script>
+<script src="analytics.js?v=a05d5717f7"></script>
+<script src="script.js?v=a05d5717f7"></script>
+<script defer src="lib/back-to-top.js?v=a05d5717f7"></script>
 </body>
 </html>

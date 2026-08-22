@@ -324,3 +324,29 @@ select:focus-visible, textarea:focus-visible {
    not something you can read in a glance down a column. */
 .ad-pill.hub { border-color: rgba(34, 211, 238, .5); color: #7dd3fc; background: rgba(34, 211, 238, .12); }
 .ad-pill.lang { border-color: rgba(74, 222, 128, .45); color: #86efac; background: rgba(74, 222, 128, .10); }
+
+/* Speaker picker (0080) */
+.ad-speaker-results {
+  margin-top: 6px; border: 1px solid var(--glass-border); border-radius: 10px;
+  overflow: hidden; background: rgba(255,255,255,.03);
+}
+.ad-speaker-hit {
+  display: block; width: 100%; text-align: left; padding: 9px 12px;
+  background: none; border: 0; border-bottom: 1px solid var(--glass-border);
+  color: var(--text); font: inherit; font-size: 13.5px; cursor: pointer;
+}
+.ad-speaker-hit:last-child { border-bottom: 0; }
+.ad-speaker-hit:hover { background: rgba(34,211,238,.10); }
+.ad-speaker-hit:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+.ad-speaker-chosen { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ad-speaker-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 8px 6px 12px; border-radius: 999px; font-size: 13px;
+  border: 1px solid rgba(34,211,238,.4); background: rgba(34,211,238,.08);
+}
+.ad-speaker-x {
+  width: 20px; height: 20px; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 1px solid var(--glass-border); background: #0b0f18; color: #e7ecf5;
+  font-size: 14px; line-height: 1;
+}
+.ad-speaker-x:hover { background: #b3261e; border-color: #b3261e; }

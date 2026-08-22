@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=2bee541930">
-<link rel="stylesheet" href="connect.css?v=2bee541930">
+<link rel="stylesheet" href="../styles.css?v=a05d5717f7">
+<link rel="stylesheet" href="connect.css?v=a05d5717f7">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -35,7 +35,7 @@
      a guest/member split of its own (Inbox against Home and Join free).
      Running first means that split is decided before the header is laid out,
      rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=2bee541930"></script>
+<script src="../header-identity.js?v=a05d5717f7"></script>
 </head>
 <body>
 
@@ -192,7 +192,7 @@
     roundsWithPlacings, hackathonRecord, engagementBreakdown, RECORD,
     summarise, escapeHtml, initialOf, linkList, placeOf,
     experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
-  } from "../lib/connect.js?v=2bee541930";
+  } from "../lib/connect.js?v=a05d5717f7";
 
   var root = document.getElementById("member-root");
   var me = null;
@@ -207,6 +207,7 @@
   var params = new URLSearchParams(window.location.search);
   var targetId = params.get("u");
   var prospectId = params.get("p");
+  var LAST_SESSIONS = [];
   var following = false;
 
   function state(title, text, actionsHtml) {
@@ -327,6 +328,64 @@
       "</svg>" +
       '<span class="sr-only">' + escapeHtml(text) + "</span>" +
       "</span>";
+  }
+
+  // ---- Sessions they delivered (0080) ------------------------------------
+  //
+  // Ahmed, 22 Aug: from a profile you should be able to reach the recording of
+  // a session they gave, or book the next one they are speaking at.
+  //
+  // ⚠ SPLIT INTO UPCOMING AND PAST, because the two ask different things of the
+  // reader. An upcoming session is something to book; a past one is something
+  // to watch. A single list ordered by date would bury the bookable one under
+  // years of history, and the whole point of the section is the next action.
+  //
+  // ⚠ Published events only. An unpublished event is a draft; naming somebody
+  // as its speaker on their public profile would announce a session the club
+  // has not announced.
+  function sessionsHtml(sessions) {
+    var rows = (sessions || []).filter(Boolean);
+    if (!rows.length) return "";
+
+    var today = new Date().toISOString().slice(0, 10);
+    var upcoming = rows.filter(function (s) { return s.event_date >= today; })
+                       .sort(function (a, b) { return a.event_date < b.event_date ? -1 : 1; });
+    var past = rows.filter(function (s) { return s.event_date < today; })
+                   .sort(function (a, b) { return a.event_date > b.event_date ? -1 : 1; });
+
+    function line(s, isUpcoming) {
+      // The action is named, not implied. "Book a place" and "Watch the
+      // recording" are different promises and only one of them is available.
+      var action = isUpcoming
+        ? '<span class="cx-session-do">Book a place &rarr;</span>'
+        : (s.recording_url
+            ? '<span class="cx-session-do">Watch the recording &rarr;</span>'
+            : '<span class="cx-session-do is-none">No recording</span>');
+      return '<a class="cx-session" href="../event.html?e=' + encodeURIComponent(s.slug) + '">' +
+        '<span class="cx-session-when">' + escapeHtml(niceDate(s.event_date)) + "</span>" +
+        '<span class="cx-session-title" dir="auto">' + escapeHtml(s.title) + "</span>" +
+        action +
+        "</a>";
+    }
+
+    return '<section class="cx-block">' +
+      "<h2>Sessions</h2>" +
+      (upcoming.length
+        ? '<p class="cx-session-head">Speaking next</p><div class="cx-sessions">' +
+            upcoming.map(function (s) { return line(s, true); }).join("") + "</div>"
+        : "") +
+      (past.length
+        ? '<p class="cx-session-head">Delivered</p><div class="cx-sessions">' +
+            past.map(function (s) { return line(s, false); }).join("") + "</div>"
+        : "") +
+      "</section>";
+  }
+
+  // Short, readable, and the same shape the rest of this page uses.
+  function niceDate(iso) {
+    var d = new Date(iso + "T12:00:00");
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
   }
 
   // ---- Role and tier badge ----------------------------------------------
@@ -734,6 +793,10 @@
         "what they keep coming back for shows up here on its own.</p></div></div>";
     }
 
+    // Sessions sit above skills and interests: what somebody has actually
+    // stood up and delivered says more than a list of tags they picked.
+    html += sessionsHtml(LAST_SESSIONS);
+
     if ((member.skills || []).length) {
       html += '<div class="cx-section"><p class="cx-section-title">Skills</p>' +
         '<div class="cx-card">' + tagsHtml(member.skills) + "</div></div>";
@@ -923,6 +986,32 @@
     // between them — see the note where they're read.
     if (prospectId) { await showProspect(); return; }
 
+    // ---- Sessions this member delivered (0080) ----
+    //
+    // ⚠ Two reads, not a nested join. `event_speakers_public` is a view over a
+    // view; asking PostgREST to embed `events` through it is fragile in a way
+    // that fails at runtime rather than at write time. Two flat reads keep the
+    // shapes obvious and let the section vanish quietly if either fails —
+    // sessions are an addition to a profile, never the reason it renders.
+    LAST_SESSIONS = [];
+    try {
+      var spk = await supabase
+        .from("event_speakers_public")
+        .select("event_id")
+        .eq("user_id", targetId);
+      var ids = (spk.data || []).map(function (r) { return r.event_id; }).filter(Boolean);
+      if (ids.length) {
+        var evs = await supabase
+          .from("events")
+          .select("id, slug, title, event_date, recording_url")
+          .in("id", ids)
+          .eq("is_published", true);   // a draft is not somebody's public credit
+        LAST_SESSIONS = evs.data || [];
+      }
+    } catch (err) {
+      LAST_SESSIONS = [];
+    }
+
     var memberRes = await getMember(targetId);
     if (memberRes.off) {
       state("Connect isn't switched on yet", CONNECT_OFF_MESSAGE,
@@ -949,7 +1038,7 @@
     render(memberRes.data, activityRes.data || null, await placingsFor(memberRes.data));
   })();
 </script>
-<script src="../script.js?v=2bee541930"></script>
-<script defer src="../lib/back-to-top.js?v=2bee541930"></script>
+<script src="../script.js?v=a05d5717f7"></script>
+<script defer src="../lib/back-to-top.js?v=a05d5717f7"></script>
 </body>
 </html>

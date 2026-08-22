@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=2bee541930">
+<link rel="stylesheet" href="admin.css?v=a05d5717f7">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -275,6 +275,30 @@
            different thing from the gallery videos below: that section is up to
            five extra clips on a past Hub event, this is the recording of the
            event itself and applies to any event. -->
+      <!-- ============================================================
+           Speakers — club members who delivered this (0080)
+           ============================================================
+
+           ⚠ DIFFERENT FROM THE "Presenter" FIELD. Presenter is free text and
+           holds whoever gave the session, usually a guest who is not and never
+           will be a member. This links to a real account, which is what lets
+           the session appear on that person's profile.
+
+           ⚠ Searches name AND Microsoft 365 mailbox, because Ahmed identifies
+           members by their @sahabaclub.com address. The mailbox is read from
+           ms365_accounts, which is staff-readable — it is never rendered on a
+           public page, only used here to find the right person. -->
+      <div class="ad-field">
+        <label for="f-speaker-q">Speakers <span class="ad-hint">up to 3 club members</span></label>
+        <input type="search" id="f-speaker-q" placeholder="Search a member by name or @sahabaclub.com mailbox…" autocomplete="off">
+        <div class="ad-speaker-results" id="f-speaker-results" hidden></div>
+        <div class="ad-speaker-chosen" id="f-speaker-chosen"></div>
+        <p class="ad-note">The member who delivered the session. It appears on the event page and
+          on <strong>their profile</strong>, so a reader can jump from the person to the recording —
+          or book the next event they are speaking at. Leave empty for events nobody from the club
+          presented. Use <strong>Presenter</strong> above for a guest speaker who has no account.</p>
+      </div>
+
       <div class="ad-field">
         <label for="f-language">Language <span class="ad-hint">what the session is run in</span></label>
         <select id="f-language">
@@ -508,10 +532,10 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=2bee541930";
-  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=2bee541930";
+  import { supabase } from "../../lib/supabase-client.js?v=a05d5717f7";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=a05d5717f7";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js?v=2bee541930";
+    from "../../lib/admin-guard.js?v=a05d5717f7";
 
   const user = await requireStaff("events");
   if (!user) throw new Error("not staff");
@@ -590,6 +614,149 @@
   function setPreview(imgEl, url) {
     if (url) { imgEl.src = url; imgEl.hidden = false; }
     else { imgEl.removeAttribute("src"); imgEl.hidden = true; }
+  }
+
+  // ============================================================
+  // Speakers (0080)
+  // ============================================================
+  //
+  // Chosen members live here between picking and saving, in slot order. Saved
+  // by replacing the event's rows wholesale, the same way organisers are.
+  let speakers = [];          // [{ user_id, full_name, mailbox }]
+  let memberIndex = [];       // every member, for the search
+  let memberIndexLoaded = false;
+
+  const MAX_SPEAKERS = 3;
+
+  // ⚠ Loaded ONCE and lazily, on first use of the search box. There are 47
+  // members; fetching them on every keystroke would be a request per letter,
+  // and fetching them at page load would cost a round trip for a panel most
+  // edits never touch.
+  //
+  // ⚠ staff_member_details, not member_directory. The directory hides anybody
+  // who is not discoverable, and a member who spoke at an event must be
+  // selectable whether or not they choose to appear in Connect.
+  async function loadMemberIndex() {
+    if (memberIndexLoaded) return;
+    memberIndexLoaded = true;
+
+    const [memRes, mbRes] = await Promise.all([
+      supabase.from("staff_member_details").select("user_id, full_name"),
+      supabase.from("ms365_accounts").select("user_id, mailbox"),
+    ]);
+
+    const mailboxes = {};
+    (mbRes.data || []).forEach(r => { if (r.mailbox) mailboxes[r.user_id] = r.mailbox; });
+
+    memberIndex = (memRes.data || []).map(m => ({
+      user_id: m.user_id,
+      full_name: m.full_name || "(no name)",
+      mailbox: mailboxes[m.user_id] || "",
+    }));
+
+    if (memRes.error) {
+      // Say it rather than showing an empty search that looks like "no members".
+      document.getElementById("f-speaker-results").hidden = false;
+      document.getElementById("f-speaker-results").innerHTML =
+        '<p class="ad-note">Couldn\'t load the member list: ' +
+        escapeHtml(memRes.error.message) + "</p>";
+    }
+  }
+
+  function paintSpeakers() {
+    const box = document.getElementById("f-speaker-chosen");
+    if (!speakers.length) { box.innerHTML = ""; return; }
+    box.innerHTML = speakers.map((s, i) =>
+      '<span class="ad-speaker-chip">' +
+        "<strong>" + escapeHtml(s.full_name) + "</strong>" +
+        (s.mailbox ? '<span class="ad-cell-dim"> ' + escapeHtml(s.mailbox) + "</span>" : "") +
+        '<button type="button" class="ad-speaker-x" data-drop="' + i + '" ' +
+          'aria-label="Remove ' + escapeHtml(s.full_name) + '">&times;</button>' +
+      "</span>"
+    ).join("");
+  }
+
+  document.getElementById("f-speaker-chosen").addEventListener("click", function (ev) {
+    const btn = ev.target.closest ? ev.target.closest("[data-drop]") : null;
+    if (!btn) return;
+    speakers.splice(Number(btn.getAttribute("data-drop")), 1);
+    paintSpeakers();
+  });
+
+  const speakerQ = document.getElementById("f-speaker-q");
+  speakerQ.addEventListener("input", async function () {
+    const box = document.getElementById("f-speaker-results");
+    const q = speakerQ.value.trim().toLowerCase();
+    if (!q) { box.hidden = true; box.innerHTML = ""; return; }
+
+    await loadMemberIndex();
+
+    if (speakers.length >= MAX_SPEAKERS) {
+      box.hidden = false;
+      box.innerHTML = '<p class="ad-note">Three speakers already — remove one to add another.</p>';
+      return;
+    }
+
+    const chosen = new Set(speakers.map(s => s.user_id));
+    // Name OR mailbox, because staff think of members both ways.
+    const hits = memberIndex
+      .filter(m => !chosen.has(m.user_id))
+      .filter(m => (m.full_name + " " + m.mailbox).toLowerCase().includes(q))
+      .slice(0, 8);
+
+    box.hidden = false;
+    box.innerHTML = hits.length
+      ? hits.map(m =>
+          '<button type="button" class="ad-speaker-hit" data-pick="' + escapeHtml(m.user_id) + '">' +
+            escapeHtml(m.full_name) +
+            (m.mailbox ? '<span class="ad-cell-dim"> · ' + escapeHtml(m.mailbox) + "</span>" : "") +
+          "</button>").join("")
+      : '<p class="ad-note">Nobody matches that.</p>';
+  });
+
+  document.getElementById("f-speaker-results").addEventListener("click", function (ev) {
+    const btn = ev.target.closest ? ev.target.closest("[data-pick]") : null;
+    if (!btn) return;
+    const id = btn.getAttribute("data-pick");
+    const m = memberIndex.find(x => x.user_id === id);
+    if (!m || speakers.length >= MAX_SPEAKERS) return;
+    speakers.push(m);
+    paintSpeakers();
+    speakerQ.value = "";
+    document.getElementById("f-speaker-results").hidden = true;
+  });
+
+  async function loadSpeakersFor(eventId) {
+    speakers = [];
+    if (eventId) {
+      const { data } = await supabase
+        .from("event_speakers_public")
+        .select("user_id, slot, full_name")
+        .eq("event_id", eventId)
+        .order("slot", { ascending: true });
+      await loadMemberIndex();
+      speakers = (data || []).map(r => {
+        const m = memberIndex.find(x => x.user_id === r.user_id);
+        return { user_id: r.user_id, full_name: r.full_name || (m && m.full_name) || "(member)",
+                 mailbox: (m && m.mailbox) || "" };
+      });
+    }
+    paintSpeakers();
+  }
+
+  // ⚠ Replace, do not merge. Slots are unique per event, so updating in place
+  // would collide the moment somebody reorders — deleting the event's rows and
+  // reinserting is the only version that cannot half-apply.
+  async function saveSpeakers(eventId) {
+    if (!eventId) return null;
+    const del = await supabase.from("event_speakers").delete().eq("event_id", eventId);
+    if (del.error) return del.error;
+    if (!speakers.length) return null;
+    const rows = speakers.slice(0, MAX_SPEAKERS).map((s, i) => ({
+      event_id: eventId, user_id: s.user_id, slot: i + 1,
+    }));
+    const ins = await supabase.from("event_speakers").insert(rows);
+    return ins.error || null;
   }
 
   // ============================================================
@@ -1187,6 +1354,7 @@
     F.live.value = e ? (e.live_link || "") : "";
     F.recording.value = e ? (e.recording_url || "") : "";
     F.language.value = e ? (e.language || "") : "";
+    loadSpeakersFor(e ? e.id : null);
     // 0078 gallery. Both are arrays; the five video inputs are filled by
     // position and the photo list is replaced wholesale, so opening a
     // different event can never leave the previous one's pictures behind.
@@ -1497,6 +1665,8 @@
     F.live.value = d.live_link || "";
     F.recording.value = d.recording_url || "";
     F.language.value = d.language || "";
+    speakers = [];
+    paintSpeakers();
     // An AI draft never carries a gallery — clear rather than inherit the
     // pictures of whatever was open before.
     F.vids.forEach(function (input) { input.value = ""; });
@@ -1648,8 +1818,16 @@
     const eventId = id || (saved.data && saved.data.id);
     const orgIds = Array.from(F.organizers.selectedOptions).map(o => o.value);
     const orgError = eventId ? await saveEventOrganizers(eventId, orgIds) : null;
+    // Same shape as organisers: the event row is already written, so a
+    // failure here is reported as "saved, but…" rather than as a failed save.
+    const spkError = eventId ? await saveSpeakers(eventId) : null;
 
     saveBtn.disabled = false;
+    if (spkError) {
+      showMessage("ad-form-msg",
+        "The event was saved, but its speakers weren't: " + spkError.message, "err");
+      return;
+    }
     if (orgError) {
       // The event IS saved at this point. Saying "couldn't save" would be a
       // lie that makes somebody re-enter the whole form.
@@ -1684,6 +1862,6 @@
   // would otherwise see an empty list and save it as "no organizers".
   loadOrganizers().then(loadEvents);
 </script>
-<script defer src="../../lib/back-to-top.js?v=2bee541930"></script>
+<script defer src="../../lib/back-to-top.js?v=a05d5717f7"></script>
 </body>
 </html>
