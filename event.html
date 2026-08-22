@@ -48,7 +48,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=f781ae2494">
+<link rel="stylesheet" href="styles.css?v=ab980d4e4c">
 <style>
   .evp-wrap { max-width: 1000px; margin: 0 auto; padding: 40px 20px 96px; }
   .evp-back { display: inline-block; font-size: 14px; color: var(--text-secondary); margin-bottom: 18px; }
@@ -261,6 +261,30 @@
     .evp-fact { flex-direction: column; gap: 2px; }
     .evp-fact-k { flex: none; }
   }
+  /* ⚠ THESE LIVE HERE, NOT IN app/connect.css. They were written there
+     first — and this page loads styles.css and its own inline block, and
+     never connect.css, so every speaker rule was dead. The result was a
+     raw avatar at its natural size instead of a 40px circle: markup with
+     no CSS behind it, which looks like a layout bug and is really a file
+     in the wrong place. Anything .evp-* belongs in this block. */
+  .evp-speaker-row { display: flex; flex-wrap: wrap; gap: 12px; }
+  .evp-speaker {
+    display: flex; align-items: center; gap: 11px; text-decoration: none; color: inherit;
+    padding: 10px 14px 10px 10px; border-radius: 999px;
+    border: 1px solid var(--glass-border); background: var(--glass);
+  }
+  a.evp-speaker:hover { border-color: var(--cyan); }
+  .evp-speaker-pic {
+    width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none;
+    background: var(--glass-border);
+  }
+  .evp-speaker-pic.is-initial {
+    display: grid; place-items: center; font-weight: 700; font-size: 16px;
+  }
+  .evp-speaker-text { display: flex; flex-direction: column; min-width: 0; }
+  .evp-speaker-name { font-size: 14.5px; font-weight: 700; }
+  .evp-speaker-role { font-size: 12.5px; color: var(--text-secondary); }
+
 </style>
 </head>
 <body>
@@ -317,7 +341,7 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=f781ae2494"></script>
+<script src="header-identity.js?v=ab980d4e4c"></script>
 
 <!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
@@ -400,11 +424,11 @@
 </footer>
 
 <script type="module">
-  import { supabase } from "./lib/supabase-client.js?v=f781ae2494";
-  import { relatedEvents } from "./lib/event-related.js?v=f781ae2494";
+  import { supabase } from "./lib/supabase-client.js?v=ab980d4e4c";
+  import { relatedEvents } from "./lib/event-related.js?v=ab980d4e4c";
   // ⚠ A static import, not a `const` — imports are hoisted, so this one is
   // exempt from the dead-zone trap described immediately below.
-  import { createRegisterPrompt, rememberPending } from "./lib/register-prompt.js?v=f781ae2494";
+  import { createRegisterPrompt, rememberPending } from "./lib/register-prompt.js?v=ab980d4e4c";
 
   // ⚠ `var` throughout, and every binding declared before the first executing
   // statement. There is a top-level await below, and a `const` after it would
@@ -683,7 +707,7 @@
         : '<span class="evp-speaker">' + inner + "</span>";
     }).join("");
 
-    return '<section class="evp-section evp-speakers">' +
+    return '<section class="evp-section">' +
       "<h2>" + (rows.length === 1 ? "Speaker" : "Speakers") + "</h2>" +
       '<div class="evp-speaker-row">' + cards + "</div>" +
       "</section>";
@@ -1007,7 +1031,7 @@
   // event-social.js is loaded on demand rather than up front: most people open
   // this page for the date and the venue and never touch any of it.
   function social(fn) {
-    import("./lib/event-social.js?v=f781ae2494").then(fn).catch(function () {});
+    import("./lib/event-social.js?v=ab980d4e4c").then(fn).catch(function () {});
   }
 
   function renderCurrent() {
@@ -1230,8 +1254,8 @@
   }
 </script>
 
-<script src="analytics.js?v=f781ae2494"></script>
-<script src="script.js?v=f781ae2494"></script>
-<script defer src="lib/back-to-top.js?v=f781ae2494"></script>
+<script src="analytics.js?v=ab980d4e4c"></script>
+<script src="script.js?v=ab980d4e4c"></script>
+<script defer src="lib/back-to-top.js?v=ab980d4e4c"></script>
 </body>
 </html>

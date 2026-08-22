@@ -1224,40 +1224,42 @@ a.cx-chip:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 /* ---- Round chips -------------------------------------------------------
    Two columns, not three: the mark IS the label, so there is no separate
    title to sit beside it. */
-.cx-chip-round { grid-template-columns: minmax(0, 1fr); gap: 5px; text-align: center; }
-.cx-chip-art { position: relative; display: block; min-height: 26px; }
-.cx-round-logo { display: block; width: auto; height: 26px; max-width: 100%; margin: 0 auto; }
-/* ⚠ THE NAME IS THE DEFAULT AND THE PICTURE HIDES IT, never the other way
-   round. Marks exist for rounds 1-5; a round with no image must still read as
-   itself rather than as a broken-image icon. .has-art is added by
-   wireRoundLogos() only after an image reports a real naturalWidth, so a 404
-   leaves the text exactly where it was. */
+.cx-chip-round { grid-template-columns: minmax(0, 1fr); gap: 6px; text-align: center; }
+.cx-chip-art { display: block; }
+.cx-round-logo { width: auto; height: 30px; max-width: 100%; margin: 0 auto; }
+
+/* ⚠ THE MARK IS THE DEFAULT NOW, and the name appears only if it fails.
+   The other way round — text shown, logo revealed on `load` — could never
+   work: the images were display:none AND loading="lazy", and a lazy image
+   that is not being rendered is never fetched, so `load` never fired and no
+   logo ever appeared on any profile. Inverting it also means the common case
+   needs no JavaScript at all. */
 .cx-chip-art .cx-round-logo { display: none; }
-.cx-chip-art.has-art .cx-round-logo.logo-img-dark { display: block; }
-html.light-mode .cx-chip-art.has-art .cx-round-logo.logo-img-dark { display: none; }
-html.light-mode .cx-chip-art.has-art .cx-round-logo.logo-img-light { display: block; }
-.cx-chip-fallback { font-size: 13px; font-weight: 700; }
-.cx-chip-art.has-art .cx-chip-fallback { display: none; }
+.cx-chip-art .logo-img-dark { display: block; }
+html.light-mode .cx-chip-art .logo-img-dark { display: none; }
+html.light-mode .cx-chip-art .logo-img-light { display: block; }
+.cx-chip-fallback { display: none; font-size: 13px; font-weight: 700; }
+/* `no-art` is set when the chip is built (a round with no mark at all) and by
+   wireRoundLogos() on an image `error`. Higher specificity than the two rules
+   above, so it wins in both themes. */
+.cx-chip-art.no-art .cx-round-logo { display: none; }
+.cx-chip-art.no-art .cx-chip-fallback { display: block; }
 
-@media (max-width: 560px) {
-  /* A chip per row reads better than two half-elided ones. */
-  .cx-chip-session { width: 100%; }
+/* ---- Sessions, compact ------------------------------------------------
+   ⚠ A GRID, NOT A WRAPPING FLEX ROW. Free-flowing chips gave rows of one and
+   two, each a different width, which is what Ahmed saw as "not organised".
+   Equal columns that fill the tile line up on both axes and take about half
+   the height, because the date and the tag are one line instead of a third
+   column reserving width on every row. */
+.cx-stat-record .cx-chips:not(.cx-chips-round) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 6px;
 }
+.cx-chip-session { grid-template-columns: auto minmax(0, 1fr); gap: 9px; padding: 7px 10px; }
+.cx-chip-session .cx-chip-ico { width: 17px; height: 17px; }
+.cx-chip-session .cx-chip-title { font-size: 12.5px; }
+.cx-chip-session .cx-chip-when { font-size: 11px; }
+/* Inline inside the meta line now, not its own column. */
+.cx-chip-session .cx-chip-tag { font-size: 11px; }
 
-.evp-speaker-row { display: flex; flex-wrap: wrap; gap: 12px; }
-.evp-speaker {
-  display: flex; align-items: center; gap: 11px; text-decoration: none; color: inherit;
-  padding: 10px 14px 10px 10px; border-radius: 999px;
-  border: 1px solid var(--glass-border); background: var(--glass);
-}
-a.evp-speaker:hover { border-color: var(--cyan); }
-.evp-speaker-pic {
-  width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none;
-  background: var(--glass-border);
-}
-.evp-speaker-pic.is-initial {
-  display: grid; place-items: center; font-weight: 700; font-size: 16px;
-}
-.evp-speaker-text { display: flex; flex-direction: column; min-width: 0; }
-.evp-speaker-name { font-size: 14.5px; font-weight: 700; }
-.evp-speaker-role { font-size: 12.5px; color: var(--text-secondary); }

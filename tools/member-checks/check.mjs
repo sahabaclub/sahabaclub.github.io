@@ -612,7 +612,11 @@ const hackRows = [
   // the stats row; a separate block lands the other side of that boundary.
   {
     const at = (needle) => html.indexOf(needle);
-    const line = at("cx-record-line");
+    // ⚠ Anchored on the tile's LABEL, not on `cx-record-line`. The summary
+    // line is now dropped for a coach — it only re-listed the rounds the chips
+    // show — so anchoring on it made this check fail for the very profile it
+    // was written to protect. The label is the one thing the tile always has.
+    const line = at('cx-stat-label">EduHackAI');
     const chip = at("cx-chip-round");
     const nextBlock = (() => {
       const a = html.indexOf("cx-section", line);
@@ -778,6 +782,61 @@ const hackRows = [
   lacks(html, ">years experience<", "…and no experience tile");
   has(html, "EduHackAI-2 runner-up", "…but their record is still on the page");
   has(html, "hasn’t joined yet", "…alongside the panel that explains why");
+}
+
+// ============================================================
+// 4b. The coach's summary line is gone; the winner's is not
+// ============================================================
+//
+// Ahmed, 22 Aug: "the text: Coached EduHackAI-1, EduHackAI-2, EduHackAI-3,
+// EduHackAI-4 (Arabic Edition) — no need." It re-listed the same rounds the
+// chips name, in the same order.
+//
+// ⚠ BUT DROPPING IT FOR EVERYONE DELETED THE WINNER'S MEDAL, which renders
+// through the same line — the trophy he asked for on 19 Aug. Both halves are
+// pinned here because the first attempt did exactly that and only the older
+// assertions caught it.
+
+section("the summary line: dropped for a coach, kept for a winner");
+
+{
+  const coachOnly = [
+    round(1, { is_mentor: true }), round(2, { is_mentor: true }),
+    round(3, { is_mentor: true }), round(4, { is_mentor: true }),
+  ];
+  const r = await loadRealm({
+    search: "?u=" + MEMBER_ID,
+    session: { user: { id: OTHER_ID } },
+    rows: {
+      member_directory: [memberRow({ hackathons: coachOnly })],
+      member_activity: [activityRow],
+      member_follows: [],
+      hackathons: hackRows,
+      hackathon_teams: teamRows,
+    },
+  });
+  const html = await renderPage(r);
+  lacks(html, "Coached EduHackAI-1", "⚠ a coach's summary line is gone");
+  has(html, "cx-chip-round", "…while the chips that replaced it are there");
+  has(html, "Coached", "…and each chip still says what they did");
+}
+{
+  // Same page, a placing. The line must survive, medal and all.
+  const r = await loadRealm({
+    search: "?u=" + MEMBER_ID,
+    session: { user: { id: OTHER_ID } },
+    rows: {
+      member_directory: [memberRow({ hackathons: [round(2, { rank: 1 })] })],
+      member_activity: [activityRow],
+      member_follows: [],
+      hackathons: hackRows,
+      hackathon_teams: teamRows,
+    },
+  });
+  const html = await renderPage(r);
+  has(html, "cx-award cx-award-1", "⚠ a winner keeps the gold pill");
+  has(html, "EduHackAI-2 winner", "…and the wording that goes with it");
+  has(html, "1st place", "…and the chip carries the placing too");
 }
 
 // ============================================================

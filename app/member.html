@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=f781ae2494">
-<link rel="stylesheet" href="connect.css?v=f781ae2494">
+<link rel="stylesheet" href="../styles.css?v=ab980d4e4c">
+<link rel="stylesheet" href="connect.css?v=ab980d4e4c">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -35,7 +35,7 @@
      a guest/member split of its own (Inbox against Home and Join free).
      Running first means that split is decided before the header is laid out,
      rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=f781ae2494"></script>
+<script src="../header-identity.js?v=ab980d4e4c"></script>
 </head>
 <body>
 
@@ -189,17 +189,17 @@
 <script type="module">
   import {
     currentUser, getMember, getProspect, getActivity, myFollowing, follow, unfollow,
-    roundsWithPlacings, hackathonRecord, engagementBreakdown, RECORD,
+    roundsWithPlacings, hackathonRecord, engagementBreakdown, RECORD, awardOf,
     summarise, escapeHtml, initialOf, linkList, placeOf,
     experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
-  } from "../lib/connect.js?v=f781ae2494";
+  } from "../lib/connect.js?v=ab980d4e4c";
   // ⚠ THE SESSIONS BLOCK BELOW NEEDS THIS AND DID NOT HAVE IT. Every other
   // query on this page goes through a helper in connect.js, which imports its
   // own client — so `supabase` had never been referenced here, the two lines
   // that reached for it threw ReferenceError, and the try/catch around them
   // turned that into "no sessions" instead of into an error. Same import the
   // other pages use.
-  import { supabase } from "../lib/supabase-client.js?v=f781ae2494";
+  import { supabase } from "../lib/supabase-client.js?v=ab980d4e4c";
 
   var root = document.getElementById("member-root");
   var me = null;
@@ -401,27 +401,38 @@
       var name = text(e.name) || ("EduHackAI-" + text(e.round));
       var n = Number(e.round);
 
-      // ⚠ THE LOGO IS DRAWN OVER THE NAME, NOT INSTEAD OF IT. Marks exist for
-      // rounds 1-5 today; round 6 will have a name before it has a picture.
-      // The text is the default and wireRoundLogos() hides it only once an
-      // image has actually decoded — so a missing mark degrades to a readable
-      // chip rather than to a broken-image icon. Same rule hackathons-ui.js
-      // uses, for the same reason.
+      // ⚠⚠ NO loading="lazy" HERE, AND THE LOGO IS NO LONGER HIDDEN BY
+      // DEFAULT. Both together are why no mark ever appeared: the images were
+      // `display:none` until JS revealed them on `load`, and a lazy image that
+      // is not being rendered is never fetched — so `load` never fired, the
+      // reveal never ran, and every chip fell back to its name. The wiring
+      // looked right and could not work.
+      //
+      // Inverted: the mark is what the browser paints, and the name is
+      // revealed only if the image ERRORS. That way the common case needs no
+      // JavaScript at all, and the fallback is driven by the one event that
+      // actually tells us something is missing.
       var art = "";
       if (isFinite(n) && n > 0) {
         var base = "../assets/eduhack/round-" + encodeURIComponent(String(n));
         art =
-          '<img class="cx-round-logo logo-img-dark" data-cx-logo="dark" alt="" aria-hidden="true" ' +
-            'width="300" height="80" loading="lazy" src="' + base + '-dark.png">' +
-          '<img class="cx-round-logo logo-img-light" data-cx-logo="light" alt="" aria-hidden="true" ' +
-            'width="300" height="80" loading="lazy" src="' + base + '-light.png">';
+          '<img class="cx-round-logo logo-img-dark" data-cx-logo="dark" alt="' + escapeHtml(name) + '" ' +
+            'width="300" height="80" src="' + base + '-dark.png">' +
+          '<img class="cx-round-logo logo-img-light" data-cx-logo="light" alt="' + escapeHtml(name) + '" ' +
+            'width="300" height="80" src="' + base + '-light.png">';
       }
 
+      // The placing when there is one, otherwise what they did in the round.
+      // ⚠ This is what lets the summary line above the chips be dropped: a
+      // placing was the one thing that line said and the chips did not.
+      var award = awardOf(e);
+      var tag = award ? award.label : roundRole(e);
+
       var inner =
-        '<span class="cx-chip-art">' + art +
+        '<span class="cx-chip-art' + (art ? "" : " no-art") + '">' + art +
           '<span class="cx-chip-fallback">' + escapeHtml(name) + "</span>" +
         "</span>" +
-        '<span class="cx-chip-tag">' + roundRole(e) + "</span>";
+        '<span class="cx-chip-tag">' + tag + "</span>";
 
       // A deep link to #<slug> opens that round on the hackathons page —
       // openFromHash() there runs on load, not only on hashchange.
@@ -456,15 +467,20 @@
       // recording" are different things and only one of them is on offer.
       var icon = upcoming ? ICON_CAL : (s.recording_url ? ICON_PLAY : ICON_MUTE);
       var tag = upcoming ? "Book a place" : (s.recording_url ? "Recording" : "No recording");
+      // ⚠ TWO COLUMNS, NOT THREE. The date and the tag used to be separate
+      // cells, which forced every row to reserve width for a third column and
+      // left the titles elided while whitespace sat beside them. They are one
+      // meta line now — "20 Aug 2026 · Recording" — which is the same
+      // information in half the height and lets the title have the room.
       return '<a class="cx-chip cx-chip-session' + (upcoming ? " is-upcoming" : "") +
           '" href="../event.html?e=' + encodeURIComponent(s.slug) + '" ' +
           'title="' + escapeHtml(s.title) + '">' +
         icon +
         '<span class="cx-chip-body">' +
           '<span class="cx-chip-title" dir="auto">' + escapeHtml(s.title) + "</span>" +
-          '<span class="cx-chip-when">' + escapeHtml(niceDate(s.event_date)) + "</span>" +
+          '<span class="cx-chip-when">' + escapeHtml(niceDate(s.event_date)) +
+            ' &middot; <span class="cx-chip-tag">' + tag + "</span></span>" +
         "</span>" +
-        '<span class="cx-chip-tag">' + tag + "</span>" +
       "</a>";
     }).join("");
   }
@@ -474,19 +490,24 @@
   // otherwise. There is deliberately no error handler: "did not load" is
   // already the fallback, and handling the error would only be a way to
   // re-introduce a state where something has to be un-drawn.
+  // ⚠ DRIVEN BY `error`, NOT BY `load`. The previous version hid the marks in
+  // CSS and revealed them once they decoded — which meant a `display:none`
+  // image with loading="lazy", which the browser never fetches, so `load`
+  // never came and no logo ever appeared. Now the mark is what the page
+  // paints, and this only has to notice the rare case where one is missing.
+  //
+  // A round with no mark at all (round 6, one day) is marked `no-art` when the
+  // chip is built, so it never depends on this running.
   function wireRoundLogos(root) {
     var scope = root || document;
     if (!scope.querySelectorAll) return;
     Array.prototype.forEach.call(scope.querySelectorAll("img[data-cx-logo]"), function (img) {
       var box = img.parentNode;
       if (!box) return;
-      function ready() {
-        // complete with naturalWidth 0 is a 404, not a decode.
-        if (!img.naturalWidth) return;
-        box.classList.add("has-art");
-      }
-      if (img.complete) ready();
-      else img.addEventListener("load", ready);
+      function missing() { box.classList.add("no-art"); }
+      // complete with naturalWidth 0 is a 404 that has already happened.
+      if (img.complete && !img.naturalWidth) missing();
+      else img.addEventListener("error", missing);
     });
   }
 
@@ -686,10 +707,32 @@
     var rounds = roundChips(entries);
     var sessions = sessionChips(LAST_SESSIONS);
 
+    // ⚠ THE SUMMARY LINE IS DROPPED ONCE THERE ARE CHIPS. Ahmed, 22 Aug:
+    // "Coached EduHackAI-1, EduHackAI-2, EduHackAI-3, EduHackAI-4 (Arabic
+    // Edition) — no need." He is right: it named the same four rounds the
+    // chips below it name, in the same order, and the chips also say what he
+    // did in each one.
+    //
+    // It still renders when there are NO chips, which is the case it is
+    // actually needed for: "No rounds yet", and the way in to the hackathons
+    // page that goes with it.
+    //
+    // ⚠ A PLACING WAS THE ONE THING THE LINE SAID THAT THE CHIPS DID NOT, so
+    // the chip tag now carries it (awardOf per round). Dropping the line
+    // without that would have quietly deleted "1st place" from a winner's
+    // profile.
+    // ⚠ BUT A WINNER KEEPS THEIR LINE. Dropping it for everyone deleted the
+    // gold medal and "EduHackAI-2 winner" from a winner's profile — the
+    // trophy Ahmed asked for on 19 Aug — because that state renders through
+    // the same line. What he asked to remove was the COACH sentence, which
+    // only re-lists the rounds the chips already show. A placing is not in
+    // that category, and the chips carry it as a tag as well.
+    var showLine = !rounds || rec.state === RECORD.WINNER;
+
     return '<div class="cx-stat cx-stat-record"' +
         (title ? ' title="' + escapeHtml(title) + '"' : "") + ">" +
         '<span class="cx-stat-label">EduHackAI</span>' +
-        '<span class="cx-record-line">' + body + "</span>" +
+        (showLine ? '<span class="cx-record-line">' + body + "</span>" : "") +
         // The nuance stays on the page rather than shrinking into the tooltip.
         // A round whose placings were never written down is the case this
         // whole line exists for, and a tooltip is not readable on a phone.
@@ -1172,7 +1215,7 @@
     render(memberRes.data, activityRes.data || null, await placingsFor(memberRes.data));
   })();
 </script>
-<script src="../script.js?v=f781ae2494"></script>
-<script defer src="../lib/back-to-top.js?v=f781ae2494"></script>
+<script src="../script.js?v=ab980d4e4c"></script>
+<script defer src="../lib/back-to-top.js?v=ab980d4e4c"></script>
 </body>
 </html>

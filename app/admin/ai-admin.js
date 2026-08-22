@@ -18,8 +18,8 @@
 // So the model dropdown being filtered by kind is a courtesy. 0031's trigger
 // is what makes a text model on an image service impossible. Never move a
 // check out of the database and rely on this file.
-import { supabase } from "../../lib/supabase-client.js?v=f781ae2494";
-import { requireStaff, renderShell, escapeHtml, formatDate } from "../../lib/admin-guard.js?v=f781ae2494";
+import { supabase } from "../../lib/supabase-client.js?v=ab980d4e4c";
+import { requireStaff, renderShell, escapeHtml, formatDate } from "../../lib/admin-guard.js?v=ab980d4e4c";
 
 const state = {
   services: [],
