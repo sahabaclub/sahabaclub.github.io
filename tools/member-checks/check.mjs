@@ -156,7 +156,14 @@ async function loadRealm({ rows, session, search }) {
     context, identifier: "lib/connect.js",
   });
   await connect.link((spec) => {
-    if (spec === "./supabase-client.js") return stub;
+    // ⚠ THE ?v= STAMP IS STRIPPED BEFORE MATCHING. tools/cache-bust.mjs writes
+    // `./supabase-client.js?v=<hash>` into lib/connect.js on every release, and
+    // this compared the specifier exactly — so the whole file stopped linking
+    // the first time the stamp changed and threw before a single assertion
+    // ran. It is not in the tools/check-*.mjs glob and needs
+    // --experimental-vm-modules to start, so nothing reported it: ~30
+    // assertions about the exact hackathon wording were simply not running.
+    if (String(spec).split("?")[0] === "./supabase-client.js") return stub;
     throw new Error("lib/connect.js imported an unexpected module: " + spec);
   });
   await connect.evaluate();
@@ -172,7 +179,8 @@ async function renderPage(realm) {
   // the page asks for and the library does not export fails here, which is
   // the check that used to need loading the page in a browser.
   await page.link((spec) => {
-    if (spec === "../lib/connect.js") return realm.connect;
+    // Same ?v= stamp, same reason as the specifier above.
+    if (String(spec).split("?")[0] === "../lib/connect.js") return realm.connect;
     throw new Error("app/member.html imported an unexpected module: " + spec);
   });
   await page.evaluate();
@@ -675,8 +683,18 @@ has(PAGE_SRC, "if (!isProspect) {", "⚠ the prospect guard on the stats row is 
 
 has(CONNECT_SRC, 'PROFILE_ONLY_COLUMNS = "bio, years_experience"',
   "years_experience is in PROFILE_ONLY_COLUMNS");
-ok(/const PROFILE_COLUMNS = "work_history, hackathons, joined_site_at";/.test(CONNECT_SRC),
-  "…and NOT in the 0023 retry group");
+// ⚠ ASSERTS THE INTENT, NOT THE EXACT STRING. This pinned the literal
+// `"work_history, hackathons, joined_site_at"` and so went stale the moment
+// 0075 deliberately added role, tier and open_to to the retry group on 19 Aug
+// — a change its own comment in lib/connect.js explains at length. It read as
+// a real regression when the file was finally able to run again. What actually
+// matters is that years_experience is in the always-asked set and NOT in the
+// group that is allowed to be dropped, because the profile prints a bare
+// number and a missing one renders as blank rather than as an error.
+ok(/const PROFILE_COLUMNS =\s*\n?\s*"[^"]*";/.test(CONNECT_SRC),
+  "PROFILE_COLUMNS is still a single string literal");
+ok(!/const PROFILE_COLUMNS =\s*\n?\s*"[^"]*years_experience[^"]*";/.test(CONNECT_SRC),
+  "…and years_experience is NOT in the 0023 retry group");
 lacks(CONNECT_SRC, '"Been around since "', "the old summary wording is gone");
 
 const CSS = fs.readFileSync(REPO + "/styles.css", "utf8");
