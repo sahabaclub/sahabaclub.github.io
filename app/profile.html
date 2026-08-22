@@ -14,7 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=15ea1b3425">
+<link rel="stylesheet" href="../styles.css?v=f781ae2494">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -384,16 +384,16 @@
 </main>
 
 <script type="module">
-  import { supabase } from "../lib/supabase-client.js?v=15ea1b3425";
-  import { getSession, sessionPhotoProviders } from "../lib/auth.js?v=15ea1b3425";
-  import { safeUrl } from "../lib/connect.js?v=15ea1b3425";
+  import { supabase } from "../lib/supabase-client.js?v=f781ae2494";
+  import { getSession, sessionPhotoProviders } from "../lib/auth.js?v=f781ae2494";
+  import { safeUrl } from "../lib/connect.js?v=f781ae2494";
   import {
     loadCountries, loadTagSuggestions, suggestionsFor, fillCountrySelect,
     createTagPicker, connectHint, onConnectHintJump, createAvatarControl,
     OPEN_TO, nullIfBlank, intOrNull, escapeHtml,
     FIELD_LIMITS, BIO_COUNTER_FROM, BIO_COUNTER_AMBER,
     bioLength, limitProblems, limitBlockMessage, saveErrorMessage,
-  } from "../lib/profile-form.js?v=15ea1b3425";
+  } from "../lib/profile-form.js?v=f781ae2494";
 
   var session;
   var loaded = {};        // the row as it came back, so we only send columns that exist
@@ -738,7 +738,7 @@
     showStatus("Saved.", "ok");
   });
 </script>
-<script src="../script.js?v=15ea1b3425"></script>
-<script defer src="../lib/back-to-top.js?v=15ea1b3425"></script>
+<script src="../script.js?v=f781ae2494"></script>
+<script defer src="../lib/back-to-top.js?v=f781ae2494"></script>
 </body>
 </html>

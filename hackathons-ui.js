@@ -845,7 +845,7 @@
   }
 
   function load() {
-    return import("./lib/supabase-client.js?v=15ea1b3425").then(function (mod) {
+    return import("./lib/supabase-client.js?v=f781ae2494").then(function (mod) {
       var sb = mod.supabase;
       // Is anybody signed in? It decides ONE thing: whether the roster query
       // may ask for profile_user_id. 0041 took that column off the anon grant,
@@ -2230,7 +2230,7 @@
   // the rest of this page does it, so a signed-out visitor is never waiting
   // on a module they do not need until they press the button.
   function submitInterest(values) {
-    return import("./lib/supabase-client.js?v=15ea1b3425").then(function (mod) {
+    return import("./lib/supabase-client.js?v=f781ae2494").then(function (mod) {
       return mod.supabase.functions.invoke("register-interest", {
         body: {
           full_name: values.full_name,

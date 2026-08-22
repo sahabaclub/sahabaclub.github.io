@@ -1183,6 +1183,15 @@ html.light-mode .cx-badge.is-founder { color: #5b21b6; }
   font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--text-muted); margin: 14px 0 8px;
 }
+/* ⚠ Scoped to the record tile, which is `display:flex; flex-direction:column;
+   gap:6px` (styles.css). Inside it the heading's own 14px top margin ADDS to
+   that gap, so it is trimmed here rather than the gap being fought. The chips
+   sit in the same tile as the summary line they belong to — that is the whole
+   point of moving them, so they must not read as a separate panel. */
+.cx-stat-record .cx-activity-head { margin: 6px 0 0; }
+.cx-stat-record .cx-chips { margin-top: 2px; }
+/* The tile is text-align:left; the round chips centre their own mark. */
+.cx-stat-record .cx-chip-round { text-align: center; }
 .cx-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 /* ⚠ minmax(0, …) not auto. A long event title has a min-content width of its
    longest word, and an `auto` track floors at that — which is what stretched

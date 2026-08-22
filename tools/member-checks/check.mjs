@@ -571,9 +571,41 @@ const hackRows = [
   const html = await renderPage(r);
   ok(html.length > 0, "the page rendered something");
 
-  // -- the Activities section (22 Aug). Ahmed: the rounds and the sessions
-  //    should be "clear icons clickable", each leading to its own page.
-  has(html, 'class="cx-block cx-activity"', "the Activities section renders");
+  // -- the activity chips (22 Aug). Ahmed: the rounds and the sessions should
+  //    be "clear icons clickable", each leading to its own page — and, after
+  //    he looked at it, INSIDE the EduHackAI tile rather than in a section
+  //    below it.
+  //
+  // ⚠ THE CONTAINMENT IS THE ASSERTION, not just the presence. They shipped
+  // once as a separate block and looked, to the person who asked for them,
+  // exactly like nothing had happened: the tile he was watching was unchanged
+  // and the chips were a screen further down. `has(html, chip)` alone passed
+  // that whole time.
+  //
+  // ⚠ Expressed as ORDER, not as a substring slice. The first attempt cut from
+  // the tile to the first </div> after the chips — which still matches when
+  // the chips are BELOW the tile, because the slice simply runs on past the
+  // tile's own close. It would have passed either layout. The chips must sit
+  // after the tile's summary line and before the first section that follows
+  // the stats row; a separate block lands the other side of that boundary.
+  {
+    const at = (needle) => html.indexOf(needle);
+    const line = at("cx-record-line");
+    const chip = at("cx-chip-round");
+    const nextBlock = (() => {
+      const a = html.indexOf("cx-section", line);
+      const b = html.indexOf("cx-block", line);
+      const found = [a, b].filter((i) => i !== -1);
+      return found.length ? Math.min(...found) : html.length;
+    })();
+    ok(line !== -1 && chip !== -1 && chip > line && chip < nextBlock,
+      "⚠ the round chips are INSIDE the EduHackAI tile, not in a section below it");
+    const sess = at("cx-chip-session");
+    ok(sess === -1 || (sess > line && sess < nextBlock),
+      "…and so are the session chips, wherever they render at all");
+  }
+  lacks(html, "cx-block cx-activity",
+    "⚠ the separate Activities section is gone, not left alongside");
   has(html, '../hackathons.html#eduhackai-3',
     "⚠ a round links to its own section on the hackathons page");
   has(html, "Coached", "…tagged with what they actually did in it");

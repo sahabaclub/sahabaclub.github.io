@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=15ea1b3425">
-<link rel="stylesheet" href="connect.css?v=15ea1b3425">
+<link rel="stylesheet" href="../styles.css?v=f781ae2494">
+<link rel="stylesheet" href="connect.css?v=f781ae2494">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -35,7 +35,7 @@
      a guest/member split of its own (Inbox against Home and Join free).
      Running first means that split is decided before the header is laid out,
      rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=15ea1b3425"></script>
+<script src="../header-identity.js?v=f781ae2494"></script>
 </head>
 <body>
 
@@ -192,7 +192,7 @@
     roundsWithPlacings, hackathonRecord, engagementBreakdown, RECORD,
     summarise, escapeHtml, initialOf, linkList, placeOf,
     experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
-  } from "../lib/connect.js?v=15ea1b3425";
+  } from "../lib/connect.js?v=f781ae2494";
 
   var root = document.getElementById("member-root");
   var me = null;
@@ -462,22 +462,6 @@
     }).join("");
   }
 
-  function activitiesHtml(entries, sessions) {
-    var rounds = roundChips(entries);
-    var events = sessionChips(sessions);
-    if (!rounds && !events) return "";
-    return '<section class="cx-block cx-activity">' +
-      "<h2>Activities</h2>" +
-      (rounds
-        ? '<p class="cx-activity-head">EduHackAI</p>' +
-          '<div class="cx-chips cx-chips-round">' + rounds + "</div>"
-        : "") +
-      (events
-        ? '<p class="cx-activity-head">Sessions delivered and upcoming</p>' +
-          '<div class="cx-chips">' + events + "</div>"
-        : "") +
-      "</section>";
-  }
 
   // Reveal a round mark only once it has actually decoded, and never
   // otherwise. There is deliberately no error handler: "did not load" is
@@ -680,6 +664,21 @@
     // would just be the same sentence twice.
     var title = rec.title && rec.title !== rec.note ? rec.title : "";
 
+    // ⚠ THE CHIPS LIVE INSIDE THIS TILE, not in a section below it. Ahmed,
+    // 22 Aug, pointing at this exact tile: "this section should include all
+    // the activities … the logos of rounds I coached, the events I speak in".
+    // They were built as a separate Activities block first, which put them a
+    // screen away from the summary line they belong to — so the tile said
+    // "Coached EduHackAI-1, 2, 3" and the things you could actually open were
+    // somewhere else entirely.
+    //
+    // The summary line stays above them. It is the one sentence that gets the
+    // wording right — never "participated" for a coach, never a placing read
+    // off a round somebody judged — and it is tested in
+    // tools/member-checks/check.mjs. The chips are how you ACT on it.
+    var rounds = roundChips(entries);
+    var sessions = sessionChips(LAST_SESSIONS);
+
     return '<div class="cx-stat cx-stat-record"' +
         (title ? ' title="' + escapeHtml(title) + '"' : "") + ">" +
         '<span class="cx-stat-label">EduHackAI</span>' +
@@ -688,6 +687,11 @@
         // A round whose placings were never written down is the case this
         // whole line exists for, and a tooltip is not readable on a phone.
         (rec.note ? '<p class="cx-record-note">' + escapeHtml(rec.note) + "</p>" : "") +
+        (rounds ? '<div class="cx-chips cx-chips-round">' + rounds + "</div>" : "") +
+        (sessions
+          ? '<p class="cx-activity-head">Sessions delivered and upcoming</p>' +
+            '<div class="cx-chips">' + sessions + "</div>"
+          : "") +
       "</div>";
   }
 
@@ -911,9 +915,6 @@
         "what they keep coming back for shows up here on its own.</p></div></div>";
     }
 
-    // Activities sit above skills and interests: what somebody has actually
-    // stood up and delivered says more than a list of tags they picked.
-    html += activitiesHtml(member.hackathons, LAST_SESSIONS);
 
     if ((member.skills || []).length) {
       html += '<div class="cx-section"><p class="cx-section-title">Skills</p>' +
@@ -1157,7 +1158,7 @@
     render(memberRes.data, activityRes.data || null, await placingsFor(memberRes.data));
   })();
 </script>
-<script src="../script.js?v=15ea1b3425"></script>
-<script defer src="../lib/back-to-top.js?v=15ea1b3425"></script>
+<script src="../script.js?v=f781ae2494"></script>
+<script defer src="../lib/back-to-top.js?v=f781ae2494"></script>
 </body>
 </html>
