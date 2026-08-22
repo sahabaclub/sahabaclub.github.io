@@ -70,6 +70,10 @@
 
   .evp-title { margin: 0 0 10px; font-size: 34px; line-height: 1.2; }
   .evp-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+  /* Language is the one chip with its own colour — see the note where it is
+     built. Green, because cyan already means recording on this page. */
+  .evp-chip.is-lang { border-color: rgba(74, 222, 128, .45); color: #86efac; }
+  html.light-mode .evp-chip.is-lang { color: #166534; }
   .evp-chip {
     font-size: 13px; padding: 5px 11px; border-radius: 999px;
     background: var(--glass); border: 1px solid var(--glass-border); color: var(--text-secondary);
@@ -429,7 +433,7 @@
     // see galleryHtml(). Fetched unconditionally because the page has one
     // query for the event and branching it on a rule computed after the
     // organisers land would mean two round trips to save two array columns.
-    "gallery_videos, gallery_photos";
+    "gallery_videos, gallery_photos, language";
 
   var MONTHS = ["January","February","March","April","May","June",
                 "July","August","September","October","November","December"];
@@ -709,6 +713,19 @@
     var chips = [];
     chips.push('<span class="evp-chip' + (isPast ? " is-past" : "") + '">' +
       (isPast ? "Past event" : "Upcoming") + "</span>");
+    // ⚠ Language sits with mode and price because it is the same kind of fact:
+    // something you need before deciding to turn up. It is also the one thing
+    // here a reader might not be able to act on — an Arabic session is no use
+    // to somebody who does not read Arabic, and finding that out on the day is
+    // the failure this chip prevents.
+    //
+    // Nothing renders when it is NULL. Most imported events have no language
+    // recorded (0079 only filled in the club's own), and "English" on somebody
+    // else's conference would be the page inventing a fact.
+    if (e.language) {
+      chips.push('<span class="evp-chip is-lang">' +
+        esc(e.language === "Arabic" ? "عربي — Arabic" : e.language) + "</span>");
+    }
     if (e.mode) chips.push('<span class="evp-chip">' + esc(e.mode) + "</span>");
     if (e.price_label) chips.push('<span class="evp-chip">' + esc(e.price_label) + "</span>");
     if (e.tier_required === "premium") chips.push('<span class="evp-chip">Premium only</span>');

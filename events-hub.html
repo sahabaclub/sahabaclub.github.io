@@ -86,6 +86,25 @@
     background: rgba(255,255,255,.05); border: 1px solid var(--glass-border); color: var(--text-secondary);
   }
   .hub-badge.is-rec { border-color: var(--cyan); color: var(--text); }
+  /* The language badge answers the filter above it, so it is the one badge
+     with its own colour. Green, because cyan already means "recording". */
+  .hub-badge.is-lang { border-color: rgba(74, 222, 128, .45); color: #86efac; }
+  html.light-mode .hub-badge.is-lang { color: #166534; }
+
+  /* Second filter row. Deliberately lighter than the Upcoming/Past tabs — that
+     pair chooses which set you are in, this only narrows it, and giving them
+     equal visual weight would make them look like alternatives. */
+  .hub-langs { display: flex; justify-content: center; gap: 8px; margin: -8px 0 24px; flex-wrap: wrap; }
+  .hub-lang {
+    font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    padding: 6px 14px; border-radius: 999px; color: var(--text-muted);
+    background: transparent; border: 1px solid var(--glass-border);
+  }
+  .hub-lang.is-on {
+    color: var(--text); border-color: rgba(74, 222, 128, .55);
+    background: rgba(74, 222, 128, .10);
+  }
+  .hub-lang:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
   .hub-empty { padding: 46px 0; text-align: center; color: var(--text-secondary); }
 
@@ -242,6 +261,27 @@
     </button>
   </div>
 
+  <!-- ⚠ A SECOND ROW, AND NOT role="tablist". Upcoming/Past above choose WHICH
+       SET you are looking at; this narrows whichever set that is. Putting the
+       two in one tab row would say they are alternatives to each other, which
+       is wrong in both directions — you can be on Past AND Arabic.
+
+       ⚠ The counts are live and language-aware: they say how many events in
+       the CURRENT set are in each language, so "Arabic (0)" tells you there
+       are none of those among past events before you press it and find an
+       empty page. -->
+  <div class="hub-langs" role="group" aria-label="Language">
+    <button type="button" class="hub-lang is-on" data-lang="" aria-pressed="true">
+      All languages<span class="hub-tab-count" id="hub-count-lang-all"></span>
+    </button>
+    <button type="button" class="hub-lang" data-lang="English" aria-pressed="false">
+      English<span class="hub-tab-count" id="hub-count-lang-en"></span>
+    </button>
+    <button type="button" class="hub-lang" data-lang="Arabic" aria-pressed="false">
+      عربي<span class="hub-tab-count" id="hub-count-lang-ar"></span>
+    </button>
+  </div>
+
   <div id="hub-list"><p class="hub-empty">Loading&hellip;</p></div>
 
   <section class="hub-section" id="hub-partners-section" hidden>
@@ -292,6 +332,7 @@
   var TODAY = new Date().toISOString().slice(0, 10);
   var buckets = { upcoming: [], past: [] };
   var current = "upcoming";
+  var currentLang = "";   // "", "English" or "Arabic"
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -312,6 +353,15 @@
       : '<div class="hub-art-fallback" aria-hidden="true">&#128197;</div>';
 
     var badges = [];
+    // ⚠ LANGUAGE FIRST among the badges — it is the thing the filter above
+    // acts on, so it should be the thing a reader can confirm at a glance.
+    // A NULL language renders NOTHING rather than a guess: most imported
+    // events have none set, and "English" on somebody else's Riyadh
+    // conference would be the card inventing a fact.
+    if (e.language) {
+      badges.push('<span class="hub-badge is-lang">' +
+        esc(e.language === "Arabic" ? "عربي" : e.language) + "</span>");
+    }
     if (e.mode) badges.push('<span class="hub-badge">' + esc(e.mode) + "</span>");
     if (e.price_label) badges.push('<span class="hub-badge">' + esc(e.price_label) + "</span>");
     // The recording is the reason to open a past event at all, so it is a
@@ -339,9 +389,24 @@
   }
 
   function paint() {
-    var rows = buckets[current];
+    var all = buckets[current];
+    // The language narrows whichever set is showing; it never changes which
+    // set that is.
+    var rows = currentLang
+      ? all.filter(function (e) { return e.language === currentLang; })
+      : all;
+
     document.getElementById("hub-count-upcoming").textContent = " (" + buckets.upcoming.length + ")";
     document.getElementById("hub-count-past").textContent = " (" + buckets.past.length + ")";
+
+    // ⚠ Counted against the CURRENT set, not the whole Hub. "Arabic (0)" while
+    // looking at Upcoming is the useful, true statement — a count of every
+    // Arabic event ever would send somebody to an empty page.
+    var enCount = all.filter(function (e) { return e.language === "English"; }).length;
+    var arCount = all.filter(function (e) { return e.language === "Arabic"; }).length;
+    document.getElementById("hub-count-lang-all").textContent = " (" + all.length + ")";
+    document.getElementById("hub-count-lang-en").textContent = " (" + enCount + ")";
+    document.getElementById("hub-count-lang-ar").textContent = " (" + arCount + ")";
 
     ["upcoming", "past"].forEach(function (t) {
       var b = document.getElementById("hub-tab-" + t);
@@ -349,12 +414,26 @@
       b.setAttribute("aria-selected", t === current ? "true" : "false");
     });
 
+    Array.prototype.forEach.call(document.querySelectorAll(".hub-lang"), function (b) {
+      var on = (b.getAttribute("data-lang") || "") === currentLang;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+
     if (!rows.length) {
-      listEl.innerHTML = '<p class="hub-empty">' +
-        (current === "upcoming"
-          ? "Nothing scheduled just yet &mdash; the past tab has everything we&rsquo;ve run so far."
-          : "Nothing here yet.") +
-        "</p>";
+      // ⚠ The empty message says WHICH filter emptied it. "Nothing here yet"
+      // under an Arabic filter reads as "the club has never run anything",
+      // which is a different and much worse claim than "none in this language".
+      var msg;
+      if (currentLang && all.length) {
+        msg = "No " + esc(currentLang === "Arabic" ? "Arabic" : "English") + " events in this list &mdash; " +
+          "try <strong>All languages</strong>.";
+      } else if (current === "upcoming") {
+        msg = "Nothing scheduled just yet &mdash; the past tab has everything we&rsquo;ve run so far.";
+      } else {
+        msg = "Nothing here yet.";
+      }
+      listEl.innerHTML = '<p class="hub-empty">' + msg + "</p>";
       return;
     }
     listEl.innerHTML = '<div class="hub-grid">' + rows.map(cardHtml).join("") + "</div>";
@@ -364,6 +443,13 @@
     var btn = ev.target.closest("[data-tab]");
     if (!btn) return;
     current = btn.getAttribute("data-tab");
+    paint();
+  });
+
+  document.querySelector(".hub-langs").addEventListener("click", function (ev) {
+    var btn = ev.target.closest("[data-lang]");
+    if (!btn) return;
+    currentLang = btn.getAttribute("data-lang") || "";
     paint();
   });
 
@@ -396,7 +482,7 @@
 
   var evRes = await supabase
     .from("events")
-    .select("id, slug, title, event_date, mode, price_label, image_url, recording_url")
+    .select("id, slug, title, event_date, mode, price_label, image_url, recording_url, language")
     .eq("is_published", true)
     .order("event_date", { ascending: false });
 

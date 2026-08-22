@@ -257,6 +257,20 @@
            five extra clips on a past Hub event, this is the recording of the
            event itself and applies to any event. -->
       <div class="ad-field">
+        <label for="f-language">Language <span class="ad-hint">what the session is run in</span></label>
+        <select id="f-language">
+          <option value="">Not set</option>
+          <option value="English">English</option>
+          <option value="Arabic">Arabic — عربي</option>
+        </select>
+        <p class="ad-note">Shown as a badge on the event page and used by the
+          <strong>Events Hub language filter</strong>. ⚠ <strong>Not set</strong> is a real
+          answer and the right one for another organiser&rsquo;s event nobody has checked —
+          it shows no badge rather than a wrong one. 0079 filled this in for Sahaba Club
+          and partner events only.</p>
+      </div>
+
+      <div class="ad-field">
         <label for="f-recording">Recording <span class="ad-hint">the main session video</span></label>
         <input type="url" id="f-recording" placeholder="https://youtu.be/… or any video URL">
         <p class="ad-note">Shown as the <strong>Recording</strong> section on the event page once
@@ -498,6 +512,7 @@
     register: document.getElementById("f-register"),
     live: document.getElementById("f-live"),
     recording: document.getElementById("f-recording"),
+    language: document.getElementById("f-language"),
     maps: document.getElementById("f-maps"),
     image: document.getElementById("f-image"),
     brand: document.getElementById("f-brand"),
@@ -1089,6 +1104,7 @@
     F.register.value = e ? (e.register_link || "") : "";
     F.live.value = e ? (e.live_link || "") : "";
     F.recording.value = e ? (e.recording_url || "") : "";
+    F.language.value = e ? (e.language || "") : "";
     // 0078 gallery. Both are arrays; the five video inputs are filled by
     // position and the photo list is replaced wholesale, so opening a
     // different event can never leave the previous one's pictures behind.
@@ -1398,6 +1414,7 @@
     F.register.value = d.register_link || "";
     F.live.value = d.live_link || "";
     F.recording.value = d.recording_url || "";
+    F.language.value = d.language || "";
     // An AI draft never carries a gallery — clear rather than inherit the
     // pictures of whatever was open before.
     F.vids.forEach(function (input) { input.value = ""; });
@@ -1489,6 +1506,9 @@
       // The main session recording. Empty means "no recording", which is
       // what the public page checks — so it must be null, not an empty string.
       recording_url: F.recording.value.trim() || null,
+      // "" means Not set, which must be NULL — the constraint allows only
+      // NULL, English or Arabic, so an empty string would fail the save.
+      language: F.language.value || null,
       // An online event has no venue to navigate to, so drop any stale map link
       // rather than leaving a Find Location button that makes no sense.
       maps_link: F.mode.value === "Online" ? null : (F.maps.value.trim() || null),
