@@ -193,6 +193,13 @@
     summarise, escapeHtml, initialOf, linkList, placeOf,
     experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
   } from "../lib/connect.js?v=f781ae2494";
+  // ⚠ THE SESSIONS BLOCK BELOW NEEDS THIS AND DID NOT HAVE IT. Every other
+  // query on this page goes through a helper in connect.js, which imports its
+  // own client — so `supabase` had never been referenced here, the two lines
+  // that reached for it threw ReferenceError, and the try/catch around them
+  // turned that into "no sessions" instead of into an error. Same import the
+  // other pages use.
+  import { supabase } from "../lib/supabase-client.js?v=f781ae2494";
 
   var root = document.getElementById("member-root");
   var me = null;
@@ -1129,6 +1136,13 @@
         LAST_SESSIONS = evs.data || [];
       }
     } catch (err) {
+      // ⚠ SWALLOWING THIS SILENTLY IS WHAT HID THE BUG. The intent was "a
+      // failed extra must not take the profile down", and that still holds —
+      // but a bare catch cannot tell a server that said no from a programming
+      // error in this file, and it treated a ReferenceError as "this member
+      // has no sessions" for as long as it took Ahmed to ask where they were.
+      // The page still renders; the reason now leaves a trace.
+      console.error("sessions not loaded", err);
       LAST_SESSIONS = [];
     }
 
