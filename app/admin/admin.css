@@ -343,6 +343,16 @@ select:focus-visible, textarea:focus-visible {
    disable, and a disabled button invites clicking it to find out why. */
 .ad-speaker-hit.is-blocked { cursor: default; opacity: .62; }
 .ad-speaker-hit.is-blocked:hover { background: none; }
+/* The guest option, always last in the list. Dimmer and set apart by a rule,
+   because it is the fallback: a real member is the better answer when one
+   exists, and this should not compete with the hits above it. */
+.ad-speaker-hit.is-guest-add { border-top: 1px solid var(--glass-border); opacity: .88; }
+.ad-speaker-hit.is-guest-add strong { font-weight: 600; }
+/* Amber, not cyan: a guest is a name and nothing more, and the chips are the
+   one place the difference is visible before saving. */
+.ad-speaker-chip.is-guest {
+  border-color: rgba(245,180,60,.42); background: rgba(245,180,60,.09);
+}
 .ad-speaker-chosen { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .ad-speaker-chip {
   display: inline-flex; align-items: center; gap: 8px;

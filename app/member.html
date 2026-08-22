@@ -16,8 +16,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="../styles.css?v=4bf9f935fb">
-<link rel="stylesheet" href="connect.css?v=4bf9f935fb">
+<link rel="stylesheet" href="../styles.css?v=15ea1b3425">
+<link rel="stylesheet" href="connect.css?v=15ea1b3425">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -35,7 +35,7 @@
      a guest/member split of its own (Inbox against Home and Join free).
      Running first means that split is decided before the header is laid out,
      rather than one parser-stall away from being. -->
-<script src="../header-identity.js?v=4bf9f935fb"></script>
+<script src="../header-identity.js?v=15ea1b3425"></script>
 </head>
 <body>
 
@@ -192,7 +192,7 @@
     roundsWithPlacings, hackathonRecord, engagementBreakdown, RECORD,
     summarise, escapeHtml, initialOf, linkList, placeOf,
     experienceLabel, monthYear, joinWords, CONNECT_OFF_MESSAGE,
-  } from "../lib/connect.js?v=4bf9f935fb";
+  } from "../lib/connect.js?v=15ea1b3425";
 
   var root = document.getElementById("member-root");
   var me = null;
@@ -343,42 +343,160 @@
   // ⚠ Published events only. An unpublished event is a draft; naming somebody
   // as its speaker on their public profile would announce a session the club
   // has not announced.
-  function sessionsHtml(sessions) {
+  // ---- Activities: the rounds and the sessions, as things you can open -----
+  //
+  // Ahmed, 22 Aug: the EduHackAI area "should include all the activities …
+  // the logos of rounds I coached, the events I speak in … each of that linked
+  // to the page … all should be clear icons clickable."
+  //
+  // ⚠ ONE SECTION, NOT TWO. The rounds and the sessions were separate blocks
+  // and it read as two half-empty lists. They answer the same question — what
+  // has this person actually done with the club — and the only difference is
+  // where the link goes.
+  //
+  // ⚠ EVERY CHIP IS A LINK OR IT IS NOT DRAWN. A round with no slug has
+  // nowhere to go, so it renders as plain text rather than as something that
+  // looks clickable and is not. That is the whole promise of the section.
+
+  var ICON_PLAY = '<svg class="cx-chip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="9"/><path d="M10 8.5l6 3.5-6 3.5z"/></svg>';
+  var ICON_CAL = '<svg class="cx-chip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<rect x="3" y="5" width="18" height="16" rx="2.4"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>';
+  var ICON_MUTE = '<svg class="cx-chip-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="9"/><path d="M8.5 8.5l7 7"/></svg>';
+
+  // What this person did in a round, in the club's own words. Mirrors
+  // hackathonRecord()'s rule and for the same reason: a coach is never
+  // described as having competed.
+  function roundRole(e) {
+    if (e.is_mentor && e.is_judge) return "Coached &amp; judged";
+    if (e.is_mentor) return "Coached";
+    if (e.is_judge) return "Judged";
+    if (e.is_winner || e.rank) return "Competed";
+    return "Took part";
+  }
+
+  function roundChips(entries) {
+    var rounds = jsonList(entries);
+    if (!rounds.length) return "";
+
+    // Newest round first: it is the one worth seeing, and it matches the order
+    // the hackathons page itself uses.
+    rounds = rounds.slice().sort(function (a, b) {
+      return (Number(b.round) || 0) - (Number(a.round) || 0);
+    });
+
+    return rounds.map(function (e) {
+      var slug = text(e.slug);
+      var name = text(e.name) || ("EduHackAI-" + text(e.round));
+      var n = Number(e.round);
+
+      // ⚠ THE LOGO IS DRAWN OVER THE NAME, NOT INSTEAD OF IT. Marks exist for
+      // rounds 1-5 today; round 6 will have a name before it has a picture.
+      // The text is the default and wireRoundLogos() hides it only once an
+      // image has actually decoded — so a missing mark degrades to a readable
+      // chip rather than to a broken-image icon. Same rule hackathons-ui.js
+      // uses, for the same reason.
+      var art = "";
+      if (isFinite(n) && n > 0) {
+        var base = "../assets/eduhack/round-" + encodeURIComponent(String(n));
+        art =
+          '<img class="cx-round-logo logo-img-dark" data-cx-logo="dark" alt="" aria-hidden="true" ' +
+            'width="300" height="80" loading="lazy" src="' + base + '-dark.png">' +
+          '<img class="cx-round-logo logo-img-light" data-cx-logo="light" alt="" aria-hidden="true" ' +
+            'width="300" height="80" loading="lazy" src="' + base + '-light.png">';
+      }
+
+      var inner =
+        '<span class="cx-chip-art">' + art +
+          '<span class="cx-chip-fallback">' + escapeHtml(name) + "</span>" +
+        "</span>" +
+        '<span class="cx-chip-tag">' + roundRole(e) + "</span>";
+
+      // A deep link to #<slug> opens that round on the hackathons page —
+      // openFromHash() there runs on load, not only on hashchange.
+      return slug
+        ? '<a class="cx-chip cx-chip-round" href="../hackathons.html#' + encodeURIComponent(slug) +
+            '" title="' + escapeHtml(name) + '">' + inner + "</a>"
+        : '<span class="cx-chip cx-chip-round is-flat" title="' + escapeHtml(name) + '">' +
+            inner + "</span>";
+    }).join("");
+  }
+
+  // ⚠ Published events only. An unpublished event is a draft; naming somebody
+  // as its speaker on their public profile would announce a session the club
+  // has not announced.
+  function sessionChips(sessions) {
     var rows = (sessions || []).filter(Boolean);
     if (!rows.length) return "";
 
     var today = new Date().toISOString().slice(0, 10);
-    var upcoming = rows.filter(function (s) { return s.event_date >= today; })
-                       .sort(function (a, b) { return a.event_date < b.event_date ? -1 : 1; });
-    var past = rows.filter(function (s) { return s.event_date < today; })
-                   .sort(function (a, b) { return a.event_date > b.event_date ? -1 : 1; });
+    // Upcoming first and soonest first — the bookable one is the one with an
+    // action attached. Past sessions follow, newest first.
+    rows = rows.slice().sort(function (a, b) {
+      var au = a.event_date >= today, bu = b.event_date >= today;
+      if (au !== bu) return au ? -1 : 1;
+      if (au) return a.event_date < b.event_date ? -1 : 1;
+      return a.event_date > b.event_date ? -1 : 1;
+    });
 
-    function line(s, isUpcoming) {
-      // The action is named, not implied. "Book a place" and "Watch the
-      // recording" are different promises and only one of them is available.
-      var action = isUpcoming
-        ? '<span class="cx-session-do">Book a place &rarr;</span>'
-        : (s.recording_url
-            ? '<span class="cx-session-do">Watch the recording &rarr;</span>'
-            : '<span class="cx-session-do is-none">No recording</span>');
-      return '<a class="cx-session" href="../event.html?e=' + encodeURIComponent(s.slug) + '">' +
-        '<span class="cx-session-when">' + escapeHtml(niceDate(s.event_date)) + "</span>" +
-        '<span class="cx-session-title" dir="auto">' + escapeHtml(s.title) + "</span>" +
-        action +
-        "</a>";
-    }
+    return rows.map(function (s) {
+      var upcoming = s.event_date >= today;
+      // The promise is named, not implied. "Book a place" and "Watch the
+      // recording" are different things and only one of them is on offer.
+      var icon = upcoming ? ICON_CAL : (s.recording_url ? ICON_PLAY : ICON_MUTE);
+      var tag = upcoming ? "Book a place" : (s.recording_url ? "Recording" : "No recording");
+      return '<a class="cx-chip cx-chip-session' + (upcoming ? " is-upcoming" : "") +
+          '" href="../event.html?e=' + encodeURIComponent(s.slug) + '" ' +
+          'title="' + escapeHtml(s.title) + '">' +
+        icon +
+        '<span class="cx-chip-body">' +
+          '<span class="cx-chip-title" dir="auto">' + escapeHtml(s.title) + "</span>" +
+          '<span class="cx-chip-when">' + escapeHtml(niceDate(s.event_date)) + "</span>" +
+        "</span>" +
+        '<span class="cx-chip-tag">' + tag + "</span>" +
+      "</a>";
+    }).join("");
+  }
 
-    return '<section class="cx-block">' +
-      "<h2>Sessions</h2>" +
-      (upcoming.length
-        ? '<p class="cx-session-head">Speaking next</p><div class="cx-sessions">' +
-            upcoming.map(function (s) { return line(s, true); }).join("") + "</div>"
+  function activitiesHtml(entries, sessions) {
+    var rounds = roundChips(entries);
+    var events = sessionChips(sessions);
+    if (!rounds && !events) return "";
+    return '<section class="cx-block cx-activity">' +
+      "<h2>Activities</h2>" +
+      (rounds
+        ? '<p class="cx-activity-head">EduHackAI</p>' +
+          '<div class="cx-chips cx-chips-round">' + rounds + "</div>"
         : "") +
-      (past.length
-        ? '<p class="cx-session-head">Delivered</p><div class="cx-sessions">' +
-            past.map(function (s) { return line(s, false); }).join("") + "</div>"
+      (events
+        ? '<p class="cx-activity-head">Sessions delivered and upcoming</p>' +
+          '<div class="cx-chips">' + events + "</div>"
         : "") +
       "</section>";
+  }
+
+  // Reveal a round mark only once it has actually decoded, and never
+  // otherwise. There is deliberately no error handler: "did not load" is
+  // already the fallback, and handling the error would only be a way to
+  // re-introduce a state where something has to be un-drawn.
+  function wireRoundLogos(root) {
+    var scope = root || document;
+    if (!scope.querySelectorAll) return;
+    Array.prototype.forEach.call(scope.querySelectorAll("img[data-cx-logo]"), function (img) {
+      var box = img.parentNode;
+      if (!box) return;
+      function ready() {
+        // complete with naturalWidth 0 is a 404, not a decode.
+        if (!img.naturalWidth) return;
+        box.classList.add("has-art");
+      }
+      if (img.complete) ready();
+      else img.addEventListener("load", ready);
+    });
   }
 
   // Short, readable, and the same shape the rest of this page uses.
@@ -793,9 +911,9 @@
         "what they keep coming back for shows up here on its own.</p></div></div>";
     }
 
-    // Sessions sit above skills and interests: what somebody has actually
+    // Activities sit above skills and interests: what somebody has actually
     // stood up and delivered says more than a list of tags they picked.
-    html += sessionsHtml(LAST_SESSIONS);
+    html += activitiesHtml(member.hackathons, LAST_SESSIONS);
 
     if ((member.skills || []).length) {
       html += '<div class="cx-section"><p class="cx-section-title">Skills</p>' +
@@ -823,6 +941,7 @@
     if (btn) wireFollow(btn, member.user_id);
 
     wireAvatarZoom(member);
+    wireRoundLogos(root);
   }
 
   // ---- The photo, larger --------------------------------------------------
@@ -1038,7 +1157,7 @@
     render(memberRes.data, activityRes.data || null, await placingsFor(memberRes.data));
   })();
 </script>
-<script src="../script.js?v=4bf9f935fb"></script>
-<script defer src="../lib/back-to-top.js?v=4bf9f935fb"></script>
+<script src="../script.js?v=15ea1b3425"></script>
+<script defer src="../lib/back-to-top.js?v=15ea1b3425"></script>
 </body>
 </html>

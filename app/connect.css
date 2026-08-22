@@ -1179,26 +1179,60 @@ html.light-mode .cx-badge.is-founder { color: #5b21b6; }
    Sessions on a profile, speakers on an event  (0080)
    ============================================================ */
 
-.cx-session-head {
+.cx-activity-head {
   font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
   color: var(--text-muted); margin: 14px 0 8px;
 }
-.cx-sessions { display: flex; flex-direction: column; gap: 8px; }
-.cx-session {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 12px; align-items: center;
-  padding: 11px 13px; border-radius: 11px; text-decoration: none;
+.cx-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+/* ⚠ minmax(0, …) not auto. A long event title has a min-content width of its
+   longest word, and an `auto` track floors at that — which is what stretched
+   the calendar and the inbox before it. The title is what must shrink here. */
+.cx-chips-round { gap: 10px; }
+
+.cx-chip {
+  display: inline-grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px; align-items: center;
+  padding: 9px 12px; border-radius: 11px; text-decoration: none;
   border: 1px solid var(--glass-border); background: var(--glass); color: inherit;
+  max-width: 100%;
 }
-.cx-session:hover { border-color: var(--cyan); }
-.cx-session-when { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; }
-.cx-session-title { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
-.cx-session-do { font-size: 12.5px; color: var(--cyan); white-space: nowrap; }
-.cx-session-do.is-none { color: var(--text-muted); }
+a.cx-chip:hover { border-color: var(--cyan); }
+a.cx-chip:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+/* A round with no page to open is not dressed as a link. */
+.cx-chip.is-flat { cursor: default; opacity: .78; }
+
+.cx-chip-ico { width: 19px; height: 19px; color: var(--cyan); flex: none; }
+.cx-chip-session.is-upcoming .cx-chip-ico { color: #7dd3a0; }
+.cx-chip-body { display: grid; gap: 1px; min-width: 0; }
+.cx-chip-title {
+  font-size: 13.5px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cx-chip-when { font-size: 11.5px; color: var(--text-muted); }
+.cx-chip-tag { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+.cx-chip-session.is-upcoming .cx-chip-tag { color: #7dd3a0; }
+
+/* ---- Round chips -------------------------------------------------------
+   Two columns, not three: the mark IS the label, so there is no separate
+   title to sit beside it. */
+.cx-chip-round { grid-template-columns: minmax(0, 1fr); gap: 5px; text-align: center; }
+.cx-chip-art { position: relative; display: block; min-height: 26px; }
+.cx-round-logo { display: block; width: auto; height: 26px; max-width: 100%; margin: 0 auto; }
+/* ⚠ THE NAME IS THE DEFAULT AND THE PICTURE HIDES IT, never the other way
+   round. Marks exist for rounds 1-5; a round with no image must still read as
+   itself rather than as a broken-image icon. .has-art is added by
+   wireRoundLogos() only after an image reports a real naturalWidth, so a 404
+   leaves the text exactly where it was. */
+.cx-chip-art .cx-round-logo { display: none; }
+.cx-chip-art.has-art .cx-round-logo.logo-img-dark { display: block; }
+html.light-mode .cx-chip-art.has-art .cx-round-logo.logo-img-dark { display: none; }
+html.light-mode .cx-chip-art.has-art .cx-round-logo.logo-img-light { display: block; }
+.cx-chip-fallback { font-size: 13px; font-weight: 700; }
+.cx-chip-art.has-art .cx-chip-fallback { display: none; }
+
 @media (max-width: 560px) {
-  /* Three columns at 360px gives a title column of nothing. Stack instead. */
-  .cx-session { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-  .cx-session-do { justify-self: start; }
+  /* A chip per row reads better than two half-elided ones. */
+  .cx-chip-session { width: 100%; }
 }
 
 .evp-speaker-row { display: flex; flex-wrap: wrap; gap: 12px; }

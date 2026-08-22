@@ -82,6 +82,22 @@ if (rows) {
     ok("every recorded speaker has a name to be credited with");
   }
 
+  // ── 3b. a guest is never linkable ──────────────────────────────────────
+  // 0082 lets a speaker be a plain name with no account. Such a row has no
+  // profile to open, so a link on it would be a dead end — and the check is
+  // here rather than trusted to the view because `is_linkable` is a computed
+  // column that a later migration could widen without anyone noticing.
+  {
+    const bad = rows.filter((r) => !r.user_id && r.is_linkable);
+    if (bad.length) {
+      fail(`${bad.length} guest speaker(s) are marked linkable but have no profile:\n` +
+           bad.map((r) => `          event ${r.event_id} slot ${r.slot} — ${r.full_name}`).join("\n") +
+           `\n          The event page will link them to a profile that does not exist.`);
+    } else {
+      ok("guest speakers are named but never linked");
+    }
+  }
+
   // ── 4. nobody has more than three ──────────────────────────────────────
   // The unique (event_id, slot) constraint should make this impossible. It is
   // asserted anyway: constraints get dropped by later migrations, and the

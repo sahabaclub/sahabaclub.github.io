@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=4bf9f935fb">
+<link rel="stylesheet" href="admin.css?v=15ea1b3425">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -532,10 +532,10 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=4bf9f935fb";
-  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=4bf9f935fb";
+  import { supabase } from "../../lib/supabase-client.js?v=15ea1b3425";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=15ea1b3425";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js?v=4bf9f935fb";
+    from "../../lib/admin-guard.js?v=15ea1b3425";
 
   const user = await requireStaff("events");
   if (!user) throw new Error("not staff");
@@ -676,10 +676,16 @@
   function paintSpeakers() {
     const box = document.getElementById("f-speaker-chosen");
     if (!speakers.length) { box.innerHTML = ""; return; }
+    // A guest chip says so. Whoever fills this form needs to see at a glance
+    // which credits will link to a profile and which are just a name, because
+    // that is the difference between the two and it is invisible otherwise.
     box.innerHTML = speakers.map((s, i) =>
-      '<span class="ad-speaker-chip">' +
+      '<span class="ad-speaker-chip' + (s.user_id ? "" : " is-guest") + '">' +
         "<strong>" + escapeHtml(s.full_name) + "</strong>" +
-        (s.mailbox ? '<span class="ad-cell-dim"> ' + escapeHtml(s.mailbox) + "</span>" : "") +
+        (s.user_id
+          ? (s.mailbox ? '<span class="ad-cell-dim"> ' + escapeHtml(s.mailbox) + "</span>" : "")
+          : '<span class="ad-cell-dim"> guest' +
+            (s.guest_title ? " · " + escapeHtml(s.guest_title) : "") + "</span>") +
         '<button type="button" class="ad-speaker-x" data-drop="' + i + '" ' +
           'aria-label="Remove ' + escapeHtml(s.full_name) + '">&times;</button>' +
       "</span>"
@@ -714,8 +720,22 @@
       .filter(m => (m.full_name + " " + m.mailbox).toLowerCase().includes(q))
       .slice(0, 8);
 
+    // ⚠ THE GUEST OPTION IS ALWAYS OFFERED, not only when the search finds
+    // nobody. Two of the three people on the "Taming the Beast" poster are not
+    // members and never will be, and one of them shares a first name with
+    // somebody who is — so "no matches" is the wrong trigger. It sits BELOW
+    // the member hits, because a real member is the better answer whenever
+    // one exists.
+    const typed = speakerQ.value.trim();
+    const guestOption =
+      '<button type="button" class="ad-speaker-hit is-guest-add" data-guest="' +
+        escapeHtml(typed) + '">Add <strong>' + escapeHtml(typed) +
+        "</strong> as a guest speaker" +
+        '<span class="ad-cell-dim"> · named on the event, no profile to link to</span>' +
+      "</button>";
+
     box.hidden = false;
-    box.innerHTML = hits.length
+    box.innerHTML = (hits.length
       ? hits.map(m =>
           m.nameless
             ? '<span class="ad-speaker-hit is-blocked">' +
@@ -726,10 +746,22 @@
                 escapeHtml(m.full_name) +
                 (m.mailbox ? '<span class="ad-cell-dim"> · ' + escapeHtml(m.mailbox) + "</span>" : "") +
               "</button>").join("")
-      : '<p class="ad-note">Nobody matches that.</p>';
+      : '<p class="ad-note">No member matches that.</p>') + guestOption;
   });
 
   document.getElementById("f-speaker-results").addEventListener("click", function (ev) {
+    const guestBtn = ev.target.closest ? ev.target.closest("[data-guest]") : null;
+    if (guestBtn) {
+      const name = (guestBtn.getAttribute("data-guest") || "").trim();
+      // A blank guest name is rejected by 0082 anyway. Refusing it here means
+      // the person filling the form finds out now rather than on save.
+      if (!name || speakers.length >= MAX_SPEAKERS) return;
+      speakers.push({ user_id: null, full_name: name, mailbox: "", guest_title: "" });
+      paintSpeakers();
+      speakerQ.value = "";
+      document.getElementById("f-speaker-results").hidden = true;
+      return;
+    }
     const btn = ev.target.closest ? ev.target.closest("[data-pick]") : null;
     if (!btn) return;
     const id = btn.getAttribute("data-pick");
@@ -744,20 +776,30 @@
   async function loadSpeakersFor(eventId) {
     speakers = [];
     if (eventId) {
+      // ⚠ THE BASE TABLE, NOT event_speakers_public. The public view collapses
+      // a member's name and a guest's into one `full_name` column, which is
+      // right for a page that only wants to print it and wrong for an editor
+      // that has to write one of them back. Reading guest_name and guest_title
+      // raw is what keeps a round-trip through this form lossless — load,
+      // change nothing, save, and the row is identical.
       const { data } = await supabase
-        .from("event_speakers_public")
-        .select("user_id, slot, full_name")
+        .from("event_speakers")
+        .select("user_id, slot, guest_name, guest_title")
         .eq("event_id", eventId)
         .order("slot", { ascending: true });
       await loadMemberIndex();
       speakers = (data || []).map(r => {
+        if (!r.user_id) {
+          return { user_id: null, full_name: r.guest_name || "",
+                   mailbox: "", guest_title: r.guest_title || "" };
+        }
         const m = memberIndex.find(x => x.user_id === r.user_id);
         // Someone saved earlier can go nameless later, by clearing their own
         // profile. Say that here rather than printing a tidy "(member)" — the
         // public page drops them, and this panel is the only place anybody
         // would find out.
         return { user_id: r.user_id,
-                 full_name: r.full_name || (m && m.full_name) || "⚠ no name on their profile",
+                 full_name: (m && m.full_name) || "⚠ no name on their profile",
                  mailbox: (m && m.mailbox) || "" };
       });
     }
@@ -772,9 +814,18 @@
     const del = await supabase.from("event_speakers").delete().eq("event_id", eventId);
     if (del.error) return del.error;
     if (!speakers.length) return null;
-    const rows = speakers.slice(0, MAX_SPEAKERS).map((s, i) => ({
-      event_id: eventId, user_id: s.user_id, slot: i + 1,
-    }));
+    // ⚠ A ROW IS A MEMBER OR A GUEST, NEVER BOTH (0082 enforces it with a
+    // check constraint). Sending user_id: null alongside guest_name is the
+    // whole of the guest path — the columns are not both filled in "just in
+    // case", because the database would reject the row and it would be right
+    // to: two names that disagree, with only one of them ever displayed.
+    const rows = speakers.slice(0, MAX_SPEAKERS).map((s, i) => (
+      s.user_id
+        ? { event_id: eventId, user_id: s.user_id, slot: i + 1 }
+        : { event_id: eventId, slot: i + 1,
+            guest_name: s.full_name,
+            guest_title: s.guest_title || null }
+    ));
     const ins = await supabase.from("event_speakers").insert(rows);
     return ins.error || null;
   }
@@ -1882,6 +1933,6 @@
   // would otherwise see an empty list and save it as "no organizers".
   loadOrganizers().then(loadEvents);
 </script>
-<script defer src="../../lib/back-to-top.js?v=4bf9f935fb"></script>
+<script defer src="../../lib/back-to-top.js?v=15ea1b3425"></script>
 </body>
 </html>

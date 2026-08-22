@@ -295,6 +295,41 @@ section("record tile — coach and judge");
   const r = C.hackathonRecord([round(2, { is_mentor: true, is_judge: true })], null);
   eq(r.text, "Coached and judged EduHackAI-2", "one round, both roles, one phrase");
 }
+
+// ⚠ A ROUND WHOSE NAME ALREADY CARRIES ITS NUMBER. Round 4 is stored as
+// "EduHackAI-4 (Arabic Edition)", and roundFamily() only strips a number at
+// the END of a name — so the number was appended a second time and Ahmed's
+// own profile read "…(Arabic Edition)-4" for weeks. Both the single-round
+// wording and the multi-round list are pinned, because the list rebuilt the
+// label from family + number and reintroduced it independently.
+{
+  const arabic = round(4, { is_mentor: true, name: "EduHackAI-4 (Arabic Edition)" });
+  const r = C.hackathonRecord([arabic], null);
+  eq(r.text, "Coached EduHackAI-4 (Arabic Edition)",
+    "a round named for itself is not renumbered");
+  lacks(r.text, "Edition)-4", "⚠ no second round number appended");
+}
+{
+  const r = C.hackathonRecord([
+    round(1, { is_mentor: true }),
+    round(2, { is_mentor: true }),
+    round(3, { is_mentor: true }),
+    round(4, { is_mentor: true, name: "EduHackAI-4 (Arabic Edition)" }),
+  ], null);
+  lacks(r.text, "Edition)-4", "⚠ nor in the multi-round list");
+  has(r.text, "EduHackAI-4 (Arabic Edition)", "the Arabic edition keeps its full name");
+  has(r.text, "EduHackAI-1", "…and the plain rounds are still listed");
+}
+{
+  // The compact form must survive: it is what keeps the common case short.
+  const r = C.hackathonRecord([
+    round(1, { is_mentor: true }),
+    round(2, { is_mentor: true }),
+    round(4, { is_mentor: true }),
+  ], null);
+  eq(r.text, "Coached EduHackAI-1, 2, 4",
+    "rounds that share a family still compact to one prefix");
+}
 {
   const r = C.hackathonRecord([
     round(3, { is_mentor: true }),
