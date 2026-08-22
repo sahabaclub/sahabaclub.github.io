@@ -318,3 +318,9 @@ select:focus-visible, textarea:focus-visible {
 }
 .ad-gallery-x:hover { background: #b3261e; border-color: #b3261e; }
 .ad-gallery-x:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+/* Row markers for Hub membership and language (0079 / 22 Aug). Both carry a
+   word, not just a colour — the table is scanned quickly and a hue alone is
+   not something you can read in a glance down a column. */
+.ad-pill.hub { border-color: rgba(34, 211, 238, .5); color: #7dd3fc; background: rgba(34, 211, 238, .12); }
+.ad-pill.lang { border-color: rgba(74, 222, 128, .45); color: #86efac; background: rgba(74, 222, 128, .10); }

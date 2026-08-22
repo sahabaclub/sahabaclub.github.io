@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=daa960a3f6">
+<link rel="stylesheet" href="admin.css?v=2bee541930">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -37,6 +37,25 @@
           <option value="upcoming">Upcoming only</option>
           <option value="all">All dates</option>
           <option value="past">Past only</option>
+        </select>
+        <!-- ⚠ "Own events" means IN THE EVENTS HUB — organiser Sahaba Club or
+             a partner — not "created by an admin". It is the same rule the
+             public Hub uses, so this filter answers "what does the Hub
+             actually contain right now", which is the question somebody asks
+             just before adding a past event to it.
+
+             "Not in the Hub" is the other half and is the more useful one for
+             that job: it lists everything that is NOT there yet. -->
+        <select class="ad-search" id="ad-hub" style="min-width:auto;">
+          <option value="">Hub &amp; others</option>
+          <option value="in">Own events (in the Hub)</option>
+          <option value="out">Not in the Hub</option>
+        </select>
+        <select class="ad-search" id="ad-lang" style="min-width:auto;">
+          <option value="">Any language</option>
+          <option value="English">English</option>
+          <option value="Arabic">Arabic — عربي</option>
+          <option value="none">Language not set</option>
         </select>
         <div class="ad-spacer"></div>
         <span class="ad-cell-dim" id="ad-count"></span>
@@ -349,9 +368,13 @@
       <div class="ad-field">
         <label for="f-organizers">Organizers</label>
         <select id="f-organizers" multiple size="6"></select>
-        <span class="ad-hint">Who ran it — hold Ctrl (or Cmd) to pick several. An event is
-          <strong>ours</strong>, and appears in the Sahaba Club Events Hub, when Sahaba Club is one
-          of them. The first non-Sahaba organizer leads the card.</span>
+        <span class="ad-hint">Who ran it — hold Ctrl (or Cmd) to pick several.
+          <strong>This is what puts an event in the Events Hub</strong>: pick Sahaba Club, or any
+          organizer marked as a partner, and it appears there. There is no separate Hub switch.
+          <strong>Past events work exactly the same</strong> — assign the organizer and it shows
+          under the Hub's Past tab, gallery and all. To find candidates, set the list filters above
+          to <em>Past only</em> + <em>Not in the Hub</em>. The first non-Sahaba organizer leads the
+          card.</span>
 
         <!-- Adding an organizer without leaving the event form. Before this,
              meeting a new organiser meant abandoning a half-filled event, going
@@ -485,10 +508,10 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=daa960a3f6";
-  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=daa960a3f6";
+  import { supabase } from "../../lib/supabase-client.js?v=2bee541930";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=2bee541930";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js?v=daa960a3f6";
+    from "../../lib/admin-guard.js?v=2bee541930";
 
   const user = await requireStaff("events");
   if (!user) throw new Error("not staff");
@@ -1004,6 +1027,41 @@
     return true;
   }
 
+  // ============================================================
+  // Which events are in the Events Hub
+  // ============================================================
+  //
+  // ⚠ THE HUB IS NOT A FLAG ON AN EVENT. An event appears in the Events Hub
+  // because one of its ORGANISERS is Sahaba Club or a partner — the same rule
+  // events-hub.html and event.html apply. That is why "add this past event to
+  // the Hub" is done by assigning the organiser, and why there is no checkbox
+  // to hunt for. The field note on Organizers says so on screen.
+  //
+  // Loaded once alongside the events so the list can filter on it. A failure
+  // here empties the set rather than throwing: the Own-events filter then
+  // matches nothing, which is visible and recoverable, where a thrown error
+  // would take the whole events list down with it.
+  let hubEventIds = new Set();
+
+  async function loadHubMembership() {
+    const [linkRes, orgRes] = await Promise.all([
+      supabase.from("event_organizers").select("event_id, organizer_id"),
+      supabase.from("organizers").select("id, slug, is_partner"),
+    ]);
+    if (linkRes.error || orgRes.error) { hubEventIds = new Set(); return; }
+
+    const hubOrgs = new Set(
+      (orgRes.data || [])
+        .filter(o => o.slug === "sahaba-club" || o.is_partner)
+        .map(o => o.id)
+    );
+    hubEventIds = new Set(
+      (linkRes.data || [])
+        .filter(l => hubOrgs.has(l.organizer_id))
+        .map(l => l.event_id)
+    );
+  }
+
   async function loadEvents() {
     const { data, error } = await supabase
       .from("events")
@@ -1015,6 +1073,10 @@
       return;
     }
     allEvents = data || [];
+    // ⚠ Awaited BEFORE render, not alongside it. Rendering first would paint
+    // every row as "not in the Hub" and then silently correct itself, which
+    // reads as the filter being broken for the first second.
+    await loadHubMembership();
     render();
   }
 
@@ -1023,9 +1085,22 @@
     const when = document.getElementById("ad-when").value;
     const today = new Date().toISOString().slice(0, 10);
 
+    const hub = document.getElementById("ad-hub").value;
+    const lang = document.getElementById("ad-lang").value;
+
     const rows = allEvents.filter(e => {
       if (when === "upcoming" && e.event_date < today) return false;
       if (when === "past" && e.event_date >= today) return false;
+
+      if (hub === "in" && !hubEventIds.has(e.id)) return false;
+      if (hub === "out" && hubEventIds.has(e.id)) return false;
+
+      // ⚠ "none" is a real choice, not an absence of one. 110 imported events
+      // have no language recorded, and finding them is the whole job of
+      // filling the gap in — an "Any language" default would bury them.
+      if (lang === "none" && e.language) return false;
+      if (lang && lang !== "none" && e.language !== lang) return false;
+
       if (!q) return true;
       return [e.title, e.location, e.country].filter(Boolean)
         .join(" ").toLowerCase().includes(q);
@@ -1052,7 +1127,14 @@
 
     body.innerHTML = rows.map(e =>
       "<tr>" +
+        // ⚠ Hub membership and language shown ON THE ROW, not just filtered on.
+        // A filter tells you what you asked for; a marker tells you what you
+        // are looking at — and the job here is usually "which of these past
+        // events are missing from the Hub", which needs both.
         '<td class="ad-cell-strong">' + escapeHtml(e.title) +
+          (hubEventIds.has(e.id) ? ' <span class="ad-pill hub">Hub</span>' : "") +
+          (e.language ? ' <span class="ad-pill lang">' +
+            escapeHtml(e.language === "Arabic" ? "عربي" : e.language) + "</span>" : "") +
           (e.tags && e.tags.length
             ? '<div class="ad-cell-dim">' + escapeHtml(e.tags.join(" · ")) + "</div>" : "") +
         "</td>" +
@@ -1439,6 +1521,8 @@
   document.getElementById("f-cancel").addEventListener("click", closeEditor);
   document.getElementById("ad-q").addEventListener("input", render);
   document.getElementById("ad-when").addEventListener("change", render);
+  document.getElementById("ad-hub").addEventListener("change", render);
+  document.getElementById("ad-lang").addEventListener("change", render);
   modal.addEventListener("click", (ev) => { if (ev.target === modal) closeEditor(); });
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "Escape" && !modal.classList.contains("ad-hidden")) closeEditor();
@@ -1600,6 +1684,6 @@
   // would otherwise see an empty list and save it as "no organizers".
   loadOrganizers().then(loadEvents);
 </script>
-<script defer src="../../lib/back-to-top.js?v=daa960a3f6"></script>
+<script defer src="../../lib/back-to-top.js?v=2bee541930"></script>
 </body>
 </html>
