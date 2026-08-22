@@ -109,5 +109,35 @@ if (rows) {
   }
 }
 
+// ── 6. the same person is not named twice on one page ────────────────────
+// `presenter` is free text that predates the speakers table. Where it names
+// somebody who is now credited as a speaker, the flat text row is dropped in
+// favour of the card — and the drop depends on LAST_SPEAKERS already being
+// populated when render() runs. Both halves are asserted: the suppression
+// itself, and the ordering that makes it work. The gallery panel shipped
+// broken in exactly this way on 22 Aug — a gate that read state a `.then()`
+// had not filled in yet.
+{
+  const src = readFileSync(join(ROOT, "event.html"), "utf8");
+  if (!/presenterIsCredited/.test(src)) {
+    fail(`event.html no longer suppresses a Presenter row that duplicates a speaker.\n          The same person appears twice on the page, once linked and once not, and reads as two people.`);
+  } else {
+    // ⚠ NOT indexOf("LAST_SPEAKERS = ") — that matches the `var LAST_SPEAKERS
+    // = []` declaration at the top of the file, which every render call comes
+    // after, so the comparison below could never fail. It was written that way
+    // first and passed a deliberate sabotage. Anchor on the assignment from
+    // the fetch result instead.
+    const assigned = src.indexOf("LAST_SPEAKERS = spkRes");
+    const renders = [...src.matchAll(/(?<!function )\brender\(event\b/g)].map((m) => m.index);
+    if (assigned === -1 || !renders.length) {
+      fail(`could not locate the LAST_SPEAKERS assignment or the render(event…) call in event.html.\n          The ordering below cannot be checked, so treat the suppression as UNVERIFIED.`);
+    } else if (renders.some((i) => i < assigned)) {
+      fail(`event.html renders the event before LAST_SPEAKERS is assigned.\n          The Presenter row will duplicate the speaker card on first paint.`);
+    } else {
+      ok("a presenter who is also a credited speaker is named once, after speakers load");
+    }
+  }
+}
+
 console.log(failed ? `\n  ${failed} problem(s).` : "\n  speakers: clean.");
 process.exit(failed ? 1 : 0);

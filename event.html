@@ -779,10 +779,26 @@
       where += ' &middot; <a href="' + esc(e.maps_link) + '" target="_blank" rel="noopener">Find it</a>';
     }
 
+    // ⚠ THE PRESENTER ROW IS DROPPED WHEN A CREDITED SPEAKER HAS THE SAME
+    // NAME. `presenter` is free text and predates the speakers table, so an
+    // event whose presenter is a member now says the name twice — once as flat
+    // text here, once as a card below with their picture, headline and a link
+    // to their profile. The card is strictly the better of the two, and a
+    // reader seeing one name in two places assumes they are two people.
+    //
+    // Compared on the name, not on the id, because that is all `presenter`
+    // has. Anyone NOT credited as a speaker still shows here: most presenters
+    // are guests who are not members and never will be.
+    var creditedNames = (LAST_SPEAKERS || [])
+      .map(function (s) { return String(s.full_name || "").trim().toLowerCase(); })
+      .filter(Boolean);
+    var presenterIsCredited = e.presenter &&
+      creditedNames.indexOf(String(e.presenter).trim().toLowerCase()) !== -1;
+
     var facts =
       factRow("When", when) +
       factRow("Where", where) +
-      factRow("Presenter", e.presenter ? esc(e.presenter) : "") +
+      factRow("Presenter", (e.presenter && !presenterIsCredited) ? esc(e.presenter) : "") +
       factRow("Length", durationText(e.duration_minutes) ? esc(durationText(e.duration_minutes)) : "");
 
     // The action changes with time. A past event's "Register" button is a lie;
