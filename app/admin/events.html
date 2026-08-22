@@ -245,6 +245,26 @@
         </div>
       </div>
 
+      <!-- ⚠ THIS FIELD DID NOT EXIST UNTIL 22 AUG, and `recording_url` has been
+           on the events table and rendered on the public page the whole time.
+           Every recording on the site was set by an import or by SQL, so staff
+           could see a Recording section on an event page with no way to change
+           the link behind it — which is how "where is the video link for this
+           event?" got asked about an event that already had one.
+
+           This is the MAIN session recording, one per event, and it is a
+           different thing from the gallery videos below: that section is up to
+           five extra clips on a past Hub event, this is the recording of the
+           event itself and applies to any event. -->
+      <div class="ad-field">
+        <label for="f-recording">Recording <span class="ad-hint">the main session video</span></label>
+        <input type="url" id="f-recording" placeholder="https://youtu.be/… or any video URL">
+        <p class="ad-note">Shown as the <strong>Recording</strong> section on the event page once
+          the event is past. A YouTube link plays in place; anything else becomes a
+          "Watch the recording" button. Different from the gallery videos below — this is the
+          session itself.</p>
+      </div>
+
       <!-- ============================================================
            From the day — gallery (0078)
            ============================================================
@@ -477,6 +497,7 @@
     tags: document.getElementById("f-tags"),
     register: document.getElementById("f-register"),
     live: document.getElementById("f-live"),
+    recording: document.getElementById("f-recording"),
     maps: document.getElementById("f-maps"),
     image: document.getElementById("f-image"),
     brand: document.getElementById("f-brand"),
@@ -1067,6 +1088,7 @@
     F.tags.value = e && e.tags ? e.tags.join(", ") : "";
     F.register.value = e ? (e.register_link || "") : "";
     F.live.value = e ? (e.live_link || "") : "";
+    F.recording.value = e ? (e.recording_url || "") : "";
     // 0078 gallery. Both are arrays; the five video inputs are filled by
     // position and the photo list is replaced wholesale, so opening a
     // different event can never leave the previous one's pictures behind.
@@ -1110,6 +1132,16 @@
       loadEventOrganizers(e.id).then(links => {
         const picked = new Set(links.map(l => l.organizer_id));
         Array.from(F.organizers.options).forEach(o => { o.selected = picked.has(o.value); });
+        // ⚠ THE GALLERY GATE HAS TO BE RE-RUN HERE, and this is the whole
+        // reason it exists twice. The organisers arrive in this .then(), long
+        // after fillForm ran — so the earlier call saw NO organiser selected,
+        // decided the event was not a Hub event, and hid the panel on every
+        // existing event. Setting .selected from JavaScript does not fire a
+        // change event either, so the listener could not rescue it.
+        //
+        // Reported as "where is the video link for this event?" about an event
+        // that was past, run by Sahaba Club, and should have shown the panel.
+        refreshGalleryPanel();
       });
     }
 
@@ -1365,6 +1397,7 @@
     F.tags.value = (d.tags || []).join(", ");
     F.register.value = d.register_link || "";
     F.live.value = d.live_link || "";
+    F.recording.value = d.recording_url || "";
     // An AI draft never carries a gallery — clear rather than inherit the
     // pictures of whatever was open before.
     F.vids.forEach(function (input) { input.value = ""; });
@@ -1453,6 +1486,9 @@
       // This value becomes an href on a page we serve, so the form is the
       // convenience and the constraint is the guarantee.
       live_link: F.live.value.trim() || null,
+      // The main session recording. Empty means "no recording", which is
+      // what the public page checks — so it must be null, not an empty string.
+      recording_url: F.recording.value.trim() || null,
       // An online event has no venue to navigate to, so drop any stale map link
       // rather than leaving a Find Location button that makes no sense.
       maps_link: F.mode.value === "Online" ? null : (F.maps.value.trim() || null),
