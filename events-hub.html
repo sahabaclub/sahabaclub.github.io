@@ -31,7 +31,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=90970f2d1d">
+<link rel="stylesheet" href="styles.css?v=daa960a3f6">
 <style>
   .hub-wrap { max-width: 1080px; margin: 0 auto; padding: 44px 20px 96px; }
   .hub-hero { text-align: center; margin-bottom: 30px; }
@@ -57,6 +57,18 @@
     border: 1px solid var(--glass-border);
   }
   .hub-card:hover { border-color: var(--cyan); }
+  /* The stretched hit area: the title's <a> is pulled out over the whole card
+     so a tap anywhere opens the event, while the link's accessible name stays
+     just the title. `position: relative` on the card is what it anchors to. */
+  .hub-card { position: relative; }
+  .hub-title a::after { content: ""; position: absolute; inset: 0; }
+  /* Anything that must stay separately clickable has to sit above that layer.
+     Nothing does today; this is here so the next person adding a button to a
+     card finds out why it does nothing before shipping it. */
+  .hub-card .hub-badges, .hub-card .hub-orgs { position: relative; z-index: 1; }
+  .hub-back { max-width: 1080px; margin: 0 auto 6px; }
+  .hub-back a { color: var(--text-secondary); text-decoration: none; font-size: 14px; }
+  .hub-back a:hover { color: var(--cyan); }
   .hub-art { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; background: rgba(255,255,255,.03); }
   .hub-art-fallback {
     width: 100%; aspect-ratio: 1 / 1; display: flex; align-items: center;
@@ -160,7 +172,7 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=90970f2d1d"></script>
+<script src="header-identity.js?v=daa960a3f6"></script>
 
 <!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
@@ -208,6 +220,12 @@
 </nav>
 
 <main class="hub-wrap">
+  <!-- ⚠ A way back. The Hub is a filtered slice — Sahaba Club events and our
+       partners' — and until now the only route to the full calendar was the
+       nav, which on a phone is behind the hamburger. Somebody who arrives here
+       from a shared link had no visible way to reach everything else. -->
+  <p class="hub-back"><a href="events.html">&larr; All events</a></p>
+
   <div class="hub-hero">
     <p class="kicker center">Sahaba Club</p>
     <h1 class="glow-text">Events Hub</h1>
@@ -262,7 +280,7 @@
 </footer>
 
 <script type="module">
-  import { supabase } from "./lib/supabase-client.js?v=90970f2d1d";
+  import { supabase } from "./lib/supabase-client.js?v=daa960a3f6";
 
   // ⚠ `var` throughout and every binding declared before the first executing
   // statement — there is a top-level await below.
@@ -300,6 +318,15 @@
     // badge rather than something you only discover after clicking through.
     if (e.recording_url) badges.push('<span class="hub-badge is-rec">Recording</span>');
 
+    // ⚠ THE WHOLE CARD OPENS THE EVENT, not just the words in the title.
+    // The picture is the biggest thing on it and the obvious thing to tap on a
+    // phone, and it did nothing — the only live target was one line of text.
+    //
+    // Done with a stretched pseudo-element over the card rather than by
+    // wrapping everything in one <a>: the title stays the accessible name of
+    // the link, so a screen reader announces "Azure Migration Best Practices"
+    // instead of the date, the title, the organisers and every badge run
+    // together. See .hub-card / .hub-title a::after in the styles above.
     return '<article class="hub-card">' + art +
       '<div class="hub-card-body">' +
         '<p class="hub-when">' + esc(longDate(e.event_date)) + "</p>" +
@@ -429,8 +456,8 @@
   }
 </script>
 
-<script src="analytics.js?v=90970f2d1d"></script>
-<script src="script.js?v=90970f2d1d"></script>
-<script defer src="lib/back-to-top.js?v=90970f2d1d"></script>
+<script src="analytics.js?v=daa960a3f6"></script>
+<script src="script.js?v=daa960a3f6"></script>
+<script defer src="lib/back-to-top.js?v=daa960a3f6"></script>
 </body>
 </html>

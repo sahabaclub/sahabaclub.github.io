@@ -281,3 +281,40 @@ select:focus-visible, textarea:focus-visible {
 .ad-source-card:hover { border-color: var(--ad-violet); }
 .ad-source-card strong { font-size: 14.5px; }
 .ad-source-card span { font-size: 12.5px; color: var(--ad-text-3); line-height: 1.5; }
+
+/* ============================================================
+   Event gallery (0078)
+   ============================================================ */
+
+.ad-gallery {
+  margin: 18px 0 4px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 211, 238, .28);
+  background: rgba(34, 211, 238, .05);
+}
+.ad-sub { margin: 0 0 6px; font-size: 15px; font-weight: 700; }
+.ad-gallery input[type="url"] + input[type="url"] { margin-top: 6px; }
+.ad-status { font-size: 12.5px; color: var(--text-secondary); margin: 6px 0 0; min-height: 1em; }
+
+.ad-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.ad-gallery-thumb { position: relative; display: block; aspect-ratio: 1 / 1; }
+.ad-gallery-thumb img {
+  width: 100%; height: 100%; object-fit: cover;
+  border-radius: 8px; border: 1px solid var(--glass-border); display: block;
+}
+/* ⚠ The X is a real button with an aria-label, not a decorative glyph on the
+   thumbnail — removing a photograph must be reachable by keyboard. */
+.ad-gallery-x {
+  position: absolute; top: -6px; right: -6px;
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1px solid var(--glass-border); background: #0b0f18; color: #e7ecf5;
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 0;
+}
+.ad-gallery-x:hover { background: #b3261e; border-color: #b3261e; }
+.ad-gallery-x:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }

@@ -31,7 +31,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=90970f2d1d">
+<link rel="stylesheet" href="styles.css?v=daa960a3f6">
 <script>
   // Apply saved theme before first paint so the page never flashes dark.
   try {
@@ -181,7 +181,7 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=90970f2d1d"></script>
+<script src="header-identity.js?v=daa960a3f6"></script>
 
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
 <nav class="mobile-menu" id="mobile-menu" aria-label="Menu" hidden>
@@ -372,11 +372,11 @@
   // Its three states mirror the nav links: before Supabase exists it
   // points at the homepage join form that already works today; after,
   // it points at real signup; once you're a member it stops selling.
-  import("./lib/supabase-client.js?v=90970f2d1d").then(function (client) {
+  import("./lib/supabase-client.js?v=daa960a3f6").then(function (client) {
     var ctaStandard = document.getElementById("cta-standard");
     if (!client.isConfigured) return null;
     ctaStandard.href = "login.html";
-    return import("./lib/tier-gate.js?v=90970f2d1d").then(function (mod) {
+    return import("./lib/tier-gate.js?v=daa960a3f6").then(function (mod) {
       return mod.getAccessLevel();
     });
   }).then(function (level) {
@@ -407,8 +407,8 @@
 <!-- Analytics, page views only, and only after the visitor says yes. PUBLIC PAGES ONLY:
      never add this under app/ — those pages are behind a login and their URLs and
      titles describe real named members. The reasoning is in analytics.js. -->
-<script src="analytics.js?v=90970f2d1d"></script>
-<script src="script.js?v=90970f2d1d"></script>
-<script defer src="lib/back-to-top.js?v=90970f2d1d"></script>
+<script src="analytics.js?v=daa960a3f6"></script>
+<script src="script.js?v=daa960a3f6"></script>
+<script defer src="lib/back-to-top.js?v=daa960a3f6"></script>
 </body>
 </html>

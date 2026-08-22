@@ -48,7 +48,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=90970f2d1d">
+<link rel="stylesheet" href="styles.css?v=daa960a3f6">
 <style>
   .evp-wrap { max-width: 1000px; margin: 0 auto; padding: 40px 20px 96px; }
   .evp-back { display: inline-block; font-size: 14px; color: var(--text-secondary); margin-bottom: 18px; }
@@ -204,6 +204,50 @@
   .evp-rec-note { font-size: 13px; color: var(--text-muted); margin: 10px 0 0; }
   .evp-rec-note a { color: var(--cyan); }
 
+  /* ---- Gallery on past Hub events (0078) ---- */
+  .evp-gallery { max-width: 900px; }
+  .evp-gal-videos { display: grid; gap: 14px; margin-bottom: 18px; }
+  @media (min-width: 720px) {
+    /* Two across on a wide screen; one on a phone, where a half-width video is
+       too small to read anything in. */
+    .evp-gal-videos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  .evp-gal-video {
+    aspect-ratio: 16 / 9;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--glass-border);
+    background: #000;
+  }
+  .evp-gal-video iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .evp-gal-fallback { margin: 0; font-size: 14px; }
+  .evp-gal-fallback a { color: var(--cyan); }
+
+  /* ⚠ minmax(0, 1fr), not 1fr — the same trap that widened the calendar and
+     the inbox. auto-fill with a bare 1fr lets a wide image set the track. */
+  .evp-gal-photos {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+  }
+  .evp-gal-photo {
+    display: block;
+    aspect-ratio: 1 / 1;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, .03);
+  }
+  .evp-gal-photo img {
+    width: 100%; height: 100%; object-fit: cover; display: block;
+    transition: transform .18s ease;
+  }
+  .evp-gal-photo:hover img { transform: scale(1.04); }
+  .evp-gal-photo:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    .evp-gal-photo img, .evp-gal-photo:hover img { transition: none; transform: none; }
+  }
+
   .evp-state { padding: 60px 0; text-align: center; color: var(--text-secondary); }
 
   @media (max-width: 760px) {
@@ -269,7 +313,7 @@
 
 <!-- Runs synchronously, before first paint, so a signed-in member never sees
      the Join CTA flash before their avatar. See the file for why not a module. -->
-<script src="header-identity.js?v=90970f2d1d"></script>
+<script src="header-identity.js?v=daa960a3f6"></script>
 
 <!-- Mobile navigation drawer. Hidden above 820px, where the full nav shows. -->
 <div class="mobile-menu-backdrop" id="mobile-menu-backdrop" hidden></div>
@@ -352,11 +396,11 @@
 </footer>
 
 <script type="module">
-  import { supabase } from "./lib/supabase-client.js?v=90970f2d1d";
-  import { relatedEvents } from "./lib/event-related.js?v=90970f2d1d";
+  import { supabase } from "./lib/supabase-client.js?v=daa960a3f6";
+  import { relatedEvents } from "./lib/event-related.js?v=daa960a3f6";
   // ⚠ A static import, not a `const` — imports are hoisted, so this one is
   // exempt from the dead-zone trap described immediately below.
-  import { createRegisterPrompt, rememberPending } from "./lib/register-prompt.js?v=90970f2d1d";
+  import { createRegisterPrompt, rememberPending } from "./lib/register-prompt.js?v=daa960a3f6";
 
   // ⚠ `var` throughout, and every binding declared before the first executing
   // statement. There is a top-level await below, and a `const` after it would
@@ -380,7 +424,12 @@
   var COLUMNS =
     "id, slug, title, description, event_date, starts_at, time_label, duration_minutes, " +
     "mode, country, location, price_label, tags, register_link, maps_link, image_url, " +
-    "brand, tier_required, is_published, presenter, recording_url, live_link";
+    "brand, tier_required, is_published, presenter, recording_url, live_link, " +
+    // 0078. Only rendered on a PAST event that belongs to the Events Hub —
+    // see galleryHtml(). Fetched unconditionally because the page has one
+    // query for the event and branching it on a rule computed after the
+    // organisers land would mean two round trips to save two array columns.
+    "gallery_videos, gallery_photos";
 
   var MONTHS = ["January","February","March","April","May","June",
                 "July","August","September","October","November","December"];
@@ -578,10 +627,69 @@
     });
   }
 
+  // ---- The gallery, on past Hub events -----------------------------------
+  //
+  // Ahmed, 22 Aug: up to 5 videos and 20 photographs on a past Sahaba Club Hub
+  // event. Videos are on YouTube; photographs are uploaded to the site.
+  //
+  // ⚠ THREE CONDITIONS, ALL REQUIRED. Past, Hub, and something to show.
+  //   * PAST — a gallery on an event that has not happened is a promise of
+  //     photographs that do not exist.
+  //   * HUB — organiser sahaba-club or a partner, the same rule
+  //     events-hub.html uses to decide what the Hub contains. The columns are
+  //     not restricted to Hub events in the database (0078 explains why a
+  //     CHECK cannot express it), so this is where the rule actually lives.
+  //   * NON-EMPTY — no empty "Gallery" heading over nothing.
+  //
+  // ⚠ The photographs are NOT lazy on the first row and ARE on the rest. The
+  // first two are usually in view on a phone; the other eighteen are not, and
+  // twenty full-size images fetched at once on mobile data is the reason a cap
+  // exists at all.
+  function galleryHtml(e, isPast, isHub) {
+    if (!isPast || !isHub) return "";
+
+    var videos = (e.gallery_videos || []).filter(Boolean).slice(0, 5);
+    var photos = (e.gallery_photos || []).filter(Boolean).slice(0, 20);
+    if (!videos.length && !photos.length) return "";
+
+    var vid = videos.map(function (url) {
+      var id = youtubeId(url);
+      // A stored URL that yields no id cannot be embedded; link it rather than
+      // rendering an iframe that will show YouTube's own error page.
+      if (!id) {
+        return '<p class="evp-gal-fallback"><a href="' + esc(url) +
+          '" target="_blank" rel="noopener">Watch on YouTube</a></p>';
+      }
+      return '<div class="evp-gal-video">' +
+        '<iframe src="https://www.youtube-nocookie.com/embed/' + esc(id) + '?rel=0" ' +
+          'title="Event video" loading="lazy" ' +
+          'allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" ' +
+          'referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>' +
+        "</div>";
+    }).join("");
+
+    var pic = photos.map(function (url, i) {
+      return '<a class="evp-gal-photo" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+        '<img src="' + esc(url) + '" alt=""' + (i < 2 ? "" : ' loading="lazy"') + ">" +
+        "</a>";
+    }).join("");
+
+    return '<section class="evp-section evp-gallery">' +
+      "<h2>From the day</h2>" +
+      (vid ? '<div class="evp-gal-videos">' + vid + "</div>" : "") +
+      (pic ? '<div class="evp-gal-photos">' + pic + "</div>" : "") +
+      "</section>";
+  }
+
   function render(e, organizers, related) {
     var today = new Date().toISOString().slice(0, 10);
     var isPast = e.event_date < today;
     var ours = organizers.some(function (o) { return o.slug === "sahaba-club"; });
+    // The Events Hub rule, kept identical to events-hub.html: ours, or a
+    // partner's. An event with no organiser recorded is not in the Hub.
+    var isHub = organizers.some(function (o) {
+      return o && (o.slug === "sahaba-club" || o.is_partner);
+    });
 
     // render() is called again when the personal layer lands, so these are set
     // on every pass rather than once at load.
@@ -745,6 +853,10 @@
       // Above the description, because for a past event the recording IS the
       // page — the description is what it was going to be about.
       (recId ? recordingHtml(e, recId, isGuest()) : "") +
+      // After the recording and before the description: somebody who came back
+      // to a past event wants the video first, then what it looked like, then
+      // the blurb they have already read.
+      galleryHtml(e, isPast, isHub) +
       (e.description ? '<div class="evp-body">' + esc(e.description) + "</div>" : "") +
       '<section class="evp-section"><h2>You might also like</h2>' + relHtml + "</section>";
 
@@ -820,7 +932,7 @@
   // event-social.js is loaded on demand rather than up front: most people open
   // this page for the date and the venue and never touch any of it.
   function social(fn) {
-    import("./lib/event-social.js?v=90970f2d1d").then(fn).catch(function () {});
+    import("./lib/event-social.js?v=daa960a3f6").then(fn).catch(function () {});
   }
 
   function renderCurrent() {
@@ -978,7 +1090,10 @@
       // Organizers for THIS event, with their logos.
       var orgRes = await supabase
         .from("event_organizers")
-        .select("is_lead, organizers(name, slug, logo_url, website, category)")
+        // is_partner is fetched for the Hub rule below — an event belongs to
+        // the Events Hub if Sahaba Club OR a partner ran it, and the gallery
+        // only renders on those. Same rule events-hub.html applies.
+        .select("is_lead, organizers(name, slug, logo_url, website, category, is_partner)")
         .eq("event_id", event.id);
 
       var organizers = (orgRes.data || [])
@@ -1030,8 +1145,8 @@
   }
 </script>
 
-<script src="analytics.js?v=90970f2d1d"></script>
-<script src="script.js?v=90970f2d1d"></script>
-<script defer src="lib/back-to-top.js?v=90970f2d1d"></script>
+<script src="analytics.js?v=daa960a3f6"></script>
+<script src="script.js?v=daa960a3f6"></script>
+<script defer src="lib/back-to-top.js?v=daa960a3f6"></script>
 </body>
 </html>

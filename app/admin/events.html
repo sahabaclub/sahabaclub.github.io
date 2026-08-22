@@ -10,7 +10,7 @@
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="../../favicon.ico" sizes="any">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="stylesheet" href="admin.css?v=90970f2d1d">
+<link rel="stylesheet" href="admin.css?v=daa960a3f6">
 <script>
   try {
     if (localStorage.getItem("sc_light_mode") === "1") {
@@ -245,6 +245,47 @@
         </div>
       </div>
 
+      <!-- ============================================================
+           From the day — gallery (0078)
+           ============================================================
+
+           ⚠ THIS PANEL HIDES ITSELF unless the event is a PAST Events Hub
+           event. The Hub is Sahaba Club's own events and our partners';
+           anything else never renders a gallery on the public page, so
+           offering the upload would be inviting somebody to spend an
+           afternoon adding twenty photographs nobody will ever see.
+
+           The rule is applied in three places and they must agree:
+           events-hub.html decides what the Hub contains, event.html decides
+           what renders, and this decides what can be entered. 0078 explains
+           why it is not also a database constraint. -->
+      <div class="ad-gallery" id="gallery-panel" hidden>
+        <h3 class="ad-sub">From the day</h3>
+        <p class="ad-note" id="gallery-why"></p>
+
+        <div class="ad-field">
+          <label for="f-vid-1">Videos <span class="ad-hint">up to 5, YouTube links</span></label>
+          <input type="url" id="f-vid-1" placeholder="https://youtu.be/… or https://www.youtube.com/watch?v=…">
+          <input type="url" id="f-vid-2" placeholder="https://…">
+          <input type="url" id="f-vid-3" placeholder="https://…">
+          <input type="url" id="f-vid-4" placeholder="https://…">
+          <input type="url" id="f-vid-5" placeholder="https://…">
+          <p class="ad-note">Paste the link straight from YouTube — watch, share
+            (<code>youtu.be</code>) and Shorts links all work. The page turns them into
+            players itself. <strong>The database rejects anything that is not a YouTube
+            link</strong>, so a Vimeo or Drive URL will fail the save rather than appear broken
+            on the page.</p>
+        </div>
+
+        <div class="ad-field">
+          <label for="f-photos">Photos <span class="ad-hint">up to 20, uploaded here</span></label>
+          <input type="file" id="f-photos" accept="image/png,image/jpeg,image/webp" multiple>
+          <p class="ad-note" id="gallery-photo-hint"></p>
+          <p class="ad-status" id="gallery-status" role="status"></p>
+          <div class="ad-gallery-grid" id="gallery-thumbs"></div>
+        </div>
+      </div>
+
       <div class="ad-row-2">
         <div class="ad-field">
           <label for="f-maps">Google Maps link</label>
@@ -410,10 +451,10 @@
 </div>
 
 <script type="module">
-  import { supabase } from "../../lib/supabase-client.js?v=90970f2d1d";
-  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=90970f2d1d";
+  import { supabase } from "../../lib/supabase-client.js?v=daa960a3f6";
+  import { describeSpec, rejectionReason, inspect, uploadEventImage } from "../../lib/event-images.js?v=daa960a3f6";
   import { requireStaff, renderShell, escapeHtml, formatDate, showMessage, clearMessage }
-    from "../../lib/admin-guard.js?v=90970f2d1d";
+    from "../../lib/admin-guard.js?v=daa960a3f6";
 
   const user = await requireStaff("events");
   if (!user) throw new Error("not staff");
@@ -445,6 +486,16 @@
     organizers: document.getElementById("f-organizers"),
     featured: document.getElementById("f-featured"),
     flogo: document.getElementById("f-flogo"),
+    // 0078 — the gallery. Videos are five plain inputs; photos are uploaded
+    // and held in `galleryPhotos` below, because a file input cannot carry a
+    // list of already-uploaded URLs.
+    vids: [1, 2, 3, 4, 5].map(function (n) { return document.getElementById("f-vid-" + n); }),
+    photos: document.getElementById("f-photos"),
+    galleryPanel: document.getElementById("gallery-panel"),
+    galleryWhy: document.getElementById("gallery-why"),
+    galleryThumbs: document.getElementById("gallery-thumbs"),
+    galleryStatus: document.getElementById("gallery-status"),
+    galleryPhotoHint: document.getElementById("gallery-photo-hint"),
     ftile: document.getElementById("f-ftile"),
     faccent: document.getElementById("f-faccent"),
     fscale: document.getElementById("f-fscale"),
@@ -481,6 +532,121 @@
     if (url) { imgEl.src = url; imgEl.hidden = false; }
     else { imgEl.removeAttribute("src"); imgEl.hidden = true; }
   }
+
+  // ============================================================
+  // The gallery (0078)
+  // ============================================================
+  //
+  // Photos live here between upload and save. The file input cannot hold a
+  // list of URLs, and a photograph is uploaded to storage the moment it is
+  // chosen — so this array is the only record of what the save will write.
+  let galleryPhotos = [];
+
+  const GALLERY_MAX_PHOTOS = 20;
+  const GALLERY_MAX_VIDEOS = 5;
+
+  F.galleryPhotoHint.textContent = describeSpec("eventGallery");
+
+  // ⚠ THE HUB RULE, third of three places (events-hub.html and event.html are
+  // the others). Shown only for a PAST event run by Sahaba Club or a partner,
+  // because that is the only case the public page will render.
+  //
+  // ⚠ It is re-evaluated whenever the date or the organisers change, not just
+  // when the editor opens: staff pick the organiser AFTER typing the title, so
+  // deciding once on open would hide the panel for every event as it is
+  // created.
+  function refreshGalleryPanel() {
+    const dateVal = F.date.value;
+    const isPast = Boolean(dateVal) && dateVal < new Date().toISOString().slice(0, 10);
+    const picked = new Set(Array.from(F.organizers.selectedOptions || []).map(function (o) { return o.value; }));
+    const chosen = organizerOptions.filter(function (o) { return picked.has(o.id); });
+    const isHub = chosen.some(function (o) { return o.slug === "sahaba-club" || o.is_partner; });
+
+    F.galleryPanel.hidden = !(isPast && isHub);
+    if (F.galleryPanel.hidden) return;
+
+    F.galleryWhy.textContent =
+      "This event is in the Events Hub and has already happened, so it can carry a gallery. " +
+      "Up to " + GALLERY_MAX_VIDEOS + " videos and " + GALLERY_MAX_PHOTOS + " photos.";
+  }
+
+  // ⚠ Re-evaluated on BOTH inputs the rule depends on. Staff normally type the
+  // title, then the date, then pick the organiser — so a panel decided once
+  // when the editor opened would be hidden for every event at the moment it
+  // actually became eligible.
+  F.date.addEventListener("change", refreshGalleryPanel);
+  F.date.addEventListener("input", refreshGalleryPanel);
+  F.organizers.addEventListener("change", refreshGalleryPanel);
+
+  function paintGalleryThumbs() {
+    if (!galleryPhotos.length) {
+      F.galleryThumbs.innerHTML = "";
+      return;
+    }
+    F.galleryThumbs.innerHTML = galleryPhotos.map(function (url, i) {
+      return '<span class="ad-gallery-thumb">' +
+        '<img src="' + escapeHtml(url) + '" alt="">' +
+        '<button type="button" class="ad-gallery-x" data-remove="' + i + '" ' +
+          'aria-label="Remove photo ' + (i + 1) + '">&times;</button>' +
+        "</span>";
+    }).join("");
+  }
+
+  // Removal is delegated: the strip is rebuilt on every change, so listeners
+  // bound to each button would be lost the first time one was used.
+  F.galleryThumbs.addEventListener("click", function (ev) {
+    const btn = ev.target.closest ? ev.target.closest("[data-remove]") : null;
+    if (!btn) return;
+    const i = Number(btn.getAttribute("data-remove"));
+    if (!Number.isInteger(i)) return;
+    // ⚠ Removed from the LIST, not from storage. The file stays in the bucket
+    // until somebody deletes it there. Deleting on removal would destroy a
+    // photograph the moment a mis-click happened, with no undo and no copy.
+    galleryPhotos.splice(i, 1);
+    paintGalleryThumbs();
+    F.galleryStatus.textContent = "Removed. Press Save to keep the change.";
+  });
+
+  F.photos.addEventListener("change", async function () {
+    const files = Array.from(F.photos.files || []);
+    if (!files.length) return;
+
+    const room = GALLERY_MAX_PHOTOS - galleryPhotos.length;
+    if (room <= 0) {
+      F.galleryStatus.textContent =
+        "That is already " + GALLERY_MAX_PHOTOS + " photos — remove one before adding another.";
+      F.photos.value = "";
+      return;
+    }
+
+    // ⚠ Truncated with the count said out loud. Silently dropping the extras
+    // is how somebody selects thirty pictures, sees no error, and never finds
+    // out which ten are missing.
+    const take = files.slice(0, room);
+    const dropped = files.length - take.length;
+
+    let ok = 0;
+    const failed = [];
+    for (let i = 0; i < take.length; i++) {
+      F.galleryStatus.textContent = "Uploading " + (i + 1) + " of " + take.length + "…";
+      const res = await uploadEventImage(take[i], {
+        eventId: F.id.value ? "gallery/" + F.id.value : "gallery/unassigned",
+        spec: "eventGallery",
+      });
+      if (res.error) { failed.push(take[i].name + ": " + res.error); continue; }
+      galleryPhotos.push(res.url);
+      ok++;
+      paintGalleryThumbs();
+    }
+
+    F.photos.value = "";
+    F.galleryStatus.textContent = [
+      ok ? ok + (ok === 1 ? " photo added" : " photos added") : "",
+      dropped ? dropped + " skipped — only " + GALLERY_MAX_PHOTOS + " fit" : "",
+      failed.length ? failed.length + " failed: " + failed.join("; ") : "",
+      ok ? "Press Save to keep them." : "",
+    ].filter(Boolean).join(" · ");
+  });
 
   // One handler for both uploads. `spec` picks the guidance and the checks;
   // `urlField` is where the resulting public URL lands, so the rest of the
@@ -539,7 +705,7 @@
   async function loadOrganizers() {
     const { data, error } = await supabase
       .from("organizers")
-      .select("id, name, category, is_partner")
+      .select("id, name, category, is_partner, slug")
       .order("sort_order", { ascending: true });
     if (error) return;
     organizerOptions = data || [];
@@ -901,6 +1067,15 @@
     F.tags.value = e && e.tags ? e.tags.join(", ") : "";
     F.register.value = e ? (e.register_link || "") : "";
     F.live.value = e ? (e.live_link || "") : "";
+    // 0078 gallery. Both are arrays; the five video inputs are filled by
+    // position and the photo list is replaced wholesale, so opening a
+    // different event can never leave the previous one's pictures behind.
+    var vids = (e && e.gallery_videos) || [];
+    F.vids.forEach(function (input, i) { input.value = vids[i] || ""; });
+    galleryPhotos = ((e && e.gallery_photos) || []).slice();
+    paintGalleryThumbs();
+    F.galleryStatus.textContent = "";
+    refreshGalleryPanel();
     F.maps.value = e ? (e.maps_link || "") : "";
     F.image.value = e ? (e.image_url || "") : "";
     F.brand.value = e ? (e.brand || "") : "";
@@ -1190,6 +1365,12 @@
     F.tags.value = (d.tags || []).join(", ");
     F.register.value = d.register_link || "";
     F.live.value = d.live_link || "";
+    // An AI draft never carries a gallery — clear rather than inherit the
+    // pictures of whatever was open before.
+    F.vids.forEach(function (input) { input.value = ""; });
+    galleryPhotos = [];
+    paintGalleryThumbs();
+    refreshGalleryPanel();
     F.maps.value = "";
     F.image.value = d.image_url || "";
     F.brand.value = d.brand || "";
@@ -1284,6 +1465,12 @@
       // Cleared when unfeatured, so an event that comes back into the banner
       // later cannot inherit a logo from a different design.
       featured_logo_url: F.featured.checked ? (F.flogo.value.trim() || null) : null,
+      // 0078. Sent on every save, including when the panel is hidden — a
+      // hidden panel means "not a Hub event", and the arrays are then empty,
+      // which is exactly what should be written. Omitting them instead would
+      // leave a gallery behind on an event that stopped being a Hub one.
+      gallery_videos: F.vids.map(function (i) { return i.value.trim(); }).filter(Boolean),
+      gallery_photos: galleryPhotos.slice(),
       featured_tile: F.featured.checked ? F.ftile.value : null,
       featured_accent: F.featured.checked ? F.faccent.value : null,
       featured_scale: F.featured.checked ? (F.fscale.value.trim() || null) : null,
@@ -1357,6 +1544,6 @@
   // would otherwise see an empty list and save it as "no organizers".
   loadOrganizers().then(loadEvents);
 </script>
-<script defer src="../../lib/back-to-top.js?v=90970f2d1d"></script>
+<script defer src="../../lib/back-to-top.js?v=daa960a3f6"></script>
 </body>
 </html>
