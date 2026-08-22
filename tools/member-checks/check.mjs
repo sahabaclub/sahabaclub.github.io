@@ -168,7 +168,7 @@ async function loadRealm({ rows, session, search }) {
   });
   await connect.evaluate();
 
-  return { context, connect, dom, C: connect.namespace };
+  return { context, connect, dom, stub, C: connect.namespace };
 }
 
 async function renderPage(realm) {
@@ -180,7 +180,12 @@ async function renderPage(realm) {
   // the check that used to need loading the page in a browser.
   await page.link((spec) => {
     // Same ?v= stamp, same reason as the specifier above.
-    if (String(spec).split("?")[0] === "../lib/connect.js") return realm.connect;
+    const bare = String(spec).split("?")[0];
+    if (bare === "../lib/connect.js") return realm.connect;
+    // ⚠ The page imports the client DIRECTLY as well as through connect.js —
+    // it needs it for the sessions fetch. Same stub, so both module instances
+    // see the same fake rows.
+    if (bare === "../lib/supabase-client.js") return realm.stub;
     throw new Error("app/member.html imported an unexpected module: " + spec);
   });
   await page.evaluate();
@@ -566,6 +571,23 @@ const hackRows = [
       member_follows: [],
       hackathons: hackRows,
       hackathon_teams: teamRows,
+      // ⚠ SESSION FIXTURES, ADDED AFTER THE PAGE SHIPPED WITHOUT THEM. The
+      // assertion below used to read `sess === -1 || …` because there was no
+      // data to render — so it passed on the absence, and went on passing
+      // while app/member.html reached for an unimported `supabase` and threw
+      // on every load. A fixture that cannot produce the thing under test is
+      // not a fixture, it is a way of not looking.
+      event_speakers_public: [
+        { event_id: "ev-past", user_id: MEMBER_ID },
+        { event_id: "ev-soon", user_id: MEMBER_ID },
+      ],
+      events: [
+        { id: "ev-past", slug: "past-talk", title: "A Talk That Happened",
+          event_date: "2025-06-01", recording_url: "https://example.invalid/r",
+          is_published: true },
+        { id: "ev-soon", slug: "soon-talk", title: "A Talk To Come",
+          event_date: "2099-01-01", recording_url: null, is_published: true },
+      ],
     },
   });
   const html = await renderPage(r);
@@ -600,10 +622,16 @@ const hackRows = [
     })();
     ok(line !== -1 && chip !== -1 && chip > line && chip < nextBlock,
       "⚠ the round chips are INSIDE the EduHackAI tile, not in a section below it");
+    // ⚠ REQUIRED TO BE PRESENT, not "present or absent". The `|| sess === -1`
+    // form is what let a page that never loaded a single session pass.
     const sess = at("cx-chip-session");
-    ok(sess === -1 || (sess > line && sess < nextBlock),
-      "…and so are the session chips, wherever they render at all");
+    ok(sess !== -1 && sess > line && sess < nextBlock,
+      "⚠ the session chips render, and inside the tile");
   }
+  has(html, "../event.html?e=past-talk", "a delivered session links to its event page");
+  has(html, "Recording", "…and says a recording is there");
+  has(html, "../event.html?e=soon-talk", "an upcoming session links to its event page");
+  has(html, "Book a place", "…and offers the booking, not a recording");
   lacks(html, "cx-block cx-activity",
     "⚠ the separate Activities section is gone, not left alongside");
   has(html, '../hackathons.html#eduhackai-3',
